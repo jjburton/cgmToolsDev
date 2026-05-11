@@ -1,0 +1,10 @@
+---
+description: Primary dev target is cgmToolsPy3 (Python 3 Maya tools); do not touch legacy py2 unless backport workflow is active.
+alwaysApply: true
+---
+
+# cgmTools Python 3 primary
+
+- **Main codebase:** Development happens in the **`cgmToolsPy3`** workspace folder (Python 3, Maya). Treat that tree as the default target for edits and suggestions.
+- **Legacy Python 2:** Do **not** read, search, or propose changes to a separate **`cgmTools` (py2)** checkout unless the user is explicitly in a **PY2 backport session** (see `Plans/PY2_BACKPORT_PLAN.md` and `py2-backport-session` rule). Do not assume py2 paths exist.
+- **Clean py3 repo:** Never suggest adding `.cursor/`, `AGENTS.md`, `*.code-workspace`, or bridge-only docs inside **`cgmToolsPy3`**; those belong in **`cgmToolsDev`**.

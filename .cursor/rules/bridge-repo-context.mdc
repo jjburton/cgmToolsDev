@@ -1,0 +1,14 @@
+---
+description: cgmToolsDev repo layout — guides, plans, and bridge docs (not runtime Maya payload).
+globs: "**/guides/**,**/Plans/**"
+alwaysApply: false
+---
+
+# cgmToolsDev bridge repo
+
+- **`cgmToolsDev`** holds **developer workflow** assets: Cursor rules, workspace files, `Plans/`, `guides/`, branch notes. It is **not** the Maya scripts tree that users sync into `scripts/`.
+- **`cgmToolsPy3`** (separate workspace root) is the **runtime library**; keep it free of `.cursor/` and other IDE-only files.
+- **`Plans/`** — backport and coordination docs (e.g. **`PY2_BACKPORT_PLAN.md`**).
+- **`guides/`** — human-oriented procedures and notes for maintaining py3/py2 alignment.
+
+When editing here, do not confuse these folders with package modules under `cgmToolsPy3`.

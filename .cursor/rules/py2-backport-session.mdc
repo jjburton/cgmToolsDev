@@ -1,0 +1,14 @@
+---
+description: When PY2 backport plan is in scope — optional py2 workspace folder and parity work only.
+globs: "**/Plans/PY2_BACKPORT_PLAN*"
+alwaysApply: false
+---
+
+# PY2 backport session only
+
+This rule applies when files matching **`Plans/PY2_BACKPORT_PLAN*`** are in context.
+
+- **Purpose:** Port or align changes with the legacy **Python 2** tree (`cgmTools`), not routine py3 feature work.
+- **Workspace:** The user should open **`cgmTools-py2-backport.code-workspace`** or **Add Folder to Workspace…** for their local py2 checkout so both trees are visible. Adjust the py2 folder path in that workspace file if their repo lives elsewhere.
+- **Scope:** Follow the steps and boundaries in **`Plans/PY2_BACKPORT_PLAN.md`**. Prefer minimal, surgical edits on the py2 side.
+- **When this rule does not apply:** Default sessions are **py3-only**; do not reference or edit py2 paths unless this backport workflow is active.

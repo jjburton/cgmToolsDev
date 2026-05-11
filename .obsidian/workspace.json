@@ -1,0 +1,202 @@
+{
+  "main": {
+    "id": "ecf12e35a1026c61",
+    "type": "split",
+    "children": [
+      {
+        "id": "1a58e217fc42ec4b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "9885c27e8a5a544d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Branches/Branch_UnrealWorkflow.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Branch_UnrealWorkflow"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9c673de7d14b93ed",
+    "type": "split",
+    "children": [
+      {
+        "id": "0e5e466bc427e380",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "88eede3cf0998936",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "4e71e39df24101d1",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "8299d4ad1d83c4ec",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "40d1b9f2d7e2c9dc",
+    "type": "split",
+    "children": [
+      {
+        "id": "dfa15176eb78e7e4",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fb7295b2518d83de",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Branches/Branch_UnrealWorkflow.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Branch_UnrealWorkflow"
+            }
+          },
+          {
+            "id": "07e8f7f3fc81433b",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Branches/Branch_UnrealWorkflow.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Branch_UnrealWorkflow"
+            }
+          },
+          {
+            "id": "fe20cfe101abd78f",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "b8cf32f1aa08e68e",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "2f29ff8c9887edec",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Branches/Branch_UnrealWorkflow.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Branch_UnrealWorkflow"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "9885c27e8a5a544d",
+  "lastOpenFiles": [
+    "Branches/Branch_Jan2026.md",
+    "Branches/Branch_UnrealWorkflow.md",
+    "Guides/README.md",
+    "Guides/NewFeature_Guide.md",
+    "AGENTS.md",
+    "Plans/PY2_BACKPORT_PLAN.md",
+    "cgmTools-py2-backport.code-workspace",
+    "cgmTools.code-workspace",
+    "Dev/Features",
+    "Dev",
+    "Branches/Branch_Dec2025.md",
+    "Guides/NewBranch_Guide.md",
+    "Features"
+  ]
+}

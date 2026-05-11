@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "cgmToolsDev"
+    },
+    {
+      "path": "../../repos/cgmToolsPy3",
+      "name": "cgmToolsPy3"
+    },
+    {
+      "path": "../cgmDocs",
+      "name": "cgmDocs"
+    }
+  ]
+}
