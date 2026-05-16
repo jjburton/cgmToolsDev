@@ -1,0 +1,16 @@
+---
+description: Use cgm_Meta.py for meta behavior; search the codebase before one-off helpers
+alwaysApply: true
+---
+
+# cgm meta API and existing patterns
+
+## Canonical meta reference
+
+- In the **cgmToolsPy3** checkout, **`cgm/core/cgm_Meta.py`** is the primary place to learn how **cgmMeta / cgmObject** (and related classes) behave: properties (`p_nameShort`, `p_nameLong`, etc.), message links, `msgList_*`, `getMessageAsMeta`, `connectChildNode`, and other shared rig/meta conventions.
+- When unsure whether a capability exists on meta instances, **read or search that file and nearby callers** instead of assuming Maya-only or ad-hoc patterns.
+
+## Prefer the codebase over one-off code
+
+- **Before** adding new helpers (extra `mc.ls`, string hacks, duplicate logic), **search the cgmToolsPy3 tree** (and other roots in this workspace) for existing utilities, meta APIs, or the same problem already solved elsewhere.
+- Reuse or extend what is already there (e.g. use `mObj.p_nameLong` on cgm objects rather than re-deriving long paths) unless there is a clear gap and a deliberate reason to diverge.
