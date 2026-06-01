@@ -1,0 +1,34 @@
+---
+description: Where new cgm code lives; do not modify vendored modules or add out-of-scope calls
+alwaysApply: true
+---
+
+# cgm module placement and boundaries
+
+## Default homes for new code
+
+| Kind of code | Where it goes |
+|--------------|---------------|
+| General utilities (paths, math, P4, file IO, Maya cmds without meta) | **`cgm/core/lib/`** — extend an existing `*_utils.py` or add a new module (e.g. `lib/perforce.py`) |
+| Meta, blocks, Scene, rig build logic | **`cgm/core/mrs/`**, **`cgm/core/rig/`**, and **`mrs/lib/`** |
+| Artist tool windows / shelves | **`cgm/core/tools/`** (+ **`tools/lib/`** for shared UI chunks) |
+| Truly global cross-cutting helpers (logging, callbacks) | **`cgm/core/cgm_General.py`** — sparingly; prefer **`lib/`** for new feature logic |
+
+Match import style of nearby callers (e.g. `import cgm.core.lib.path_utils as PATHUTIL`).
+
+## Do not modify vendored / out-of-scope trees
+
+- **`cgm/lib/zoo/`** (zooPy) — not ours: **no edits**, **no wiring cgm.core through it**.
+- **`Red9/`** (vendored Red9 core / docs; Pro Pack if present on disk) — **do not modify without explicit user clearance**, including when fixing bugs. Default: fix or work around in **`cgm/core/`** (usually **`lib/`**, **`mrs/`**, **`tools/`**). If a bug truly lives in Red9, **ask first** before editing Red9 files.
+- Useful vendored patterns → **reimplement or wrap under `cgm/core/lib/`**, not import/patch upstream.
+
+## Keep modules focused
+
+- Do not bolt unrelated features onto a module because it is already imported (P4 belongs in **`lib/perforce.py`**, not `cgm_General` or zooPy).
+- **Callers** (`Scene.py`, `bakeAndPrep.py`, …) stay thin: import a **`lib/`** helper, orchestrate, return.
+- Before extending a large file, search **`cgm/core/lib/`** and **`mrs/lib/`** for an existing helper.
+
+## Related rules
+
+- Meta APIs and search-first: **`cgm-meta-and-existing-patterns`**
+- py3 target and clean repo: **`python3-primary`**

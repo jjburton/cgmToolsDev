@@ -14,3 +14,7 @@ alwaysApply: true
 
 - **Before** adding new helpers (extra `mc.ls`, string hacks, duplicate logic), **search the cgmToolsPy3 tree** (and other roots in this workspace) for existing utilities, meta APIs, or the same problem already solved elsewhere.
 - Reuse or extend what is already there (e.g. use `mObj.p_nameLong` on cgm objects rather than re-deriving long paths) unless there is a clear gap and a deliberate reason to diverge.
+
+## Module placement (non-meta code)
+
+- General new utilities belong under **`cgm/core/lib/`**, not vendored trees or unrelated large modules — see **`cgm-module-placement`** rule.

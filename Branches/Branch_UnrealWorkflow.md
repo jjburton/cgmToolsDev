@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: May 9, 2026 (Save/export icon buttons + file dialog defaults, rig/cutscene export refinements + mesh-strip transform recovery, namespace-aware delete-set, `zUpRoot` helper, subtype invariants registry, Arnold plugin load guard, exception logging revamp, batch `worldUp`, ribbon attach kwargs + module child traversal hardening, moduleTarget wiring on parent change, eyeLook resolution hardening)  
+**Last Updated**: June 1, 2026 (Export prep/bake tdSet resolution; FBX bootstrap; writable-path reporting; export summary)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -14,24 +14,180 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Builder.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Builder.py)** - `ui_toStandAlone` (MRS Build), `uiFunc_process` batch / logging
 - **[Project.py](../../../repos/cgmToolsPy3/cgm/core/tools/Project.py)** - `Project.data`, `fillDefaults` (project picker / version menus)
 - **[RigBlocks.py](../../../repos/cgmToolsPy3/cgm/core/mrs/RigBlocks.py)** - `cgmRigMaster.rebuildMasterShapes` (batch rig / master controls)
-- **[bakeAndPrep.py](../../../repos/cgmToolsPy3/cgm/core/tools/bakeAndPrep.py)** - Bake, Prep, `ProcessDeleteSet`, texture breaking
-- **[cgm_General.py](../../../repos/cgmToolsPy3/cgm/core/cgm_General.py)** - Shared logging helpers
+- **[bakeAndPrep.py](../../../repos/cgmToolsPy3/cgm/core/tools/bakeAndPrep.py)** - Bake, Prep, `ProcessDeleteSet`, `resolve_td_set_for_asset`, texture breaking
+- **[path_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/path_utils.py)** - Export output writability check, `.bak` sidecar cleanup, `ExportOutputNotWritableError`, non-writable path session list
+- **[batch_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py)** - Mayapy batch preflight (`ensure_fbx_plugin` before Scene import)
+- **[project_utils.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/project_utils.py)** - Lazy `get_fbx_versions()` (no import-time FBX MEL probe)
+- **[animFilterTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/animFilterTool.py)** - Anim post filters UI (`VERIFY_CLOSE` / `confirmClose`)
+- **[baseMelUI.py](../../../repos/cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)** - `BaseMelWindow` close hooks (`VERIFY_CLOSE`, `restoreAfterCloseCancelled`)
+- **[cgm_General.py](../../../repos/cgmToolsPy3/cgm/core/cgm_General.py)** - Shared helpers (`playback_stop`, logging); `ensure_fbx_plugin`, FBX export preamble/selection helpers
+- **[PostBake.py](../../../repos/cgmToolsPy3/cgm/core/classes/PostBake.py)** - Post filters bake loop (AnimFilter dragger/spring/etc.)
+- **[locinator.py](../../../repos/cgmToolsPy3/cgm/core/tools/locinator.py)** - `bake_match` timeline bake
+- **[curve_Utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/curve_Utils.py)** - `align_eps_by_lane_projection`, `distribute`
+- **[shape_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/shape_utils.py)** - `get_nonintermediate` (canonical live shape resolution)
+- **[toolbox.py](../../../repos/cgmToolsPy3/cgm/core/tools/toolbox.py)** - Snap **Ratio** row; Controls **tweak** row (`buildRow_tweakCurve`)
+- **[snapTools.py](../../../repos/cgmToolsPy3/cgm/core/tools/snapTools.py)** - Snap **Ratio** row (shared with toolbox)
+- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio**; `buildRows_ratio_arrange`
+- **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, golden/finger presets
+- **[general_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/general_utils.py)** - `ratio()` shim to `alongRatio`
+- **[block_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** - `prerig_handlesLayoutRatio`, `prerig_arrangeRatio_menuDict`
 - **[ml_breakdown.py](../../../repos/cgmToolsPy3/cgm/core/lib/ml_tools/ml_breakdown.py)** - Optional diagnostics touchpoint
 - **[NewBranch_Guide.md](./NewBranch_Guide.md)** - Branch documentation format reference
+- **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
 
 ## 🗓️ Timeline
 
-### May 9, 2026 - Scene UI: save/export icon buttons + file dialog defaults
-**What**: Replaced text MelButton controls with `MelIconButton` icon buttons for set/subset/variation/version actions, added explicit Save/New Version/Export icon buttons in the version and sets rows, added an "Export Here" menu item, and pre-filled Maya save/export dialog filenames/paths via reusable helpers. Also corrected swapped icon/callback assignments so the version row uses Save/New Version + Export semantics consistently.  
+### June 1, 2026 - Export prep/bake tdSets, FBX bootstrap, writable paths, export summary
+**What**: Hardened batch/standalone export for nested reference namespaces (e.g. `M_MED_Base_APose:M_MED_Base_Head:root`), fixed mayapy FBX MEL spam at import, fail-fast on read-only depot FBX targets with batch reporting, and added end-of-run export summaries (shots + UP axis). Full Perforce `p4 edit` integration deferred.  
 **Files**:
-- EXTENDED: `cgm/core/mrs/Scene.py` — `SaveVersion` extracted helpers `_compute_next_version_save_basename` / `_save_here_suggested_stub`; `uiPath_mayaSaveTo` accepts a `defaultFilename` and uses it as `fileDialog2` startingDirectory; `uiPath_mayaSaveTo_sets/variant/version` pass suggested names; new `ExportSelection` `sets` mode + `ExportSelection_sets` wrapper; icon buttons wired to correct save/export callbacks (icon-only, 25x25, `cgmUI.guiButtonColor`)
-- ADDED: `cgm/images/icons/new_set.png`, `cgm/images/icons/new_dir.png`, `cgm/images/icons/new_version.png`, `cgm/images/icons/export_file.png`; updated `cgm/images/icons/new_file.png`
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `resolve_td_set_for_asset()` walks namespace prefixes outer→inner for `bake_tdSet` / `export_tdSet` / `delete_tdSet`; `Bake()` uses it; `Prep()` resolves export/delete sets after outer namespace merge, optional missing delete set, namespace merge instead of per-DAG rename loop
+- EXTENDED: `cgm/core/lib/path_utils.py` — `ExportOutputNotWritableError`, `check_export_output_writable()`, `cleanup_fbx_export_sidecars()`, session list `clear/record/get_non_writable_export_paths()`
+- EXTENDED: `cgm/core/cgm_General.py` — `ensure_fbx_plugin()` (reload + MEL source fallback); `fbx_export_preamble` / `fbx_export_shot_time_range` / `fbx_export_selection` (delegates writability to `path_utils`); `get_mayaFBXVersionsAvailable()` no longer probes 2010–2050 at import
+- EXTENDED: `cgm/core/tools/lib/project_utils.py` — lazy `get_fbx_versions()`; removed import-time `get_mayaFBXVersionsAvailable()` call
+- EXTENDED: `cgm/core/mrs/lib/batch_utils.py` — mayapy `l_pre`: `ensure_fbx_plugin` **before** `import Scene` (avoids `FBXExportFileVersion` spam from `project_utils` import)
+- EXTENDED: `cgm/core/mrs/Scene.py` — FBX export paths use `cgmGEN` helpers; `_finalize_fbx_export_error` for `ExportOutputNotWritableError`; `BatchExport` clears/lists non-writable paths; `log_export_results_summary()` + `logExportSummary` flag (batch suppresses per-scene duplicate); records per-shot exports with frame ranges + **UP axis** query
 
 **Features**:
-- "Save new version" → `new_version.png` calling `SaveVersion()`
-- "Export selected objects…" → `export_file.png` calling `ExportSelection(mode='version')` and `ExportSelection_sets()` for the version and sets rows respectively
-- New "Export Here" menu item alongside save/new-version/export icon buttons
-- File dialog now pre-fills suggested filename and starts in the resolved directory
+- **Bake set**: finds `RefNamespace:bake_tdSet` when export root is `Ref:Inner:root` (not only full nested prefix)
+- **Prep**: export set at root after APose merge; missing delete set is warning-only; final namespace via `mergeNamespaceWithRoot`
+- **Writable check**: fails before `FBXExport` with checkout hint; removes editable `.bak` sidecars only
+- **Batch summary**: non-writable paths block at end; successful exports listed once (`Batch export summary`) with shot name, frames, path, UP axis
+- **Standalone export**: same summary via `logExportSummary=True` (default)
+
+**Decisions**:
+- Path/write helpers live in **`path_utils`**, not `cgm_General` (keeps General Maya/FBX-only)
+- No `p4 edit` / auto `p4 add` in this pass — artists checkout manually; clearer errors replace opaque FBX I/O failures
+- Batch runs one summary at end, not per-scene + batch duplicate
+
+**Status**: ✅ Complete (user verified Crate per-shot export + writable-path behavior)
+
+---
+
+### May 27, 2026 - Prerig ratio arrange (golden / finger / custom prompt)
+**What**: Generalized proportional handle spacing for snap arrange and MRS prerig workflows. Replaced rigid 4-node finger `ratio()` with `alongRatio` (N controls, first/last fixed). Golden preset uses a true geometric φ chain (not equal weights). Custom entries prompt for one ratio or comma-separated segment weights.  
+**Files**:
+- EXTENDED: `cgm/core/lib/arrange_utils.py` — `PHI`, `_ratio_weights`, `_ratio_cumulative_fractions`, `_ratio_parse_weights_input`, `alongRatio` (linear + cubic/arc/target curves), `alongRatio_prompt`; `_d_arrangeRatio_ann`
+- EXTENDED: `cgm/core/rig/general_utils.py` — `ratio()` delegates to `ARRANGE.alongRatio` (no 4-node assert)
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — `_ui_arrange_ratio` (Snap → Arrange submenu); `buildRows_ratio_arrange` (toolbox + snapTools)
+- EXTENDED: `cgm/core/tools/toolbox.py`, `cgm/core/tools/snapTools.py` — Snap section **Ratio** / **Ratio custom** button rows via `UICHUNKS.buildRows_ratio_arrange`
+- EXTENDED: `cgm/core/mrs/lib/block_utils.py` — `prerig_handlesLayout_getHandles`, `prerig_handlesLayoutRatio`, `prerig_arrangeRatio_menuDict`; refactored `prerig_handlesLayout` to shared handle resolver
+- EXTENDED: `cgm/core/mrs/Builder.py` — block menu **Prerig** (picker, editor, context): `**BLOCKUTILS.prerig_arrangeRatio_menuDict(...)` after existing Linear/Cubic arrange items
+
+**Features**:
+- **Presets (no prompt)**: Golden, Golden | Curve, Finger, Finger | Curve
+- **Custom (prompt)**: Custom, Custom | Curve — one number → geometric chain; comma list → explicit per-segment weights (root → tip)
+- Span preserved along straight A→D (linear) or rebuilt/reference curve (cubic); middle prerig/snap controls move only
+- MRS block menu uses same ratios on prerig handle index range as `prerig_handlesLayout`
+
+**Decisions**:
+- `golden_all` weights are `ratio^(n-1)…ratio^0` per segment — equal `[φ,φ,φ]` was removed (normalized to even spacing)
+- No **Custom | Finger** menu entry (finger preset covers one-click; custom defaults to φ)
+- Ratio UI centralized in `tool_chunks.buildRows_ratio_arrange` / `prerig_arrangeRatio_menuDict` to avoid drift across toolbox, snapTools, and Builder
+
+**Status**: ✅ Complete (Maya runtime verification user-side)
+
+---
+
+### May 27, 2026 - Curve EP lane alignment + distribute (toolbox Controls tweak row)
+**What**: Added lane-projection EP alignment for middle curves between start/end guides, exposed it and existing `distribute` on the toolbox **Controls → tweak** row, and unified duplicate `get_nonintermediate` helpers without introducing a `distance_utils` ↔ `shape_utils` import cycle.  
+**Files**:
+- EXTENDED: `cgm/core/lib/curve_Utils.py` — `_nurbs_curve_shape_for_closest`, `_get_edit_point_count`, `_closest_point_between_line_and_curve`, `align_eps_by_lane_projection` (shape-level EP read/write, solve-then-apply; reuses `_closestPointOnShape`, `DIST`, `MATH.Vector3.Lerp`, `POS`, `TRANS`, `SHAPES`)
+- EXTENDED: `cgm/core/lib/search_utils.py` — `get_nonintermediateShape` delegates to `SHAPES.get_nonintermediate` (lazy import)
+- EXTENDED: `cgm/core/tools/toolbox.py` — `buildRow_tweakCurve` after mirror row: **Align EPs (lane)** (`func_process` `all`) and **Distribute EPs** (`func_process` `each`)
+
+**Features**:
+- **Align EPs (lane)**: selection order start → middle(s) → end; per-EP lane from start/end EP positions; closest point on each middle curve to that segment
+- **Distribute EPs**: even arc-length spacing of edit points on selected curve(s); closed curves keep first/last EP fixed
+- Single `nurbsCurve` shape per transform (fail-fast); `SHAPES.get_nonintermediate` for deformer/Orig-safe closest-point and EP IO
+
+**Decisions**:
+- No `maya.api.OpenMaya`; closest point via existing `_closestPointOnShape` (`nearestPointOnCurve` DG node)
+- `distance_utils` keeps calling `SEARCH.get_nonintermediateShape` (not a top-level `SHAPES` import) to avoid circular import through `transform_utils` → `distance_utils` → `shape_utils` → `rigging_utils`
+- Lane align uses `func_process` mode `all` (ordered list passed as `curves`); distribute uses `each`
+
+**Status**: ✅ Complete (Maya runtime verification user-side)
+
+---
+
+### May 19, 2026 - AnimFilter verify-close on window close
+**What**: Added optional close confirmation for AnimFilter so clicking the window **X** prompts before the tool hides (`RETAIN=True`). Cancel re-shows the window; Close hides as before. Implemented via shared `BaseMelWindow` hooks in `baseMelUI` (cmds/MEL only — no Qt).  
+**Files**:
+- EXTENDED: `cgm/core/lib/zoo/baseMelUI.py` — `BaseMelWindow.VERIFY_CLOSE`, `confirmClose()`, `restoreAfterCloseCancelled()` (`scriptJob` idle + `evalDeferred` fallback), `Close()` calls confirm before `visible=False`
+- EXTENDED: `cgm/core/tools/animFilterTool.py` — `VERIFY_CLOSE = True`; `confirmClose()` uses `confirmDialog` (`Close` / `Cancel`, default **Cancel**)
+
+**Features**:
+- **X** on AnimFilter shows “Close AnimFilter?”; **Cancel** keeps the window open; **Close** hides it
+- Other cgm tools can opt in by setting `VERIFY_CLOSE = True` and overriding `confirmClose()` (e.g. only when actions are loaded)
+
+**Decisions**:
+- Maya `closeCommand` runs after the window is already hidden; cancel path must re-show via deferred restore, not synchronous `showWindow` alone
+- Do not use `cgmGEN.Callback` for `closeCommand` (one-shot `del self` breaks repeat closes)
+- Qt `closeEvent` was tried and reverted (set `closeCommand` to `doNothing` when hook failed, which closed with no prompt)
+
+**Status**: ✅ Complete
+
+---
+
+### May 19, 2026 - Global playback stop before frame-scrub bakes
+**What**: Timeline playback could fight `currentTime` loops when users started a bake while Maya was playing (reported on AnimFilter). Added `cgmGEN.playback_is_playing()` / `playback_stop()` and wired it at shared bake entry points. **Stop only** — does not resume playback after bake.  
+**Files**:
+- EXTENDED: `cgm/core/cgm_General.py` — `playback_is_playing()`, `playback_stop(log=True)`
+- EXTENDED: `cgm/core/classes/PostBake.py` — `playback_stop()` at start of `bake()` (AnimFilter, dragger, spring, designer spring, trajectory aim, keyframe-to-motion-curve)
+- EXTENDED: `cgm/core/tools/locinator.py` — `bake_match()`
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `Bake()`
+- EXTENDED: `cgm/core/tools/mocapBakeTools.py` — `bake()`
+- EXTENDED: `cgm/core/tools/funcIterTime.py` — `fOverTimeBAK.run()`, `run_frames()`
+
+**Features**:
+- Starting any wired bake while the timeline is playing stops playback first
+- Opening bake UIs alone does not stop playback (only bake execution)
+
+**Decisions**:
+- Central helper in `cgm_General` rather than per-tool copies; no auto-resume after bake
+
+**Status**: ✅ Complete
+
+---
+
+### May 14, 2026 - Version list path parity (`_version_files_parent_directory`)
+**What**: Fixed Save here / Export / Save version when the version column is the second column (e.g. subtype is `version`, no `hasSub`, or no subtype tabs). `LoadVersionList` already searched `path_asset` in those layouts, but `SaveVersion`, save-here dialogs, and `path_versionDirectory` used `path_subType` / `hasNested` logic and could pass `False` into `os.path.join`.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_version_files_parent_directory()` mirrors `LoadVersionList` `searchDir` (no subtypes → `path_asset`; `hasVariant` → variation dir; `hasSub` → `path_set`; else → `path_subType`); `path_versionDirectory` property delegates to it; `SaveVersion`, `CreateSubTypeRef`, and `uiPath_mayaSaveTo_version` use it; `OpenVersionDirectory` guards missing path; removed stray `cgmUI` token in `LoadVersionList` no-`hasSub` filter branch
+
+**Features**:
+- Version-column icon row and RMB **Save Maya here** target the same folder the version list is built from
+- No more `TypeError: ... not bool` on **Save version** when `path_subType` is unset
+- **Export** / **Save here** no longer warn "Version path doesn't exist" while files still list correctly
+
+**Status**: ✅ Complete
+
+---
+
+### May 10–13, 2026 - Scene column icon rows, save-here stub, `ExportSelection` sets mode
+**What**: Replaced cramped text rows with icon strips on the version column and no-subtype sets row (matching explorer icon styling). Wired the same behaviors as RMB **Save Maya here** / **Export Here** / **Save Version**, added sets-column **Export Here**, fixed Maya `MelButton` extra-callback `*args` issues, and pre-filled save dialogs with a version-stub basename (no trailing version digits, no `.ma`/`.mb`).  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `mRow_versionButtons` and no-`hasSub` `mRow_setButtons` icon rows (order: **save here** → **export** → **save version**); `ExportSelection(mode='sets')` + `ExportSelection_sets()`; sets list RMB **Export Here**; `_compute_next_version_save_basename()` shared with `SaveVersion`; `_save_here_suggested_stub()` for save-here dialog; `uiPath_mayaSaveTo(..., defaultFilename=)` via `fileDialog2` `startingDirectory`; `uiPath_mayaSaveTo_*` accept `*args` for Maya callbacks; `variationButton` / **New {subtype}** / **Add Set** / **Add Variation** on dedicated icons
+- ADDED: `cgm/images/icons/new_set.png`, `new_dir.png`, `new_version.png`, `new_variation.png`, `export_file.png`; updated `new_file.png`
+
+**Features**:
+- Version column: `new_file` (save here), `export_file` (export selection), `new_version` (`SaveVersion`)
+- No-subtype sets row: `new_dir` (add set) + same three action icons
+- Has-subtype row: `new_set` (new subtype), `new_variation` (add variation), `new_dir` (add set when applicable)
+- Save-here suggests e.g. `bird_wing_mdl` while **Save version** still increments to `bird_wing_mdl_12.mb`
+
+**Status**: ✅ Complete
+
+---
+
+### May 9, 2026 - Cutscene export: `deleteMesh` selection recovery + strict per-rig delete sets
+**What**: After multi-ref cutscene debugging: Prep no longer resolves another rig’s `delete_tdSet` when DAG paths include `|`; cutscene `deleteMesh` no longer leaves stale transform names in `exportTransforms` for `mc.select`.  
+**Files**:
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `Prep` parses namespace from `_topShort = topNode.mNode.split('|')[-1]` (matches `Bake`); `_ns_hint = ns.rstrip(':')`; `resolve_delete_set` with `namespace_prefix` tries only explicit prefixed candidates (no global `*:delete_tdSet` scan); `ProcessDeleteSet(..., resolved_set=)` when `mc.objExists(deleteSet)` in Prep
+- EXTENDED: `cgm/core/mrs/Scene.py` — module helper `_export_transforms_after_mesh_strip()` filters deleted mesh transforms after `deleteMesh`, falls back to export root `obj`; used on referenced and rig multi-root export paths; fails with stage `select` if no DAG remains
+
+**Features**:
+- Multi-reference cutscene Prep uses `CrateBase:delete_tdSet` when prepping `CrateBase:master`, not the first `*:delete_tdSet` in the scene
+- Cutscene export survives mesh strip when Prep selection included geo transforms
 
 **Status**: ✅ Complete
 
@@ -41,7 +197,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 **What**: Hardened FBX export pathing/naming for rig and cutscene modes, recovered transforms after mesh-strip steps so `deleteMesh`-driven exports do not silently lose targets, made delete-set resolution namespace-aware, and added a root-motion utility (`zUpRoot`).  
 **Files**:
 - EXTENDED: `cgm/core/mrs/Scene.py` — added `_export_transforms_after_mesh_strip` for post-strip DAG recovery; abort export when `deleteMesh` removes all export DAGs; animation folder/name logic uses selected set or leaf token, treats `none`/`null` as no animation; only appends animation name for non-static/non-rig exports; `exportAnimPath` resolution simplified (rigs use asset path); rig filenames produced as `{assetName}_rig.fbx`; cutscenes collapse per-shot output into a single anim folder with asset disambiguation; rig exports skip per-shot splitting and unnecessary directory creation
-- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `resolve_delete_set` is now namespace-aware; `ProcessDeleteSet` accepts an optional `resolved_set` param to force per-rig resolution; namespace parsing/handling fixed in `Prep`
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — initial namespace-aware `resolve_delete_set` / `ProcessDeleteSet` (strict per-rig resolution completed May 9)
 - EXTENDED: `cgm/core/mrs/lib/post_utils.py` — new `zUpRoot` helper (validates selection, defaults `rootMotion_jnt`/`rootMotion_anim`, removes existing root constraints, temporarily unparents children, sets master `rx=90`, applies point/orient constraints with `maintainOffset=True`, reparents children, early returns on invalid input)
 
 **Features**:
@@ -385,9 +541,18 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [ ] Validate re-export overwrite behavior across all modes.
 - [x] Namespace + bake set behavior for non-referenced namespaced rigs (short-name bake set resolution)
 - [x] Delete set runs for non-referenced export path (`ProcessDeleteSet` pre/post namespace)
+- [x] Multi-reference cutscene Prep picks correct rig `delete_tdSet` (strict `resolve_delete_set` + `resolved_set`)
+- [x] Cutscene `deleteMesh` + stale `exportTransforms` after Prep (`_export_transforms_after_mesh_strip`)
+- [x] Version-column save/export when versions live under `path_asset` (`_version_files_parent_directory`)
 
 ### Low
+- [x] Playback stopped before frame-scrub bakes (`cgmGEN.playback_stop` + PostBake / Locinator / bakeAndPrep / mocap / funcIterTime)
+- [x] AnimFilter close confirmation on window **X** (`BaseMelWindow.VERIFY_CLOSE` + `animFilterTool.confirmClose`)
 - [x] Structured export / batch / delete-set logging for triage (log-based; UI summary optional later)
+- [x] End-of-export summary: per-shot list, frame ranges, paths, UP axis (`log_export_results_summary`; batch rollup)
+- [x] Read-only depot FBX fail-fast + non-writable path batch report (`path_utils`; P4 checkout deferred)
+- [x] Nested-ref bake/export/delete tdSet resolution (`resolve_td_set_for_asset`)
+- [x] Mayapy FBX import order + lazy FBX version probe (no `FBXExportFileVersion` spam at batch start)
 - [x] Send to Build / MRS Build path: stage logging, window placement, `fillDefaults` opt-in verbosity (`CGM_VERBOSE_FILL_DEFAULTS`)
 - [x] Batch rig master rebuild when prerig vis/settings messages are absent (`RigBlocks` / `getMessageAsMeta` vs `False`)
 
@@ -402,7 +567,10 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 
 ### Results Snapshot
 - **Rig + shot-splitting option ON**: ✅ Code-path validated; split branch blocked for rig exports.
-- **Anim/Cutscene shot split behavior**: ⚠️ Not changed in this pass; requires runtime verification.
+- **Multi-ref cutscene + deleteMesh**: ✅ Code-path validated; per-rig delete set + post-strip selection refresh.
+- **Version column (no subtype tabs / version in column 2)**: ✅ Save/export paths aligned with `LoadVersionList`.
+- **Per-shot individual FBX (exportShotsToIndividualFiles)**: ✅ User verified (Crate closed/opening/open/closing); export summary at batch end.
+- **Read-only synced FBX in depot**: ✅ Fail before FBX with path listed; `.bak` cleanup when deletable (manual `p4 edit` still required).
 - **Static export + texture-link option behavior**: ⚠️ Not changed in this pass; requires runtime verification.
 - **Cross-mode path consistency**: ⚠️ Requires runtime verification with project data variants.
 
@@ -417,7 +585,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 # Scene Export: Unreal workflow (rig stability, logging, bake/delete, MRS Build)
 
 ## Overview
-Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability and window placement, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, and removal of unused `Scene2.py`.
+Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, and removal of unused `Scene2.py`.
 
 ## Major Changes
 
@@ -451,13 +619,67 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 ### 8. Cleanup
 - Removed `cgm/core/mrs/Scene2.py` (unused backup; no in-repo imports)
 
+### 9. Multi-reference cutscene Prep (`bakeAndPrep`)
+- `Prep` namespace from DAG leaf (`split('|')[-1]`); strict `resolve_delete_set` when prefix is known; `resolved_set` when delete set already exists
+
+### 10. Cutscene mesh strip (`Scene`)
+- `_export_transforms_after_mesh_strip` refreshes selection after `deleteMesh` removes geo transforms from Prep selection
+
+### 11. Scene column UI (`Scene`)
+- Icon rows: save here / export / save version; `_save_here_suggested_stub` + `fileDialog2` prefill; `_version_files_parent_directory` for list/save path parity
+
+### 12. AnimFilter close confirm (`baseMelUI`, `animFilterTool`)
+- `BaseMelWindow.VERIFY_CLOSE` + `confirmClose()` / `restoreAfterCloseCancelled()`; AnimFilter always confirms on **X** (cmds `closeCommand` path)
+
+### 13. Playback stop before bakes (`cgm_General`, PostBake, bake tools)
+- `playback_stop()` at frame-scrub bake entry points; fixes playback-during-bake conflicts (AnimFilter and Locinator-class tools)
+
+### 14. Curve tweak tools (`curve_Utils`, `toolbox`, `search_utils`)
+- `align_eps_by_lane_projection`: middle curves snap EPs to lanes between start/end curves (ordered selection)
+- Toolbox **Controls → tweak**: **Align EPs (lane)** + **Distribute EPs**
+- `get_nonintermediate` canonical in `shape_utils`; `search_utils.get_nonintermediateShape` delegates (lazy import)
+
+### 15. Ratio arrange (`arrange_utils`, snap/toolbox, MRS prerig block menu)
+- `alongRatio` / `alongRatio_prompt`: proportional spacing, endpoints fixed, N≥3 controls
+- Golden geometric chain; finger preset; custom prompt (φ default or comma weights)
+- Snap **Arrange → Ratio** submenu; cgmToolbox/snapTools **Ratio** button rows
+- MRS Builder block **Prerig**: **Arrange | Ratio *** menu items via `prerig_arrangeRatio_menuDict`
+
+### 16. Export tdSet resolution + Prep namespace (`bakeAndPrep`)
+- `resolve_td_set_for_asset`: outer→inner namespace candidates for bake/export/delete sets
+- `Prep`: resolved export set after ref merge; optional delete set; `mergeNamespaceWithRoot` for remaining NS
+
+### 17. Writable export paths + FBX bootstrap (`path_utils`, `cgm_General`, `Scene`, `batch_utils`, `project_utils`)
+- Pre-export writability check; `ExportOutputNotWritableError`; editable `.bak` sidecar cleanup
+- `ensure_fbx_plugin` before Scene import in mayapy batch; lazy FBX version list (no import probe loop)
+- Batch non-writable path summary; export success summary (shots, frames, paths, UP axis)
+
 ## Files Modified
 - `cgm/core/mrs/Scene.py`
+- `cgm/core/mrs/lib/batch_utils.py`
 - `cgm/core/mrs/Builder.py`
 - `cgm/core/tools/Project.py`
+- `cgm/core/tools/lib/project_utils.py`
 - `cgm/core/mrs/RigBlocks.py`
 - `cgm/core/tools/bakeAndPrep.py`
+- `cgm/core/lib/path_utils.py`
+- `cgm/core/cgm_General.py`
+- `cgm/core/classes/PostBake.py`
+- `cgm/core/tools/locinator.py`
+- `cgm/core/tools/mocapBakeTools.py`
+- `cgm/core/tools/funcIterTime.py`
+- `cgm/core/lib/zoo/baseMelUI.py`
+- `cgm/core/tools/animFilterTool.py`
+- `cgm/core/lib/curve_Utils.py`
+- `cgm/core/lib/search_utils.py`
+- `cgm/core/tools/toolbox.py`
+- `cgm/core/tools/snapTools.py`
+- `cgm/core/tools/lib/tool_chunks.py`
+- `cgm/core/lib/arrange_utils.py`
+- `cgm/core/rig/general_utils.py`
+- `cgm/core/mrs/lib/block_utils.py`
 - REMOVED: `cgm/core/mrs/Scene2.py`
+- ADDED: `cgm/images/icons/new_set.png`, `new_dir.png`, `new_version.png`, `new_variation.png`, `export_file.png` (and updated `new_file.png`)
 
 ## Testing
 - ✅ Static / lint checks on touched files
@@ -467,8 +689,8 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - **External only**: anything that imported `cgm.core.mrs.Scene2` must use `Scene`.
 
 ## Next Steps
-- Runtime pass: batch rig, non-referenced + namespaced root, verify bake member count and delete-set logs
-- Unreal ingest spot-check on exported FBX
+- Optional `p4 edit` integration at export writability check
+- Unreal ingest spot-check on exported FBX (UP axis in summary for troubleshooting)
 ```
 
 ---
@@ -478,7 +700,7 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 ### Architectural Patterns Established
 - Export mode should strictly govern whether optional export toggles are applicable.
 - Mode-incompatible options must be ignored rather than partially honored.
-- Shared helpers (`ProcessDeleteSet`, bake set resolution) keep referenced vs non-referenced paths consistent.
+- Shared helpers (`ProcessDeleteSet`, `resolve_td_set_for_asset`) keep referenced vs non-referenced paths consistent.
 - Parse DAG nodes with `split('|')[-1]` before inferring namespace/bake/delete set names.
 
 ### Lessons Learned
@@ -487,12 +709,29 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Anything that only ran inside `Prep()` never ran for non-referenced exports until explicitly duplicated or shared.
 - `cgmMeta.getMessageAsMeta` returns **`False`** when a message is missing; do not chain meta-only APIs on that return without a truthiness check.
 - `log.debug` still prints when the effective logger level is DEBUG; opt-in env flags are safer than `log.debug` alone for very hot paths like `fillDefaults`.
+- `topNode.mNode.split(':')` on a full DAG path leaves `|` in the namespace token; use `split('|')[-1]` before `:` parsing (same as `Bake`).
+- `LoadVersionList` search directory and save/export helpers must share one resolver when subtype tabs are absent.
+- Retained Maya windows (`RETAIN=True`) need deferred re-show on cancelled close; overriding `closeCommand` alone is not enough to veto the **X** button.
+- Shared UI close policy belongs on `BaseMelWindow` in `baseMelUI`, not per-tool Qt hooks.
+- Frame-scrub bakes must call `cgmGEN.playback_stop()` before driving `currentTime`; opening the tool UI is not enough.
+- Do not add top-level `shape_utils` imports in `distance_utils`; use `SEARCH.get_nonintermediateShape` or lazy import inside functions to avoid `transform_utils` circular init.
+- Curve lane alignment: shape-level `.ep[i]` + `SHAPES.get_nonintermediate` keeps closest-point and EP edits on visible geometry, not Orig.
+- Ratio presets: equal segment weights normalize to even spacing — geometric chains need descending powers per segment, not repeated constants.
+- Shared menu builders (`buildRows_ratio_arrange`, `prerig_arrangeRatio_menuDict`) keep snap, toolbox, and MRS block menus aligned.
+- Nested ref export roots need **outer** namespace on tdSets (`Blurrg:bake_tdSet` not `Blurrg:Inner:bake_tdSet`); use prefix walk, not full DAG namespace string.
+- `project_utils` must not call FBX MEL at import — lazy `get_fbx_versions()` and batch must load FBX **before** importing Scene.
+- Read-only depot FBX fails as opaque FBX I/O; pre-check + batch path list is enough until optional `p4 edit` pass.
+- Export path helpers belong in **`path_utils`**, not `cgm_General`.
 
 ### Future Considerations
-- Optional lightweight UI toast or summary line after export when `RunExportCommand` / batch returns failure (logs remain source of truth).
+- AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
+- Optional **`p4 edit`** before export — see **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)**
+- Rig FBX: confirm `_rig_fbx_export_to_path` no-takes path on same builds as anim export.
 - Consider a UI hint/disable state for options not applicable to selected mode.
+- Curve tweak row: optional `rebuild` toggle for distribute; lane-align `samples` / `refine_steps` exposed in UI if artists need tuning.
+- Ratio arrange: optional `cubicRebuild` / target-curve entries on toolbox row; store last custom ratio in optionVar.
 
 ---
 
-*Last Updated: May 9, 2026 (Save/export icon buttons + file dialog defaults, rig/cutscene export refinements + mesh-strip transform recovery, namespace-aware delete-set, `zUpRoot` helper, subtype invariants registry, Arnold plugin load guard, exception logging revamp, batch `worldUp`, ribbon attach kwargs + module child traversal hardening, moduleTarget wiring on parent change, eyeLook resolution hardening)*  
+*Last Updated: June 1, 2026 (Export prep/bake tdSet resolution; FBX bootstrap; writable-path reporting; export summary)*  
 *Branch Status: Active*

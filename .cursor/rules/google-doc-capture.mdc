@@ -1,0 +1,18 @@
+---
+description: When the user asks to document tool changes for Google Docs, capture manual updates, or sync cgm changes to the artist-facing documentation.
+globs: "**/Guides/**,**/Branches/**"
+alwaysApply: false
+---
+
+# Google Doc capture
+
+When the user wants **user-facing documentation** for the Google Doc manual (not branch/PR dev notes):
+
+1. Read and follow **[`Guides/GoogleDoc_Capture_Guide.md`](../../Guides/GoogleDoc_Capture_Guide.md)** — outline table, workflow, output template.
+2. Apply the **`google-doc-capture`** skill (`.cursor/skills/google-doc-capture/SKILL.md`) for the full capture workflow.
+3. **Never** write Google Doc draft content into **`cgmToolsPy3`**; outputs are paste blocks for the user only.
+4. Prefer **one section block per Google Doc heading** — not long essays.
+5. If the guide’s outline table is still `[TBD]`, ask the user for exact section titles from the manual before drafting.
+6. Gather sources in order: `git log` / diff on py3 (if available) → relevant [`Branches/Branch_*.md`](../../Branches/) → UI strings in code for labels/tooltips only.
+
+Do not edit the Google Doc via API; produce copy-paste-ready text only.
