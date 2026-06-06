@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: June 1, 2026 (Export prep/bake tdSet resolution; FBX bootstrap; writable-path reporting; export summary)  
+**Last Updated**: June 5, 2026 (MetaHuman facial skeleton prune; Maya Be Odd cascade UI windows)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -27,7 +27,14 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[shape_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/shape_utils.py)** - `get_nonintermediate` (canonical live shape resolution)
 - **[toolbox.py](../../../repos/cgmToolsPy3/cgm/core/tools/toolbox.py)** - Snap **Ratio** row; Controls **tweak** row (`buildRow_tweakCurve`)
 - **[snapTools.py](../../../repos/cgmToolsPy3/cgm/core/tools/snapTools.py)** - Snap **Ratio** row (shared with toolbox)
-- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio**; `buildRows_ratio_arrange`
+- **[joint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/joint_utils.py)** - `pruneSkeletonToJoints` (MetaHuman / facial skeleton strip to keep-list + root chain)
+- **[mayaBeOdd_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaBeOdd_utils.py)** - Maya Be Odd helpers (`cascade_mc_windows`, outliner/panel cleanup)
+- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio**; **Point Special → Ground**; Loc **Ground Pos**; `buildRows_ratio_arrange`; **Maya Be Odd → Cascade UI Windows**
+- **[snap_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/snap_utils.py)** - `to_ground`, `ground_position_get`
+- **[snap_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/snap_calls.py)** - `get_special_pos` (`groundPos`), `snap_action` ground mode
+- **[position_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/position_utils.py)** - `scene_up_axis_get`, `ground_plane_up_index`, `position_project_to_ground_plane`, scene-up **bottom**/**top** in `get_bb_pos`
+- **[transform_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/transform_utils.py)** - `ground_position_get` re-export
+- **[mayaSettings_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaSettings_utils.py)** - `sceneUp_get()` (Maya `upAxis`)
 - **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, golden/finger presets
 - **[general_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/general_utils.py)** - `ratio()` shim to `alongRatio`
 - **[block_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** - `prerig_handlesLayoutRatio`, `prerig_arrangeRatio_menuDict`
@@ -36,6 +43,51 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
 
 ## 🗓️ Timeline
+
+### June 5, 2026 - MetaHuman facial skeleton prune + Maya Be Odd cascade UI windows
+**What**: Added a joint-prune helper for MetaHuman facial prep (keep listed joints plus parent chain to root; delete all other joints under that hierarchy) and a dev toolbox action to cascade visible `mc.window` UIs onscreen when many tool windows pile up during rig/export debugging.  
+**Files**:
+- EXTENDED: `cgm/core/rig/joint_utils.py` — `pruneSkeletonToJoints(jointsToKeep, delete=True, report=True)`; walks up joint parents to root into keep set; deletes other joints under root(s) deepest-first; dry-run via `delete=False`
+- EXTENDED: `cgm/core/lib/mayaBeOdd_utils.py` — `cascade_mc_windows(start_x, start_y, step_x, step_y, skip, verbose)`; moves visible Maya UI windows in a screen cascade (skips `MayaWindow` by default)
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — **Maya Be Odd → Cascade UI Windows** menu item
+
+**Features**:
+- **Facial skeleton strip**: pass joints to keep (facial set); spine/neck path to root preserved; side branches (body, extra facial) pruned — supports MetaHuman facial wiring workflows (`TechAnimation/Maya/ProjectScripts/MetahumanFacial.py` usage pattern)
+- **Cascade UI Windows**: cgmToolbox **Maya Be Odd:** submenu; logs moved window names to Script Editor
+
+**Decisions**:
+- Skeleton prune lives in **`joint_utils`** (rig joint IO), not `face_utils` — general keep-list + root-chain behavior, reusable beyond one facial script
+- `pruneSkeletonToJoints` does **not** clean skin clusters or other joint connections; run on dup or expect skin/bind fixes
+- Cascade helper in **`mayaBeOdd_utils`** with toolbox wiring only (no artist manual / Google Doc scope)
+
+**Status**: ✅ Complete (Maya runtime verification user-side for prune; cascade is dev ergonomics)
+
+---
+
+### June 4, 2026 - Scene-up-aware ground snap (unified groundPos / to_ground)
+**What**: Fixed ground snap math for **Z-up** Maya scenes. Previously `to_ground` and `groundPos` assumed Y-up (ymin BB bottom, force `Y=0`). Centralized scene-up plane logic in `position_utils` and routed snap UI, loc creation, and master-block selection snap through shared helpers.  
+**Files**:
+- EXTENDED: `cgm/core/lib/position_utils.py` — `scene_up_axis_get()` (wraps `MAYASET.sceneUp_get`), `ground_plane_up_index()`, `position_project_to_ground_plane()`, `ground_bottom_position_get()`; `get_bb_pos` **bottom**/**top** use min/max along scene up (Y or Z)
+- EXTENDED: `cgm/core/lib/snap_utils.py` — `ground_position_get(obj, mode='pivot'|'bottom')` (query); `to_ground()` uses up index + `ground_bottom_position_get`
+- EXTENDED: `cgm/core/lib/transform_utils.py` — `ground_position_get = SNAP.ground_position_get`
+- EXTENDED: `cgm/core/tools/lib/snap_calls.py` — `groundPos` branch calls `SNAP.ground_position_get` (was hardcoded `[x,0,z]`)
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — Point Special menu **Ground** (removed WIP label)
+- UNCHANGED API (benefit from fix): `cgm/core/mrs/RigBlocks.py` master create `targetPivot='groundPos'`; `cgm/core/mrs/lib/blockShapes_utils.py` `SNAP.to_ground`
+
+**Features**:
+- **Point Special → Ground**: moves selection so shape BB **bottom** sits on ground plane (`scene up = 0`)
+- **Loc → Ground Pos** / **`groundPos` snap pivot**: projects rotate pivot onto ground plane (keeps other axes)
+- **Master block + selection size**: placement snap uses same `groundPos` query (via `get_special_pos`)
+- **Y-up and Z-up**: ground plane component is index 1 or 2 per `mc.upAxis`
+
+**Decisions**:
+- Two behaviors kept: **query** (pivot projection) vs **action** (BB-bottom move) — only axis math is shared
+- Low-level helpers in **`position_utils`** (imports `mayaSettings_utils`); snap API in **`snap_utils`**; public query alias on **`transform_utils`** (avoids SNAP↔TRANS import cycle)
+- `get_bb_pos` front/back/left/right modes unchanged (out of scope)
+
+**Status**: ✅ Complete (Maya Y-up / Z-up runtime verification user-side)
+
+---
 
 ### June 1, 2026 - Export prep/bake tdSets, FBX bootstrap, writable paths, export summary
 **What**: Hardened batch/standalone export for nested reference namespaces (e.g. `M_MED_Base_APose:M_MED_Base_Head:root`), fixed mayapy FBX MEL spam at import, fail-fast on read-only depot FBX targets with batch reporting, and added end-of-run export summaries (shots + UP axis). Full Perforce `p4 edit` integration deferred.  
@@ -553,6 +605,9 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] Read-only depot FBX fail-fast + non-writable path batch report (`path_utils`; P4 checkout deferred)
 - [x] Nested-ref bake/export/delete tdSet resolution (`resolve_td_set_for_asset`)
 - [x] Mayapy FBX import order + lazy FBX version probe (no `FBXExportFileVersion` spam at batch start)
+- [x] Ground snap / `groundPos` respect Maya scene up (Y-up and Z-up; unified helpers in `position_utils` / `snap_utils`)
+- [x] MetaHuman facial skeleton prune to keep-list + root chain (`joint_utils.pruneSkeletonToJoints`)
+- [x] Maya Be Odd **Cascade UI Windows** dev menu action (`mayaBeOdd_utils` / `tool_chunks`)
 - [x] Send to Build / MRS Build path: stage logging, window placement, `fillDefaults` opt-in verbosity (`CGM_VERBOSE_FILL_DEFAULTS`)
 - [x] Batch rig master rebuild when prerig vis/settings messages are absent (`RigBlocks` / `getMessageAsMeta` vs `False`)
 
@@ -585,7 +640,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 # Scene Export: Unreal workflow (rig stability, logging, bake/delete, MRS Build)
 
 ## Overview
-Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, and removal of unused `Scene2.py`.
+Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
 
 ## Major Changes
 
@@ -654,6 +709,19 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `ensure_fbx_plugin` before Scene import in mayapy batch; lazy FBX version list (no import probe loop)
 - Batch non-writable path summary; export success summary (shots, frames, paths, UP axis)
 
+### 18. Scene-up-aware ground snap (`position_utils`, `snap_utils`, `snap_calls`, `tool_chunks`, `transform_utils`)
+- `ground_position_get` / `position_project_to_ground_plane` / `ground_bottom_position_get` — single source for plane math via `sceneUp_get`
+- Point Special **Ground** + `groundPos` loc/snap/master-block placement fixed in Z-up (no hardcoded `Y=0` / ymin)
+- `to_ground` preserves pivot offset along scene up; BB bottom/top in `get_bb_pos` respect up axis
+
+### 19. MetaHuman facial skeleton prune (`joint_utils`)
+- `pruneSkeletonToJoints`: keep listed joints + parent chain to joint root; delete all other joints under that hierarchy (deepest first)
+- Dry run: `delete=False`; returns `kept` / `deleted` / `roots` dict
+- Does not strip skin or other joint connections — artist dup or post-fix expected
+
+### 20. Maya Be Odd cascade UI windows (`mayaBeOdd_utils`, `tool_chunks`)
+- **Maya Be Odd → Cascade UI Windows** in cgmToolbox; dev ergonomics when many tool windows are open during export/rig debugging
+
 ## Files Modified
 - `cgm/core/mrs/Scene.py`
 - `cgm/core/mrs/lib/batch_utils.py`
@@ -678,6 +746,12 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `cgm/core/lib/arrange_utils.py`
 - `cgm/core/rig/general_utils.py`
 - `cgm/core/mrs/lib/block_utils.py`
+- `cgm/core/lib/position_utils.py`
+- `cgm/core/lib/snap_utils.py`
+- `cgm/core/lib/transform_utils.py`
+- `cgm/core/tools/lib/snap_calls.py`
+- `cgm/core/rig/joint_utils.py`
+- `cgm/core/lib/mayaBeOdd_utils.py`
 - REMOVED: `cgm/core/mrs/Scene2.py`
 - ADDED: `cgm/images/icons/new_set.png`, `new_dir.png`, `new_version.png`, `new_variation.png`, `export_file.png` (and updated `new_file.png`)
 
@@ -722,6 +796,10 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `project_utils` must not call FBX MEL at import — lazy `get_fbx_versions()` and batch must load FBX **before** importing Scene.
 - Read-only depot FBX fails as opaque FBX I/O; pre-check + batch path list is enough until optional `p4 edit` pass.
 - Export path helpers belong in **`path_utils`**, not `cgm_General`.
+- Ground snap must use **`MAYASET.sceneUp_get()`** (or `POS.scene_up_axis_get`) — never hardcode `pos[1]=0` or ymin for “ground” in Z-up pipelines.
+- **`groundPos`** (pivot on plane) and **`to_ground`** (BB bottom on plane) are different tools; share projection/BB helpers only.
+- **`pruneSkeletonToJoints`**: keep set = explicit list ∪ parent chains to joint root only; does not retain unlisted **children** of kept joints — list every joint you need or they are pruned.
+- MetaHuman facial wiring scripts should call **`JNTUTIL.pruneSkeletonToJoints`** after building the keep list; preview with `delete=False` first.
 
 ### Future Considerations
 - AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
@@ -730,8 +808,9 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Consider a UI hint/disable state for options not applicable to selected mode.
 - Curve tweak row: optional `rebuild` toggle for distribute; lane-align `samples` / `refine_steps` exposed in UI if artists need tuning.
 - Ratio arrange: optional `cubicRebuild` / target-curve entries on toolbox row; store last custom ratio in optionVar.
+- Optional skin-cluster / bind preflight before `pruneSkeletonToJoints` (or auto-detach helper) if facial strip becomes a one-click artist tool.
 
 ---
 
-*Last Updated: June 1, 2026 (Export prep/bake tdSet resolution; FBX bootstrap; writable-path reporting; export summary)*  
+*Last Updated: June 5, 2026 (MetaHuman facial skeleton prune; Maya Be Odd cascade UI windows)*  
 *Branch Status: Active*
