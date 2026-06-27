@@ -16,6 +16,10 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 4. **User-facing Google Doc updates** (artist manual): follow [`Guides/GoogleDoc_Capture_Guide.md`](Guides/GoogleDoc_Capture_Guide.md) and the **`google-doc-capture`** skill (`.cursor/skills/google-doc-capture/`). Branch docs in `Branches/` are the dev source; the guide produces paste-ready section blocks for your Google Doc.
 
+5. **Export pipeline design contract**: [`Features/Feature_SceneExportFlow.md`](Features/Feature_SceneExportFlow.md) — canonical dev/TA reference for Scene export behavior (modes, tdSets, prep invariants). Update when changing `ExportScene` or `bakeAndPrep`.
+
+6. **MetaHuman facial solve design contract**: [`Features/Feature_Metahuman.md`](Features/Feature_Metahuman.md) — joint matching, bridge mapping, `transfer_rig` / `constrain_rig`, rest-pose invariants. Timeline on [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md). Primary code in Perforce `ProjectScripts/MetahumanFacial.py` (factor core to cgm when API stabilizes).
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.
@@ -27,5 +31,5 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 | Path | Purpose |
 |------|---------|
-| `cgmToolsDev/` | Bridge: rules, workspaces, `Plans/`, `guides/` |
+| `cgmToolsDev/` | Bridge: rules, workspaces, `Plans/`, `Features/`, `guides/` |
 | `cgmToolsPy3/` (separate clone) | Ship-only Maya tools (Python 3) |

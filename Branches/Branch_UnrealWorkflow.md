@@ -3,13 +3,18 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: June 5, 2026 (MetaHuman facial skeleton prune; Maya Be Odd cascade UI windows)  
+**Last Updated**: June 22, 2026 (MetaHuman facial SDK transfer/constrain; feature doc; deleteUnused safety)  
 **PR**: Pending
 
 ## 🎯 Goals
-Harden Scene export behavior so Unreal-oriented exports are consistent, repeatable, and predictable for animation and rig workflows. Track export issues and fixes in one place, with explicit validation criteria and PR-ready notes.
+Harden Scene export behavior so Unreal-oriented exports are consistent, repeatable, and predictable for animation and rig workflows. **Also:** MetaHuman / Fortnite facial solve — joint matching, control→bridge mapping, SDK transfer onto source rigs, and lightweight target-follow constraints (`ProjectScripts/MetahumanFacial.py`). Track export and facial issues in one place, with explicit validation criteria and PR-ready notes.
 
 ## 📚 Related Documentation
+- **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Canonical dev/TA spec: export modes, tdSet contract, prep order, namespace/path rules, troubleshooting
+- **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** - MetaHuman facial solve spec: two-hop SDK model, transfer_rig / constrain_rig, REST POSE invariants
+- **MetahumanFacial.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/MetahumanFacial.py` (Perforce) — facial SDK transfer / constrain (iteration home until core factors to py3)
+- **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** - `fortniteMetaHuman` pose-buffer schema
+- **[sdk_utils.py](../../cgmToolsPy3/cgm/core/lib/sdk_utils.py)** - Existing SDK patterns; candidate merge target when factoring facial helpers from ProjectScripts
 - **[Scene.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Scene.py)** - Main Scene UI, `RunExportCommand`, `ExportScene`, `BatchExport`, `SendToBuild`
 - **[Builder.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Builder.py)** - `ui_toStandAlone` (MRS Build), `uiFunc_process` batch / logging
 - **[Project.py](../../../repos/cgmToolsPy3/cgm/core/tools/Project.py)** - `Project.data`, `fillDefaults` (project picker / version menus)
@@ -43,6 +48,78 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
 
 ## 🗓️ Timeline
+
+### June 22, 2026 - MetaHuman feature doc + constrain_rig deleteUnused safety
+**What**: Captured facial solve design contract in `Feature_Metahuman.md`; hardened `constrain_rig` so unmapped target joints that are **ancestors** of matched targets are never deleted (`protected_unused` vs `deletable_unused`).  
+**Files**:
+- NEW: `cgmToolsDev/Features/Feature_Metahuman.md`
+- EXTENDED: `cgmToolsDev/AGENTS.md` — MetaHuman feature doc cross-link
+- EXTENDED: `ProjectScripts/MetahumanFacial.py` — `_protected_target_ancestors`, `_deletable_unused_target_joints`; constrain_rig check_only reports both buckets
+
+**Features**:
+- **deleteUnused safety**: structural unmapped parents of matched joints kept even when unmapped
+- **Dev docs**: feature spec; timeline tracked on this branch (UnrealWorkflow)
+
+**Decisions**:
+- ProjectScripts remains iteration home; **factor reusable core into cgm proper** when API stabilizes (see Deliverables + Notes)
+- `transfer_rig` REST POSE block frozen unless explicitly requested — invariants in feature doc
+
+**Status**: ✅ Complete
+
+---
+
+### June 2026 - MetaHuman transfer_rig (SDK transfer pipeline)
+**What**: Full facial SDK transfer from target hierarchy onto source: rest capture, bridge.rest base SDK, offset locators, target curve cache, snap-sampled control pose SDKs.  
+**Files**:
+- EXTENDED: `ProjectScripts/MetahumanFacial.py` — `transfer_rig` and helpers (rest TR, offset locators, movement cache, channel transfer, audit)
+
+**Features**:
+- **check_only** + **testControl** filter for incremental validation
+- **REST POSE INVARIANTS**: attr-based rest (`getAttr` tx–rz), never xform; bridge.rest @ 0 holds base pose; control SDK @ 0 is always 0
+- **Offset locators** (`MH_offset_*`): parentConstraint target sdk → locator; snap source sdk to locator per pose key
+- **Movement cache**: skip static joints per channel; **pose_baseline** restore between channels
+- Undo chunk + full plug restore at end
+
+**Decisions**:
+- Replicate target SDK topology on source; control→bridge assumed wired on scene
+- Pose keys: set **control only**, snap sdk → locator, `setDrivenKeyframe` **without** explicit `value=`
+- Rejected: xform rest, bridge driving during sample, locator differential math without snap, per-pose SDK disconnect loops
+
+**Status**: ✅ Code complete — full-face Maya verification ongoing
+
+---
+
+### June 2026 - MetaHuman constrain_rig + get_driven_data + joint/bridge foundation
+**What**: Lightweight target-follow (`constrain_rig`), SDK curve introspection (`get_driven_data`), joint pairing (`snap_source_to_target`), control→bridge probe (`map_controls_to_bridge`), mirror helpers, manual Fortnite `d_wire` map.  
+**Files**:
+- EXTENDED: `ProjectScripts/MetahumanFacial.py` — `constrain_rig`, `get_driven_data`, `snap_source_to_target`, `map_controls_to_bridge`, `mirror_face_joints`
+
+**Features**:
+- **constrain_rig**: parentConstraint target sdk → source sdk; optional deleteUnused (deepest-first, ancestor-safe after June 22)
+- **get_driven_data**: read SDK animCurve keys on bridge/joint plugs for audit + transfer cache
+- **map_controls_to_bridge**: axis probe with baseline restore; overlaps conceptually with `sdk_utils` — factor later
+
+**Status**: ✅ Code complete — Maya verification ongoing
+
+---
+
+### June 15, 2026 - Non-ref export post-delete selection (master in delete_tdSet)
+**What**: Fixed non-referenced `ExportScene` failing with `No object exists: master` when `master` is intentionally in `delete_tdSet`. Non-ref prep now mirrors referenced `Prep()`: constraints cleared on export set members before delete, per-rig delete sets via `resolve_td_set_for_asset`, and FBX selection from surviving `export_tdSet` members — not the export context hint (`master`).  
+**Files**:
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `export_select_targets_resolve`, `export_constraints_clear_on_members`, `export_prep_non_referenced`; `Prep()` final selection uses shared helper
+- EXTENDED: `cgm/core/mrs/Scene.py` — non-ref single + multi-root prep call `export_prep_non_referenced`; `_export_transforms_after_mesh_strip` falls back to export set members; export root discovery logs clarify context-hint vs post-delete DAG
+
+**Features**:
+- **Crate non-ref export**: `master` in `delete_tdSet`, `export_tdSet` = geo + `rootMotion_jnt` → batch/export selects export members after delete (including re-run on `*_baked.mb`)
+- **Multi-rig namespaced**: namespace on hint drives tdSet resolution; no global `*:delete_tdSet` bleed on post-ns delete
+
+**Decisions**:
+- `exportObjs` entries remain bake/orchestration hints only — never assumed to exist after `ProcessDeleteSet`
+- Shared prep logic lives in `bakeAndPrep` so referenced and non-ref paths stay aligned
+
+**Status**: ✅ Code complete — Maya runtime verification user-side (Crate non-ref + baked file re-export; referenced export smoke test)
+
+---
 
 ### June 5, 2026 - MetaHuman facial skeleton prune + Maya Be Odd cascade UI windows
 **What**: Added a joint-prune helper for MetaHuman facial prep (keep listed joints plus parent chain to root; delete all other joints under that hierarchy) and a dev toolbox action to cascade visible `mc.window` UIs onscreen when many tool windows pile up during rig/export debugging.  
@@ -547,6 +624,16 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [ ] Full Maya + Unreal ingest verification pass (manual runtime pass pending)
 - [x] Documentation updated and PR notes drafted
 
+### MetaHuman Facial Solve (ongoing — ProjectScripts)
+- [x] `snap_source_to_target`, `map_controls_to_bridge`, `get_driven_data`
+- [x] `transfer_rig` with REST POSE invariants and offset-locator sampling
+- [x] `constrain_rig` with safe deleteUnused (protected ancestors)
+- [x] Dev feature spec (`Feature_Metahuman.md`)
+- [ ] Shelf / UI wrapper for probe → transfer → constrain
+- [ ] Persisted `bridgeMapping` per character variant
+- [ ] Full-face Maya regression scenes + batch/mayapy smoke
+- [ ] **Factor core helpers into cgm proper** — see Notes (target: `sdk_utils`, `mrs/lib/face_utils`; keep `d_wire` in ProjectScripts)
+
 ---
 
 ## Unreal Export Success Criteria
@@ -800,6 +887,9 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - **`groundPos`** (pivot on plane) and **`to_ground`** (BB bottom on plane) are different tools; share projection/BB helpers only.
 - **`pruneSkeletonToJoints`**: keep set = explicit list ∪ parent chains to joint root only; does not retain unlisted **children** of kept joints — list every joint you need or they are pruned.
 - MetaHuman facial wiring scripts should call **`JNTUTIL.pruneSkeletonToJoints`** after building the keep list; preview with `delete=False` first.
+- MetaHuman **rest pose**: capture sdk node rest via **`getAttr` tx–rz** only — never `xform`; `jointOrient` breaks xform-based rest reads.
+- MetaHuman **pose SDK transfer**: set control only during sampling; snap sdk → offset locator; omit `value=` on `setDrivenKeyframe` so snapped attrs drive keys.
+- MetaHuman **constrain_rig deleteUnused**: unmapped joints on the parent chain of matched targets are structural — protect, do not delete.
 
 ### Future Considerations
 - AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
@@ -809,8 +899,9 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Curve tweak row: optional `rebuild` toggle for distribute; lane-align `samples` / `refine_steps` exposed in UI if artists need tuning.
 - Ratio arrange: optional `cubicRebuild` / target-curve entries on toolbox row; store last custom ratio in optionVar.
 - Optional skin-cluster / bind preflight before `pruneSkeletonToJoints` (or auto-detach helper) if facial strip becomes a one-click artist tool.
+- **Factor MetaHuman facial core into cgm proper** when API stabilizes: `get_driven_data` / SDK helpers → **`sdk_utils`**; joint match, bridge probe, rest/transfer helpers → **`mrs/lib/face_utils`**; thin **`tools/`** or ProjectScripts caller for orchestration; character **`d_wire`** maps stay project-specific. Do not split REST POSE + offset-locator sampling prematurely.
 
 ---
 
-*Last Updated: June 5, 2026 (MetaHuman facial skeleton prune; Maya Be Odd cascade UI windows)*  
+*Last Updated: June 22, 2026 (MetaHuman transfer_rig / constrain_rig; feature doc; deleteUnused safety)*  
 *Branch Status: Active*

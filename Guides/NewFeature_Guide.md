@@ -21,7 +21,7 @@ Examples:
 - `Feature_TailAnimator.md`
 - `Feature_TrackingDebugUI.md`
 
-Place the file under `Docs/CursorRef/Features/`.
+Place the file under `Features/` at the cgmToolsDev repo root (e.g. `Features/Feature_SceneExportFlow.md`). The legacy path `Docs/CursorRef/Features/` is not used in this repo.
 
 ## Template
 Use this template to start a new feature doc, then tailor sections based on the system’s needs.
@@ -129,7 +129,7 @@ Use this template to start a new feature doc, then tailor sections based on the 
 - Revision history table updated whenever substantial edits occur
 
 ## Ready-Made Process
-1. **Create doc** using template above in `Docs/CursorRef/Features/`
+1. **Create doc** using template above in `Features/` (cgmToolsDev root)
 2. **Link doc** in `Plan_Cursor.md` quick reference under appropriate category
 3. **Reference doc** in all related branch docs and PR notes
 4. **Update doc** post-merge to reflect final status and follow-up items
