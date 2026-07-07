@@ -20,6 +20,8 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 6. **MetaHuman facial solve design contract**: [`Features/Feature_Metahuman.md`](Features/Feature_Metahuman.md) — joint matching, bridge mapping, `transfer_rig` / `constrain_rig`, rest-pose invariants. Timeline on [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md). Primary code in Perforce `ProjectScripts/MetahumanFacial.py` (factor core to cgm when API stabilizes).
 
+7. **Mocap align snap / bake design contract**: [`Features/Feature_MocapAlignSnap.md`](Features/Feature_MocapAlignSnap.md) — plan to integrate local-TR locator align, single-frame snap, and timeline bake into `mocapBakeTools`. Update when changing offset capture, CCL schema, or bake loop.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.
