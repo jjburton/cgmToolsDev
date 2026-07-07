@@ -49,6 +49,20 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 
 ## 🗓️ Timeline
 
+### July 2, 2026 - Empty shot list anim export fallback
+**What**: Fixed silent no-op when `exportShotsToIndividualFiles` (or cutscene per-shot branch) was enabled but the scene had no `AnimList` shots — prep completed, batch reported success, no FBX written.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_export_single_anim_fbx` helper; empty `shotList` falls back to single file at `exportName`; fail `fbx_export` if `exportFBXFile` and zero `_export_results`
+- EXTENDED: `Features/Feature_SceneExportFlow.md` — path rule + anti-pattern + failure stage
+
+**Features**:
+- **Anim export, no shots**: writes `exportName` FBX with warning log instead of skipping FBX
+- **Safety**: `No FBX files written` prevents false batch success
+
+**Status**: ✅ Code complete — Maya verify Chr_0V_C no-shot + per-shot regression
+
+---
+
 ### June 22, 2026 - MetaHuman feature doc + constrain_rig deleteUnused safety
 **What**: Captured facial solve design contract in `Feature_Metahuman.md`; hardened `constrain_rig` so unmapped target joints that are **ancestors** of matched targets are never deleted (`protected_unused` vs `deletable_unused`).  
 **Files**:
