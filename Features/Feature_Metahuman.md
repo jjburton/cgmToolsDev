@@ -2,12 +2,12 @@
 
 ## Status and Overview
 
-- **Status**: In progress (June 2026)
-- **Last Updated**: June 22, 2026
-- **Audience**: Dev / TA — design contract for MetaHuman facial retargeting, SDK transfer, and constraint workflows
-- **Purpose**: Canonical reference for how we match Fortnite / custom facial rigs to MetaHuman joint hierarchies, probe control→bridge wiring, and copy or constrain target SDK behavior onto source joints. Use when extending `MetahumanFacial.py`, debugging pose drift, or onboarding to the multi-month facial solve effort.
+- **Status**: In progress (July 2026)
+- **Last Updated**: July 7, 2026
+- **Audience**: Dev / TA — design contract for MetaHuman facial retargeting, SDK transfer, constraint workflows, and related Maya pipelines (body alignment, animation import)
+- **Purpose**: Canonical reference for how we match Fortnite / custom rigs to MetaHuman hierarchies, probe control→bridge wiring, copy or constrain target SDK behavior onto source joints, align custom anim controls to MetaHuman body skeletons, and import / retarget animation. Use when extending project facial solve scripts, debugging pose drift, building align presets, or onboarding to the multi-month MetaHuman effort.
 
-**Maintenance rule**: Update this doc when `transfer_rig`, `constrain_rig`, `map_controls_to_bridge`, or rest-pose / offset-locator behavior changes. Day-to-day iteration notes live in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md) (MetaHuman timeline section).
+**Maintenance rule**: Update this doc when `transfer_rig`, `constrain_rig`, `map_controls_to_bridge`, rest-pose / offset-locator behavior, **body align offset capture**, or **CCL mapping conventions** change. Day-to-day iteration notes live in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md) (MetaHuman timeline section).
 
 ---
 
@@ -21,10 +21,14 @@
 - Lightweight target-follow setup (`constrain_rig`) without SDK rebuild
 - Rest-pose capture, `bridge.rest` base SDK, offset-locator sampling
 - cgm `face_utils` pose-buffer schema for `fortniteMetaHuman` (reference only — wiring lives in project scripts today)
+- **Body rig alignment** — map custom anim controls to MetaHuman body / hand joints, capture spatial offsets, snap controls to follow skeleton motion (CCL preset workflow)
+- **Animation import** — light FBX body/face merge import and face control key transfer onto namespaced scene rigs
 
 ### Code placement note
 
-Core solve logic currently lives in Perforce **`ProjectScripts/MetahumanFacial.py`** for fast iteration. **Reusable helpers should factor into `cgmToolsPy3`** once the API stabilizes — see **MetaHuman Facial Solve** deliverables and **Future Considerations** in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md).
+Core solve logic currently lives in Perforce **project scripts** for fast iteration (`MetahumanFacial.py` for facial; body align and animation-import orchestration in separate project modules wired through Scene **Project Scripts**). **Reusable helpers should factor into `cgmToolsPy3`** once APIs stabilize — e.g. facial SDK helpers → `sdk_utils` / `mrs/lib/face_utils`; align offset capture, CCL load/save, and joint/control resolution → `cgm/core/lib/` — see **MetaHuman Facial Solve** deliverables and **Future Considerations** in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md).
+
+Project scripts depend on **cgmTools on Maya `PYTHONPATH`** (`cgm.core`, `cgm.lib`, `other.metahuman_api`). They are **not** co-located with the cgm ship tree; CCL mapping **data** lives under character `cgmDat/mocap/` assets.
 
 ### Out of scope
 
@@ -157,6 +161,69 @@ Both roots are **excluded** from joint pairs — only descendants are matched an
 
 ---
 
+## Body rig alignment to MetaHuman skeleton
+
+**Goal**: While a MetaHuman skeleton drives or previews motion, keep a **custom anim rig’s controls** spatially aligned using per-pair offsets — without rebaking the rig each frame manually.
+
+This is separate from facial SDK transfer but shares the **offset-locator** mental model: capture a rest differential once, replay it under moving joints.
+
+### Workflow (artist / TA)
+
+1. **Scene setup** — MetaHuman skeleton (Body / Face roots) and custom anim rig referenced in the same scene.
+2. **Skeleton roots** — Select the MH skeleton root transform(s) used for this shot / character and register them in the align UI. Required when **more than one MetaHuman skeleton** exists in the scene (duplicate `foot_l`-style names otherwise resolve to the wrong hierarchy).
+3. **Rig namespace** — Set the anim rig namespace (e.g. `Hondo:`) so control names resolve.
+4. **Load mapping preset** — Per-character `.ccl` file (mocapBakeTools-compatible JSON): skeleton joint pattern → anim control, plus follow mode per pair.
+5. **Bind pose** — With rig and skeleton in the intended aligned rest pose, **capture offsets** for all pairs (or selection).
+6. **Preview / animate** — Scrub skeleton or retarget motion; **snap** mapped controls (all or selected). Optional **debug locators** parented under joints for inspection.
+7. **Save preset** — Write updated `.ccl` with captured `localTranslate` / `localRotate` for reuse.
+
+### CCL mapping conventions (July 2026)
+
+Keep preset files **small and portable** — resolve at runtime, do not store scene DAG long paths.
+
+| Field | Convention | Resolved via |
+|-------|------------|--------------|
+| **Source (joint)** | `Body\|…` / `Face\|…` chains for spine/clavicle/head; **leaf names** for limbs and fingers (`foot_l`, `thumb_01_r`, `hand_r`, …) | Skeleton roots set in UI + suffix match under those roots |
+| **Target (control)** | Namespaced short name only (`Namespace:control_anim`) | Rig namespace field |
+| **Follow** | `po` = position + rotation; `o` = rotation only | Per-pair `setPosition` / `setRotation` in connection dict |
+| **Offsets** | `localTranslate`, `localRotate` on locator **parented to source joint** | Captured in bind pose; legacy `positionOffset` / forward-up vectors are deprecated for this workflow |
+
+Finger pairs follow MetaHuman ↔ custom rig naming (e.g. `index_metacarpal_r` → `*_index_0_FK_anim`, `index_01_r` → `*_index_1_fk_anim`, thumb chain three joints, no metacarpal). Helper / twist joints without anim controls (e.g. `index_01_half_r`) are intentionally unmapped.
+
+### Offset capture contract (body align)
+
+Same pivot discipline as marking-menu **Locator → Selected** (`LOC.create` uses rotate pivot), not legacy scale-pivot placement:
+
+1. **`doLoc()` on the anim control** — locator matches control world orientation; placement uses **rotate pivot (`rp`)**.
+2. **Parent locator to source joint** — preserve world transform (`maintainOffset` parenting).
+3. **Store** locator **`localTranslate` / `localRotate`** under that joint.
+4. **Snap** — rebuild (or reuse) parented locator with saved local TR; **`movePointSnap`** / **`moveOrientSnap`** on the control from locator world pivots/rotation.
+
+Use **`cgmObject(longName)`** for meta wrapping on production controls — avoid `validateObjArg(..., setClass=True)` on rig controls with locked `mClass`.
+
+### Multi-skeleton scenes
+
+When two MetaHuman rigs are present, joint lookup must be **scoped to UI skeleton roots** (semicolon-separated **long DAG paths** stored from selection). Short-name CCL patterns alone are correct only **after** roots disambiguate the hierarchy. Re-set roots, delete stale debug locators, and re-capture if the wrong skeleton was used during an earlier session.
+
+### Reporting
+
+Snap completion summaries go to the **Script Editor** (print + log), not modal dialogs — failures and unchanged pairs remain visible there for batch debugging.
+
+---
+
+## Animation import (MetaHuman FBX)
+
+Lightweight pipeline for bringing Unreal / MetaHuman animation into an existing namespaced scene rig:
+
+1. **Detect namespace** from selection (`CTRL_expressions` or `FacialControls` on target rig).
+2. **Body FBX** — merge import with aggressive FBX flags (no skins/shapes/cameras/constraints); optional post-import geo prune on the import delta.
+3. **Face FBX** — same light import; transfer animation from imported `CTRL_*` drivers onto namespaced scene controls using shared **`other.metahuman_api`** helpers (key copy / audit, not a full SDK rebuild).
+4. **Audit** — matched vs missing controls reported for TA review before publish.
+
+This path is orthogonal to facial **SDK transfer** (`transfer_rig`) — import moves **keys**; transfer rebuilds **driven joint SDK curves**.
+
+---
+
 ## transfer_rig Pipeline (normative order)
 
 High-level stages inside the undo chunk:
@@ -255,6 +322,11 @@ Deepest-first delete order for deletable joints only.
 | **Explicit `value=` on pose `setDrivenKeyframe`** | Bypasses snapped pose; omit `value` to use current attrs |
 | **Deleting all unmapped target joints** | Unmapped **ancestors** of matched joints are structural — must protect |
 | **Recomputing rest after SDK break** | Must use entry snapshot only |
+| **Scale pivot for align `doLoc` capture** | Translate wrong while rotate looks fine — snap uses rotate pivot; use **`rp`** (matches `LOC.create` / marking-menu locators) |
+| **Long DAG paths in CCL presets** | Bloated, path-dependent assets — use short joint patterns + namespaced controls; resolve via skeleton roots + rig NS |
+| **Global joint resolve with duplicate skeletons** | Locators parent to wrong hierarchy — require skeleton roots in UI before capture / snap |
+| **`validateObjArg(setClass=True)` on anim controls** | Locked `mClass` errors — use `cgmObject` only for align meta wrap |
+| **Legacy CCL `positionOffset` + forward/up for align** | Incompatible with parented local-TR workflow — capture `localTranslate` / `localRotate`; re-capture after pivot fix |
 
 ---
 
@@ -269,6 +341,8 @@ Deepest-first delete order for deletable joints only.
 | Transfer without movement cache | Keys on static joints | Respect `joint_static` skips |
 | `deleteUnused` on protected ancestors | Broken hierarchy / constraints | Use `check_only` → read `protected_unused` |
 | Assume control → joint direct SDK | Missing bridge hop | Audit with `get_driven_data` on bridge plug first |
+| Capture align offsets without skeleton roots (multi-MH scene) | Wrong joint parent for locators | Set roots from selection first |
+| Mix scale-pivot capture with rotate-pivot snap | Position drift on IK / offset controls | Single pivot contract end-to-end (`rp`) |
 
 ---
 
@@ -284,6 +358,17 @@ Run in Maya on a known MetaHuman + Fortnite test scene:
 6. **Full `transfer_rig()`** — undo chunk; scene restores plug values at end.
 7. **`constrain_rig(check_only=True)`** — pairs; `deletable_unused` vs `protected_unused` sane.
 8. **`constrain_rig(deleteUnused=True)`** — only leaf/unmapped branches removed.
+
+### Body align verification (dev)
+
+Run in Maya with MH skeleton + custom anim rig in bind pose:
+
+1. Set **skeleton roots** from the intended MH `Body` / `Face` roots; confirm field shows long paths.
+2. Load character **`.ccl`** preset; confirm mapping list resolves (no unresolved rows).
+3. **Capture offsets** — spot-check one IK foot and one finger: locator under correct joint, local TR sane.
+4. **Create debug locators** — parent chain matches skeleton roots scope.
+5. Move skeleton (or scrub retarget); **snap all** — Script Editor report; controls follow with captured differential.
+6. **Save CCL** — file uses short patterns only (no `\|BP_\|` / `\|master\|` DAG paths); reload round-trips.
 
 ### Example script calls
 
@@ -304,8 +389,14 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 - [ ] Persisted `bridgeMapping` asset per character variant
 - [ ] Bridge → joint second-hop audit (today: transfer samples target joint motion via locators, not a separate bridge→joint curve walk)
 - [ ] Batch / mayapy path for regression scenes
-- [ ] **Factor core helpers into cgm proper** (`sdk_utils`, `mrs/lib/face_utils`) — see [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md)
+- [ ] **Factor core helpers into cgm proper** (`sdk_utils`, `mrs/lib/face_utils`; align CCL + offset capture → `lib/`) — see [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md)
 - [ ] Artist manual section (Google Doc capture when UI exists)
+- [x] Body align: parented local-TR offset capture + snap (July 2026)
+- [x] CCL short-name convention + skeleton-root disambiguation (July 2026)
+- [x] `doLoc` rotate-pivot default aligned with marking-menu locators (July 2026 — cgm core)
+- [ ] Body + hand finger mappings in per-character CCL assets (ongoing as rigs land)
+- [ ] Optional mocapBakeTools timeline bake integration for align presets (not required for manual snap preview)
+- [ ] **Native align/snap/bake in mocapBakeTools** — see [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md)
 
 ---
 
@@ -327,5 +418,6 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 
 | Date | Summary |
 |------|---------|
+| 2026-07-07 | Body rig align workflow: CCL short-name conventions, skeleton-root scoping, local-TR offset capture (`rp` / `doLoc`), snap reporting; animation import overview; multi-skeleton and pivot learnings in rejected approaches |
 | 2026-06-22 | Branch timeline consolidated under UnrealWorkflow; factor-to-cgm note |
 | 2026-06-22 | Initial feature doc — two-hop SDK model, transfer_rig / constrain_rig pipelines, REST POSE invariants, offset locators, deleteUnused safety, rejected approaches, verification checklist |
