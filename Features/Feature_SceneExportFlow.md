@@ -247,6 +247,8 @@ Path roots built in `RunExportCommand`:
 
 **`addNamespaceSuffix`**: when cutscene-style multi-export, stem may get `_{assetName}` before `.fbx` for the base export file path.
 
+**Empty shot list + per-shot option**: when `exportShotsToIndividualFiles` (or cutscene flags) is on but `AnimList.shotList` is empty, export **falls back** to a single FBX at `exportName` (same as when per-shot is off). Log: `No shot list; falling back to single FBX`. If no FBX is recorded after export, `ExportScene` fails with `No FBX files written`.
+
 ---
 
 ## Export Options Data Flow
@@ -410,6 +412,7 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 | Disabling unparent "temporarily" | Silent loss of export hierarchy | Keep unparent in both prep paths |
 | Assuming bake strips namespace | Prefix still on during bake | Namespace strip is prep-stage only |
 | Mode 4 static expecting prep | No delete/export set processing | Static skips bake/prep by design |
+| `exportShotsToIndividualFiles` with empty `shotList` (old behavior) | Prep OK, no `FBXExport` log, batch `succeeded=1` | Fall back to single FBX at `exportFile`; guard fails if nothing written |
 
 ---
 
@@ -423,7 +426,7 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 | `bake` | Missing/empty bake set, bake exception | `Bake stage failed` |
 | `prep` | `Prep()` returned False, NS merge fail, non-ref prep exception | `Prep stage failed`, `Non-referenced prep failed` |
 | `select` | No targets after prep or mesh strip | `No export targets after`, `No export DAG to select after mesh strip` |
-| `fbx_export` | FBX plugin missing, path not writable | `FBX plugin not ready`, `Export output not writable` |
+| `fbx_export` | FBX plugin missing, path not writable, **no files written** | `FBX plugin not ready`, `Export output not writable`, `No FBX files written` |
 | `post_cleanup` | Optional cleanup delete failures | `Failed export cleanup delete` |
 
 **Useful success markers**:
@@ -470,3 +473,4 @@ Run in Maya after export pipeline changes:
 |------|---------|
 | 2026-06-15 | Initial feature doc — modes, tdSets, prep invariants, namespace/path rules, pattern cards, troubleshooting (post delete-selection + unparent fixes) |
 | 2026-06-15 | Added Export Options Data Flow — schema, cfg, Project tab UI, RunExportCommand/batch payload wiring |
+| 2026-07-02 | Empty shot list fallback — single FBX when per-shot option on but no shots; `No FBX files written` guard |
