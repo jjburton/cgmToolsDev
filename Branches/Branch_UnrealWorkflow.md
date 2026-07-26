@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: June 22, 2026 (MetaHuman facial SDK transfer/constrain; feature doc; deleteUnused safety)  
+**Last Updated**: July 25, 2026 (mirror_get cgmDirectionModifier matching + animate context guard)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -11,6 +11,8 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 
 ## 📚 Related Documentation
 - **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Canonical dev/TA spec: export modes, tdSet contract, prep order, namespace/path rules, troubleshooting
+- **[Feature_SimChain.md](../Features/Feature_SimChain.md)** - Canonical dev/TA spec: cgmSimChain / cgmDynFK hair + cloth attach, nCloth presets, connect/bake, Query Settings
+- **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** - Module/puppet message graphs, `mirror_get` tag-matching contract, control rewire consumers
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** - MetaHuman facial solve spec: two-hop SDK model, transfer_rig / constrain_rig, REST POSE invariants
 - **MetahumanFacial.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/MetahumanFacial.py` (Perforce) — facial SDK transfer / constrain (iteration home until core factors to py3)
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** - `fortniteMetaHuman` pose-buffer schema
@@ -38,6 +40,15 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[snap_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/snap_utils.py)** - `to_ground`, `ground_position_get`
 - **[snap_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/snap_calls.py)** - `get_special_pos` (`groundPos`), `snap_action` ground mode
 - **[position_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/position_utils.py)** - `scene_up_axis_get`, `ground_plane_up_index`, `position_project_to_ground_plane`, scene-up **bottom**/**top** in `get_bb_pos`
+- **[nCloth_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/nCloth_utils.py)** - nCloth preset apply (`profile_load` layered fabric/solver/wind), `query_settings` / `query_settings_selection`, scene-up nucleus gravity remap, skip list (`isDynamic`, collision attrs), `get_out_mesh_shape` / `get_out_mesh_transform` for cloth attach
+- **[node_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/node_utils.py)** - `create_UVPin`, `create_UVPinOnMesh`, `createRivetOnMesh` (Constraints-menu Rivet API + classic edge-loft fallback; no `mel createRivet`)
+- **[constraint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/constraint_utils.py)** — `attach_toShape(..., surfaceTrack=)` (follicle | rivet | uvPin); Rigging Utils **Attach by** surface-track items
+- **[dynamic_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/dynamic_utils.py)** — `map_cloth_surface`, `get_mapped_cloth`, `attach_to_cloth_dynFK`, `setup_sim_dynFK`, `cgmDynFK.bake_nodes`, `set_base_name`, `chainMode='clothAttach'`
+- **[dynFKTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/dynFKTool.py)** (`cgmSimChain`) - **Init Sim Setup**, Details **Cloth** `>>` + **Fabric** / **Solver** menus (explicit apply only), **Cloth track**, **Attach to Cloth**, editable **Base Name**, **Tools → Query Settings**, target bake + post-bake `targets_disconnect`, `reload_dependencies()`
+- **[tool_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_calls.py)** — `cgmSimChain()` reloads backend modules via `cgmGEN._reloadMod` before opening UI
+- **[module_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/module_utils.py)** — `mirror_get`, `siblings_get`, module parent/children wiring
+- **[animate_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/animate_utils.py)** — Animate context cache (`module_get`, `context_get`, mirror module expansion)
+- **[cgmNCloth_presets.py](../../../repos/cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** - Layered profiles: **fabric** (`silk`, `cotton`, `denim`, …), **solver** (`solver_balanced`, `solver_quality`, `solver_high`, …), **wind** (`wind_calm`, `wind_flag`); `d_profileKind` registry
 - **[transform_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/transform_utils.py)** - `ground_position_get` re-export
 - **[mayaSettings_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaSettings_utils.py)** - `sceneUp_get()` (Maya `upAxis`)
 - **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, golden/finger presets
@@ -48,6 +59,173 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
 
 ## 🗓️ Timeline
+
+### July 25, 2026 - mirror_get cgmDirectionModifier matching (FRNT vs none)
+**What**: Fixed bilateral module mirror lookup when a puppet has multiple same-name modules on one side differing only by **`cgmDirectionModifier`** (e.g. `L_coat_segment_part` vs `L_FRNT_coat_segment_part`). `mirror_get` previously omitted absent modifier tags from the match dict, so `L_coat_segment_part` matched both `R_coat_segment_part` and `R_FRNT_coat_segment_part` and raised `"Shouldn't have found more than one mirror module!"`. Animate marking-menu context then crashed with `'NoneType' object is not subscriptable` when `module_get` failed.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/lib/module_utils.py` — `mirror_get` always compares `cgmPosition`, `cgmPositionModifier`, `cgmDirectionModifier` via `getCGMNameTags(['cgmDirection'])` (absent tags = `False`); child loop uses same tag source for modifier plugs
+- EXTENDED: `cgm/core/mrs/lib/animate_utils.py` — `context_get` uses `module_get(...) or {}` and `.get('mControls', [])` when building control lists
+- EXTENDED: `Features/Feature_MRSWiring.md` — **Module mirror lookup (`mirror_get`)** pattern + maintenance rule cross-ref
+
+**Features**:
+- **`L_coat_segment_part` → `R_coat_segment_part`** (no FRNT modifier on either side)
+- **`L_FRNT_coat_segment_part` → `R_FRNT_coat_segment_part`** (FRNT modifier preserved)
+- Marking-menu / Animate mirror context no longer hard-fails on ambiguous coat modules
+
+**Decisions**:
+- Module mirror pairing follows the same tag contract as control pairing in **`mirror_verify`** — do not match on name/type/direction alone when position/modifier tags differ
+- Keep the `"more than one mirror module"` guard; disambiguation is via tags, not tie-break heuristics
+
+**Status**: ✅ Code complete — user verify: Hondo (or similar) coat modules + normal limb mirror spot-check in Animate marking menu
+
+---
+
+### July 25, 2026 - cgmSimChain bake constraint cleanup + preset menu fix
+**What**: Fixed two cloth-workflow regressions: **Bake All Targets** left loc→target `parentConstraint` nodes live after simulation bake, and **Attach to Cloth** / Details rebuild could re-apply nCloth presets because Fabric/Solver menus defaulted to `cotton` / `solver_balanced` and fired `changeCommand` on UI rebuild. Added canonical **`Feature_SimChain.md`** design contract (July 14 doc; branch cross-link maintained).  
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `bake_nodes` calls **`targets_disconnect`** after `bakeResults` for any chain whose `mTargets` were baked (explicit `parentConstraint` cleanup; `disableImplicitControl` alone was unreliable)
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — Fabric/Solver menus default to **`Fabric`** / **`Solver`** placeholders; **`_suppressClothPresetApply`** while wiring menus on Details rebuild; presets apply **only** on explicit menu change (not attach/map/rebuild); remembers last menu selection for display without re-apply
+- NEW: `Features/Feature_SimChain.md` — dev/TA spec: hair vs `clothAttach`, connect/bake contract, layered presets, Query Settings, verification checklist
+- EXTENDED: `Features/Feature_SimChain.md` — bake contract documents post-bake `targets_disconnect`; anti-pattern for preset auto-apply on rebuild
+
+**Features**:
+- **Bake All Targets**: keys from sim bake, then constraints removed on baked target chains
+- **Presets**: selecting **Fabric** / **Solver** from Details menus applies; attach and chain creation do **not** touch cloth attrs
+
+**Decisions**:
+- Do not rely on Maya **`disableImplicitControl`** alone for loc→target cleanup — always **`targets_disconnect`** after target bake
+- nCloth preset apply is **opt-in** from menus — never side-effect of UI rebuild or attach
+
+**Status**: ✅ Code complete — user verify: attach chain → tuned cloth unchanged; connect → bake → no `parentConstraint` on targets
+
+---
+
+### July 20, 2026 - Scene export queue multi-select + file-list popup rebuild
+**What**: Artists can Ctrl/Shift multi-select Maya files in Sets, Variation, and Version scroll lists and enqueue them in one action from the bottom toolbar. Right-click file menus stay single-selection only; multi-select suppresses the popup using the same delete-and-rebuild pattern as MRS Builder block scroll lists.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `build_searchable_list(..., allowMultiSelect=)`; `AddSelectedToExportQueue` + `_collectExportQueueEntries` / `_exportQueueEntryFor*` helpers; toolbar **Add to queue as** wired to bulk path; RMB **To Queue as** still uses `AddToExportQueue` (one item); `_wireFileListScrollSelect`, `_fileListSelectCommand`, `_clearFileListPopupMenu`, `buildSubTypeListPopup` / `buildVariationListPopup` / `buildVersionListPopup` (Builder pattern: delete popup on selection change, skip rebuild when multi-select); `button=3` popups; init guard so wire-up does not run select handlers before sibling lists exist
+- EXTENDED: `Features/Feature_SceneExportFlow.md` — export queue UI section + revision note
+
+**Features**:
+- **Multi-select** on Sets / Variation / Version file scroll lists (Asset list remains single-select)
+- **Toolbar bulk queue**: **Add to queue as: Anim / Cutscene / Rig** → `AddSelectedToExportQueue` appends one queue entry per selected file (active list prefers multi-selection, else Version → Variation → Sets)
+- **Right-click unchanged for queue**: popup **To Queue as:** still queues primary selection only via `AddToExportQueue`
+- **Multi-select + RMB**: no context menu (popup deleted, not rebuilt — matches `Builder.uiScrollList_block_select`)
+- **Batch unchanged**: `batch_buildFile` / `BatchExport` consume same `batchExportItems` dict shape
+
+**Decisions**:
+- Bulk queue is **toolbar-only** — no multi-mode right-click queue submenu
+- Popup suppression follows **Builder** (rebuild on select, omit menu when `len(selected) > 1`), not enable/vis toggles on a static popup (those did not reliably hide Maya menus)
+- Do not call list select handlers during initial UI wire when downstream columns are not built yet (`variationList` guard)
+
+**Status**: ✅ Code complete — user verified bulk queue; reload Scene UI after sync
+
+---
+
+### July 14, 2026 - cgmSimChain polish: bake, presets, query, base name
+**What**: Hardened cloth workflow UX after surface-track attach: nucleus-only **Init Sim Setup**, layered nCloth **Fabric** + **Solver** menus, simulation bake for targets (cloth + hair), preset query tool, editable setup base name, and preset hygiene (`isDynamic` is not profile data).  
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `setup_sim_dynFK` / `cgmDynFK.setup_sim`; `ensure_nucleus` + `_wire_time1_current_time`; `map_cloth_surface` rewires mapped nCloth to setup nucleus; `attach_to_cloth_dynFK` sets `cgmMatchTarget` → paired `mLoc`; `targets_connect` sets match target + `parentConstraint(loc, target)`; `cgmDynFK.bake_nodes` (`mc.bakeResults`, `simulation=True`, `disableImplicitControl=True`); `set_base_name`; load existing setup reads `cgmName` / `_dynFK` suffix
+- EXTENDED: `cgm/core/lib/nCloth_utils.py` — layered `profile_load(fabric, solver=, wind=)`; `profile_kind` / `d_profileKind`; `query_settings`, `query_nucleus_settings`, `query_settings_selection`, `profile_format_paste`; `l_skipPresetAttrs` adds **`isDynamic`**; removed `isDynamic` from `base` nc in presets file
+- EXTENDED: `cgm/core/presets/cgmNCloth_presets.py` — split **fabric** / **solver** / **wind** profiles; `solver_high` (20 substeps, 50 max collision iters); `preview` → `solver_preview` alias in utils
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — **Init Sim Setup**; Details **Fabric** + **Solver** option menus on Cloth row (`uiFunc_apply_ncloth_profiles`); editable **Base Name** (Details + Options); **Tools → Query Settings**; bake calls `bake_nodes` only (no manual snap loop)
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — dynFK nucleus `profile_load` remaps gravity via `NCLOTH._remap_nucleus_scene_axes`
+
+**Features**:
+- **Init Sim Setup**: `cgmDynFK` + nucleus + `time1.outTime → currentTime` without `makeCurvesDynamic` — required before **Cloth `>>`** when no hair chain exists
+- **Map cloth**: links `mCloth` transform; if setup nucleus exists, reconnects nCloth sim to that nucleus
+- **Presets in UI**: `NCLOTH.profile_load(fabric, solver=solver, applyNucleus=True)` — fabric feel independent of solver speed
+- **Bake All Targets**: `bakeResults` simulation bake; **`targets_disconnect`** after bake removes loc→target constraints (July 25 — `disableImplicitControl` alone was insufficient)
+- **Connect Targets**: `mLocs` drive targets; `cgmMatchTarget` points at loc for snap/bake workflows
+- **Base Name**: editable on loaded setup; renames `{baseName}_dynFK` + updates `cgmName`
+- **Tools → Query Settings**: selection → preset-shaped `profile` dict (diff from `base`), paste-ready Python block, Script Editor output; supports nCloth, nucleus, cgmDynFK mapped cloth, hair/nucleus dynFK nodes
+
+**Decisions**:
+- **`isDynamic`** is a runtime sim on/off switch — never apply or capture in presets (same class as collision flags)
+- Target bake uses Maya **simulation bake**, not per-frame `doSnapTo` + `setKeyframe`
+- Fabric and solver are **layered profiles**, not combined monolithic presets (`denim` + `solver_high`, etc.)
+- Query output is **diff from `base`** so artists can paste deltas into new fabric/solver entries
+
+**Status**: ✅ Code complete — Maya verify: Init Sim → map cloth → cotton + solver_high → attach → connect → bake targets; Query Settings on tuned cloth
+
+---
+
+### July 13, 2026 - nCloth preset profiles + apply helper
+**What**: Added script-editor nCloth preset library and applier for cloth sim testing (capes, apparel, flags). Profiles set fabric dynamics + nucleus solver attrs; scene **Z-up** gravity is detected automatically; collision setup on the nCloth is left untouched.  
+**Files**:
+- NEW: `cgm/core/presets/cgmNCloth_presets.py` — `base` + initial monolithic profiles (`silk`, `cotton`, …); **July 14** refactor split fabric / solver / wind — see timeline entry above
+- NEW: `cgm/core/lib/nCloth_utils.py` — `get_nCloth` / `get_nCloths` (shape, transform, or mesh); `profile_list`, `profile_load`, `apply`; `scene_up_get`, `gravity_direction_get`; `_remap_nucleus_scene_axes` via `position_utils.scene_up_axis_get`
+- EXTENDED: `cgm/core/lib/nCloth_utils.py` — `pointMass` alias (`mass` → `pointMass`); skip compound/array attrs; `l_skipPresetAttrs` for collision attrs + **`isDynamic`** (July 14)
+
+**Features**:
+- **Script editor**: `import cgm.core.lib.nCloth_utils as NCLOTH` → `NCLOTH.profile_load('stable')` on selected nCloth / mesh
+- **Scene up**: nucleus `gravityDirection` remapped at apply (Y-up `[0,-1,0]`, Z-up `[0,0,-1]`); ground `planeNormal` when `usePlane` is on
+- **Collision preserved**: presets do not overwrite self-collide, collision flags, or thickness — artist/scene collision setup stays as-is
+- **Profiles**: `stable` for character apparel first pass; `silk` / `flag` for light/windy cloth; `preview` for fast scrubbing
+
+**Decisions**:
+- Presets live under **`cgm/core/presets/`** (same pattern as `cgmDynFK_presets`); applier in **`lib/nCloth_utils.py`**
+- Fabric dynamics only from presets — collision attrs filtered at apply time even if re-added to preset data later
+- Nucleus `spaceScale` default `0.01` (cm scenes); artists on meters bump manually for now
+
+**Status**: ✅ Code complete — Maya nCloth runtime verification user-side (Z-up gravity + stable/silk profiles)
+
+---
+
+### July 13, 2026 - cgmSimChain cloth attach + surface tracks (follicle / rivet / uvPin)
+**What**: Extended **cgmSimChain** (`dynFKTool` / `cgmDynFK`) with mapped cloth surface, nCloth preset loading in Details, a distinct **Attach to Cloth** action (mesh trackers on linked nCloth **outMesh**), and artist-selectable **surface track** mode. **Make Dynamic Chain** (hair / `makeCurvesDynamic`) unchanged. nCloth **creation** stays outside the tool — artists map an existing nCloth to setup `mCloth`.  
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `map_cloth_surface()`, `get_mapped_cloth()`; `attach_to_cloth_dynFK()` calls `RIGCONSTRAINTS.attach_toShape` per joint on nCloth outMesh; `chainMode='clothAttach'`; per-chain `surfaceTrack` attr; msgLists `mLocs`, `mMeshFollicles`, `mRivets`, `mUvPins`; `chain_create` dispatches `hair` vs `clothAttach`; `chain_create_hair` (extracted, behavior unchanged); `get_dat()` adds `mCloth`, `mClothOutMesh`, per-chain track lists
+- EXTENDED: `cgm/core/rig/constraint_utils.py` — `attach_toShape(..., surfaceTrack='follicle'|'rivet'|'uvPin')`; rivet via `NODES.createRivetOnMesh`; uvPin via `NODES.create_UVPinOnMesh`
+- EXTENDED: `cgm/core/lib/node_utils.py` — `createRivetOnMesh` (Maya **Constraints → Rivet** internal API when available, else classic `curveFromMeshEdge` + `loft` + `pointOnSurfaceInfo` network — **not** `mel createRivet`, which is absent in current Maya/py3 builds); `create_UVPinOnMesh` wrapper around existing `create_UVPin`
+- EXTENDED: `cgm/core/lib/nCloth_utils.py` — `get_out_mesh_shape`, `get_out_mesh_transform` (sim output mesh for attach)
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — Details **Cloth** row: status label + single **`>>`** (map selected nCloth; no separate Map Cloth button); `cgmNCloth_presets` menu when mapped; Create panel **Cloth track** menu + **Attach to Cloth** (gated on `mCloth`); per-chain UI branches on `chainMode` / `surfaceTrack`; `reload_dependencies()` + **Setup → Reload** via `cgmGEN._reloadMod`
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — Rigging Utils **Attach by → Surface track** items (`track:follicle`, `track:rivet`, `track:uvPin`)
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — `cgmSimChain()` reloads `dynamic_utils`, `constraint_utils`, `node_utils`, nCloth presets before UI open
+
+**Features**:
+- **Map cloth**: select nCloth → Details **Cloth** row **`>>`** → `map_cloth_surface()` links setup `mCloth` (nCloth **transform**, not shape — reliable readback via `listConnections`)
+- **nCloth presets in tool**: Details Cloth row **Fabric** + **Solver** menus → `NCLOTH.profile_load(fabric, solver=, applyNucleus=True)` (July 14 split; was single menu July 13)
+- **Cloth track** (Create panel): `follicle` | `rivet` | `uvPin` before **Attach to Cloth**
+- **Attach to Cloth**: fails fast if `mCloth` unset; places mesh tracker on **outMesh** per joint; **loc per target** parented under track (`mLocs` drive Connect Targets / bake — not follicle/rivet/uvPin xform directly)
+- **Surface track behavior**:
+  - **follicle** — follicle on closest UV (`mMeshFollicles`)
+  - **rivet** — Constraints-menu rivet or classic edge-loft rivet (`mRivets`)
+  - **uvPin** — `uvPin` node + locator on closest UV; one shared `uvPin` per mesh shape when possible (`mUvPins`)
+- **Coexistence**: hair (`chainMode='hair'`) and cloth attach chains on one setup (shared nucleus)
+- **Reload**: **Setup → Reload** or toolbox `cgmSimChain()` picks up backend changes without Maya restart
+
+**Decisions**:
+- **Extend cgmSimChain**, not a separate cloth-only tool — shared nucleus, joint list, bake/connect UX
+- Cloth chains do **not** use `makeCurvesDynamic` or per-chain hairSystem — follow simmed cloth mesh only
+- Reuse **`RIGCONSTRAINTS.attach_toShape`** (Rigging Utils **Attach by**) — no parallel `dynamic_mesh_follow` module
+- Do **not** merge `cgmNCloth_presets` into `cgmDynFK_presets` (`nc` vs `hs` sections)
+- Presets still skip collision attrs at apply (unchanged)
+- Details **Cloth** row uses **`>>` only** for map (no duplicate Map Cloth button)
+
+**Status**: ✅ Code complete — Maya verify: map cloth (`>>`) → preset → pick surface track → attach joint chain → connect/bake targets (all three track modes)
+
+---
+
+### July 13, 2026 - Scene mixed-level scroll list buttons
+**What**: Fixed Scene asset-browser columns treating a browse level as **either** directories **or** files. When set folders and loose `.ma/.mb` files coexist at the same level (e.g. `Animations/` with set subdirs + loose scenes), the sets/variation rows now show **both** directory actions (New Subtype / Add Set / Add Variation) **and** file actions (Save Maya here / Export / Save Version). Version column visibility is driven by level content and selection type, not `hasSub`/`hasNested` alone.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_dir_children_dirs`, `_dir_maya_files`, `_dir_is_mixed`, `_subtype_level_has_content`, `_level_show_dir_actions`, `_level_show_file_actions`, `_version_column_should_show`; shared `_append_set_*` / `_append_variation_*` button builders; refactored `uiUpdate_setsButtons` + new `uiUpdate_variationButtons`; `mRow_variationButtons` replaces static `variationButton`; `b_varFile` parallel to `b_subFile`; `LoadVariationList` includes loose Maya files; select handlers refresh buttons + version column; `versionFile` resolves when `path_variationDirectory` is a file; `SetSubType` / `buildAssetForm` use content-based version-column gates
+
+**Features**:
+- **Mixed subtype level**: sets row shows dir + file icon buttons together; folder select keeps version column; file select hides version column but keeps file buttons on sets row
+- **Mixed set + variants**: variation row shows Add Variation + file buttons when variant subdirs and loose files coexist under `path_set`
+- **Files-only / dirs-only**: prior single-mode behavior preserved (file buttons only vs dir buttons only)
+- **Metadata on loose variation files**: file select in variation list drives `getMetaDataFromFile` via `versionFile` file-path resolution
+
+**Decisions**:
+- Dir and file button visibility composed independently from **immediate children** of the browse directory — do not infer file actions from `hasSub` alone
+- Hide version column only when parent-list selection is itself a file (`b_subFile` / `b_varFile`), or when the resolved version parent has neither child dirs nor Maya files
+- Variation column uses same dynamic row pattern as sets (`mRow_variationButtons` + `uiUpdate_variationButtons`)
+
+**Status**: ✅ Complete — user verified in Maya
+
+---
 
 ### July 2, 2026 - Empty shot list anim export fallback
 **What**: Fixed silent no-op when `exportShotsToIndividualFiles` (or cutscene per-shot branch) was enabled but the scene had no `AnimList` shots — prep completed, batch reported success, no FBX written.  
@@ -697,6 +875,9 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] Multi-reference cutscene Prep picks correct rig `delete_tdSet` (strict `resolve_delete_set` + `resolved_set`)
 - [x] Cutscene `deleteMesh` + stale `exportTransforms` after Prep (`_export_transforms_after_mesh_strip`)
 - [x] Version-column save/export when versions live under `path_asset` (`_version_files_parent_directory`)
+- [x] Mixed browse levels (dirs + loose `.ma/.mb` at same path): sets/variation icon rows and version column visibility (`uiUpdate_setsButtons`, `uiUpdate_variationButtons`, `_version_column_should_show`)
+- [x] Export queue bulk add from multi-selected Sets/Variation/Version files (toolbar **Add to queue as**; RMB queue single-file only)
+- [x] Animate mirror context on rigs with duplicate module names + direction modifiers (`mirror_get` tag matching; `animate_utils.context_get` guard)
 
 ### Low
 - [x] Playback stopped before frame-scrub bakes (`cgmGEN.playback_stop` + PostBake / Locinator / bakeAndPrep / mocap / funcIterTime)
@@ -707,6 +888,16 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] Nested-ref bake/export/delete tdSet resolution (`resolve_td_set_for_asset`)
 - [x] Mayapy FBX import order + lazy FBX version probe (no `FBXExportFileVersion` spam at batch start)
 - [x] Ground snap / `groundPos` respect Maya scene up (Y-up and Z-up; unified helpers in `position_utils` / `snap_utils`)
+- [x] nCloth preset profiles + apply helper with scene-up nucleus gravity (`nCloth_utils`, `cgmNCloth_presets`)
+- [x] cgmSimChain cloth map + attach (`attach_to_cloth_dynFK` / `attach_toShape` surface tracks, `dynFKTool` Cloth `>>` / Attach to Cloth, follicle / rivet / uvPin)
+- [x] cgmSimChain Init Sim + layered nCloth Fabric/Solver presets + `solver_high` (`setup_sim_dynFK`, split menus, `profile_load` layering)
+- [x] cgmSimChain target bake via `bake_nodes` / `bakeResults(simulation=True)` + post-bake **`targets_disconnect`**
+- [x] cgmSimChain Fabric/Solver menus — explicit preset apply only (no auto-apply on attach/Details rebuild)
+- [x] **Feature_SimChain.md** design contract (canonical dev/TA reference)
+- [x] cgmSimChain **Tools → Query Settings** (`query_settings_selection`, preset diff from `base`)
+- [x] nCloth presets exclude `isDynamic` (runtime switch, not fabric profile)
+- [x] cgmSimChain editable base name on loaded setup (`set_base_name`)
+- [x] `mirror_get` disambiguates modules with same name/type/direction but different `cgmDirectionModifier` (FRNT vs none); animate `context_get` guard when `module_get` fails
 - [x] MetaHuman facial skeleton prune to keep-list + root chain (`joint_utils.pruneSkeletonToJoints`)
 - [x] Maya Be Odd **Cascade UI Windows** dev menu action (`mayaBeOdd_utils` / `tool_chunks`)
 - [x] Send to Build / MRS Build path: stage logging, window placement, `fillDefaults` opt-in verbosity (`CGM_VERBOSE_FILL_DEFAULTS`)
@@ -725,6 +916,8 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **Rig + shot-splitting option ON**: ✅ Code-path validated; split branch blocked for rig exports.
 - **Multi-ref cutscene + deleteMesh**: ✅ Code-path validated; per-rig delete set + post-strip selection refresh.
 - **Version column (no subtype tabs / version in column 2)**: ✅ Save/export paths aligned with `LoadVersionList`.
+- **Mixed browse level (set folders + loose `.ma/.mb`)**: ✅ User verified — dir + file buttons together; version column follows folder vs file selection.
+- **Export queue multi-select (toolbar Add to queue as)**: ✅ User verified — multiple version files enqueue in one action; RMB suppressed on multi-select.
 - **Per-shot individual FBX (exportShotsToIndividualFiles)**: ✅ User verified (Crate closed/opening/open/closing); export summary at batch end.
 - **Read-only synced FBX in depot**: ✅ Fail before FBX with path listed; `.bak` cleanup when deletable (manual `p4 edit` still required).
 - **Static export + texture-link option behavior**: ⚠️ Not changed in this pass; requires runtime verification.
@@ -741,7 +934,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 # Scene Export: Unreal workflow (rig stability, logging, bake/delete, MRS Build)
 
 ## Overview
-Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
+Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
 
 ## Major Changes
 
@@ -783,6 +976,8 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 
 ### 11. Scene column UI (`Scene`)
 - Icon rows: save here / export / save version; `_save_here_suggested_stub` + `fileDialog2` prefill; `_version_files_parent_directory` for list/save path parity
+- Mixed browse levels: dir + file icon buttons composed independently on sets/variation rows; `_version_column_should_show` + `b_subFile` / `b_varFile` for version column visibility
+- Export queue: multi-select on Sets/Variation/Version lists; toolbar **Add to queue as** → `AddSelectedToExportQueue`; RMB **To Queue as** → `AddToExportQueue` (single item); file-list popups rebuilt via Builder pattern (`_wireFileListScrollSelect`, no menu when multi-select)
 
 ### 12. AnimFilter close confirm (`baseMelUI`, `animFilterTool`)
 - `BaseMelWindow.VERIFY_CLOSE` + `confirmClose()` / `restoreAfterCloseCancelled()`; AnimFilter always confirms on **X** (cmds `closeCommand` path)
@@ -904,6 +1099,28 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - MetaHuman **rest pose**: capture sdk node rest via **`getAttr` tx–rz** only — never `xform`; `jointOrient` breaks xform-based rest reads.
 - MetaHuman **pose SDK transfer**: set control only during sampling; snap sdk → offset locator; omit `value=` on `setDrivenKeyframe` so snapped attrs drive keys.
 - MetaHuman **constrain_rig deleteUnused**: unmapped joints on the parent chain of matched targets are structural — protect, do not delete.
+- Scene scroll-list **bottom buttons** and **version column visibility** must be derived from **level content** (child dirs + Maya files) and **selection type** (`b_subFile` / `b_varFile`) — `hasSub` / `hasNested` mean “any child dir exists” and must not gate file actions or hide the version column when loose files are present.
+- **File-list context menus** (Sets/Variation/Version): use **Builder** pattern — `delete()` popup on each selection change, rebuild only for single-select; static popups + enable/vis toggles do not reliably suppress Maya RMB on `iconTextScrollList`.
+- **Export queue bulk add** is toolbar-only; RMB queue stays one primary item. Re-bind `sc` on the scroll list after replacing `selCommand` so popup sync runs on Ctrl/Shift multi-select (`cgmScrollList` registers callback at create time).
+- **`_wireFileListScrollSelect`**: do not invoke select handlers during initial UI build before sibling columns exist (`variationList` may still be `None`).
+- nCloth **`mass`** in the Attribute Editor maps to plug **`pointMass`** on the shape; parent `mass` is compound — preset applier aliases and skips non-scalar attrs.
+- nCloth presets intentionally **do not** set collision thickness / self-collide / collision flags — cloth collision is scene-specific (character body, layers, thickness).
+- Nucleus **`gravityDirection`** for nCloth presets must follow **`scene_up_axis_get()`** — same Z-up lesson as ground snap; do not hardcode Y-down in apply paths.
+- **cgmSimChain cloth attach** uses nCloth **outputMesh**, not input mesh — resolve via `get_out_mesh_shape` before tracker placement.
+- **Attach to Cloth** requires setup-level **`mCloth`** — no silent fallback to selection; gate UI until mapped.
+- **`mCloth`** links the nCloth **transform** (not shape) — shape `viewName` breaks `get_message` readback; use plain `listConnections` in `get_mapped_cloth`.
+- **`mel createRivet`** is not available in current Maya/py3 builds — rivet path uses Constraints-menu internal API or classic edge-loft node network in **`node_utils.createRivetOnMesh`**.
+- **Cloth surface tracks**: `follicle` (follicle UV), `rivet` (face/edge rivet), `uvPin` (`create_UVPin` + locator) — all via `attach_toShape(..., surfaceTrack=)`; locators under track for connect/bake.
+- **cgmSimChain reload**: `reload_dependencies()` + `cgmGEN._reloadMod` on toolbox launch and **Setup → Reload** — required after editing `dynamic_utils` / `constraint_utils` / `node_utils` during dev.
+- **Init Sim Setup** creates nucleus without hair — map cloth (`>>`) expects this path when artists have nCloth but no dynamic curve chain; `time1 → currentTime` must be wired on nucleus and nCloth after map.
+- **nCloth preset layering**: fabric profiles touch **`nc`** only; solver profiles touch **`n`** only — pair in UI (`cotton` + `solver_high`), not one monolithic preset.
+- **`isDynamic`** is not preset data — sim enable/disable is artist workflow; Query Settings and `profile_load` skip it.
+- **Target bake**: `mc.bakeResults(..., simulation=True)` then **`targets_disconnect`** on baked target chains — do not rely on `disableImplicitControl` alone for loc→target cleanup.
+- **Cloth preset menus**: default **`Fabric`** / **`Solver`** placeholders; apply only when artist picks a profile — Details rebuild (attach/map) must not call `profile_load`.
+- **Query Settings** returns **diff from `base`** + paste-ready block — use **Tools → Query Settings** or `NCLOTH.query_settings_selection()` when capturing tuned cloth for new presets.
+- **`mc.ls(..., long=True)`** — not `longPath` (Maya cmds flag name).
+- **`mirror_get`**: always match **`cgmPosition` / `cgmPositionModifier` / `cgmDirectionModifier`** via `getCGMNameTags(['cgmDirection'])` — absent tags are **`False`**, not “ignore in comparison”. Omitting unset attrs caused duplicate matches (e.g. `L_coat` matching both `R_coat` and `R_FRNT_coat`).
+- Animate **`context_get`**: treat failed **`module_get`** as `{}` when collecting controls — `mirror_get` exceptions must not cascade to `'NoneType' object is not subscriptable`.
 
 ### Future Considerations
 - AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
@@ -913,9 +1130,12 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Curve tweak row: optional `rebuild` toggle for distribute; lane-align `samples` / `refine_steps` exposed in UI if artists need tuning.
 - Ratio arrange: optional `cubicRebuild` / target-curve entries on toolbox row; store last custom ratio in optionVar.
 - Optional skin-cluster / bind preflight before `pruneSkeletonToJoints` (or auto-detach helper) if facial strip becomes a one-click artist tool.
+- Cloth attach: optional manual UV / face placement override (closest-point is default for all three surface tracks); chain rebuild parity for `clothAttach` chains.
+- Query Settings: optional copy-to-clipboard; full-profile export toggle (not only diff from `base`).
+- nCloth: `cotton_static` or similar only if artists need a documented “sim off” utility — still must not use `isDynamic` in fabric presets.
 - **Factor MetaHuman facial core into cgm proper** when API stabilizes: `get_driven_data` / SDK helpers → **`sdk_utils`**; joint match, bridge probe, rest/transfer helpers → **`mrs/lib/face_utils`**; thin **`tools/`** or ProjectScripts caller for orchestration; character **`d_wire`** maps stay project-specific. Do not split REST POSE + offset-locator sampling prematurely.
 
 ---
 
-*Last Updated: June 22, 2026 (MetaHuman transfer_rig / constrain_rig; feature doc; deleteUnused safety)*  
+*Last Updated: July 25, 2026 (mirror_get cgmDirectionModifier matching + animate context guard)*  
 *Branch Status: Active*

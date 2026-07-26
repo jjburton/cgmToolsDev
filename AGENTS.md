@@ -18,9 +18,13 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 5. **Export pipeline design contract**: [`Features/Feature_SceneExportFlow.md`](Features/Feature_SceneExportFlow.md) — canonical dev/TA reference for Scene export behavior (modes, tdSets, prep invariants). Update when changing `ExportScene` or `bakeAndPrep`.
 
-6. **MetaHuman facial solve design contract**: [`Features/Feature_Metahuman.md`](Features/Feature_Metahuman.md) — joint matching, bridge mapping, `transfer_rig` / `constrain_rig`, rest-pose invariants. Timeline on [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md). Primary code in Perforce `ProjectScripts/MetahumanFacial.py` (factor core to cgm when API stabilizes).
+6. **cgmSimChain design contract**: [`Features/Feature_SimChain.md`](Features/Feature_SimChain.md) — hair vs cloth attach chains, nCloth preset layering, connect/bake invariants, Query Settings. Update when changing `cgmDynFK`, `dynFKTool`, or `nCloth_utils`.
 
-7. **Mocap align snap / bake design contract**: [`Features/Feature_MocapAlignSnap.md`](Features/Feature_MocapAlignSnap.md) — plan to integrate local-TR locator align, single-frame snap, and timeline bake into `mocapBakeTools`. Update when changing offset capture, CCL schema, or bake loop.
+7. **MetaHuman facial solve design contract**: [`Features/Feature_Metahuman.md`](Features/Feature_Metahuman.md) — joint matching, bridge mapping, `transfer_rig` / `constrain_rig`, rest-pose invariants. Timeline on [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md). Primary code in Perforce `ProjectScripts/MetahumanFacial.py` (factor core to cgm when API stabilizes).
+
+8. **Mocap align snap / bake design contract**: [`Features/Feature_MocapAlignSnap.md`](Features/Feature_MocapAlignSnap.md) — plan to integrate local-TR locator align, single-frame snap, and timeline bake into `mocapBakeTools`. Update when changing offset capture, CCL schema, or bake loop.
+
+9. **MRS module wiring design contract**: [`Features/Feature_MRSWiring.md`](Features/Feature_MRSWiring.md) — block/module/puppet message graphs, build sync, control rewire, attach points. Update when changing `puppet_utils`, `module_utils`, or `moduleTarget_wire_from_blockParent`.
 
 ## Python 2 backport (exceptional)
 

@@ -3,11 +3,15 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: June 15, 2026
+- **Last Updated**: July 20, 2026
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
 **Maintenance rule**: Update this doc whenever `ExportScene`, `Prep`, `export_prep_non_referenced`, or tdSet resolution behavior changes. Timeline of individual fixes lives in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md).
+
+**Related docs**
+
+- [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — block/module/puppet wiring and qss sets on puppet/modules (orthogonal; export reads tdSets, not module graph)
 
 ---
 
@@ -158,7 +162,7 @@ sequenceDiagram
   ES->>BP: Resolve export_tdSet + capture member hint strings
   BP->>Maya: export_constraints_clear_on_members
   BP->>Maya: export_unparent_members_to_world
-  Note over BP,Maya: Required when export members are under master and master is in delete_tdSet
+  Note over BP,Maya: When parentExportToWorld=True; required if export members are under master in delete_tdSet
   BP->>Maya: ProcessDeleteSet per-rig resolved_set
   BP->>Maya: mergeNamespaceWithRoot if removeNamespace
   BP->>Maya: export_select_targets_resolve
@@ -173,7 +177,7 @@ sequenceDiagram
 | Function | Role |
 |----------|------|
 | `export_constraints_clear_on_members` | Remove constraints (and optional `zeroRoot` on `rootMotion`) on export set members |
-| `export_unparent_members_to_world` | `mc.parent(member, world=True)` so delete of `master` does not delete export hierarchy |
+| `export_unparent_members_to_world` | When `parentExportToWorld=True`: `mc.parent(member, world=True)` so delete of `master` does not delete export hierarchy |
 | `export_select_targets_resolve` | Resolve surviving paths from member hints + short-name `mc.ls`; post-NS fallback re-reads unnamespaced export set |
 | `export_prep_non_referenced` | Full non-ref prep pipeline; returns list of paths or `None` |
 
@@ -247,7 +251,16 @@ Path roots built in `RunExportCommand`:
 
 **`addNamespaceSuffix`**: when cutscene-style multi-export, stem may get `_{assetName}` before `.fbx` for the base export file path.
 
-**Empty shot list + per-shot option**: when `exportShotsToIndividualFiles` (or cutscene flags) is on but `AnimList.shotList` is empty, export **falls back** to a single FBX at `exportName` (same as when per-shot is off). Log: `No shot list; falling back to single FBX`. If no FBX is recorded after export, `ExportScene` fails with `No FBX files written`.
+**Empty shot list + per-shot option**: when `exportShotsToIndividualFiles` (or cutscene flags) is on but `AnimList.shotList` is empty, export **falls back** to a single FBX (same as when per-shot is off). Log: `No shot list; falling back to single FBX`. If no FBX is recorded after export, `ExportScene` fails with `No FBX files written`.
+
+**Empty shot list naming** (`noShotListExportName` — anim/cutscene only; ignored when `shotList` is non-empty):
+
+| Value | Single-file FBX stem when `shotList` is empty |
+|-------|-----------------------------------------------|
+| `asset` (default) | Browser/batch `exportName` (`asset_set[_variation].fbx` or `asset_subtypeToken.fbx`) |
+| `sceneFile` | Open Maya file basename without extension; `_baked` suffix stripped; invalid chars sanitized |
+
+Resolved in `ExportScene` via `_resolve_no_shot_export_name()` after `AnimList()` load. Rig (`{assetName}_rig.fbx`) and static (`p_nameBase.fbx`) naming are unchanged.
 
 ---
 
@@ -299,6 +312,8 @@ flowchart LR
 | `reducer` | bool | False | Bake |
 | `simplify` | bool | False | Bake |
 | `exportShotsToIndividualFiles` | bool | False | Per-shot FBX vs single file |
+| `noShotListExportName` | `asset` / `sceneFile` | `asset` | Single-file FBX stem when `shotList` is empty (anim/cutscene only) |
+| `parentExportToWorld` | bool | True | Unparent `export_tdSet` members to world before delete |
 | `breakTextureLinks` | bool | True | Prep / static |
 | `fbxVersion` | option menu | `default` | Project setting; FBX version probing is lazy elsewhere |
 
@@ -311,7 +326,7 @@ Add a new export option by extending `_exportOptionSettings`, then wiring the wi
 | `removeNameSpace` | `removeNamespace` |
 | `postEuler` | `euler` |
 | `postTangent` | `tangent` |
-| `zeroRoot`, `sampleBy`, `simplify`, `reducer`, `exportShotsToIndividualFiles`, `breakTextureLinks` | same name |
+| `zeroRoot`, `sampleBy`, `simplify`, `reducer`, `exportShotsToIndividualFiles`, `breakTextureLinks`, `noShotListExportName`, `parentExportToWorld` | same name |
 
 ### Not in `exportOptions`
 
@@ -329,6 +344,13 @@ These are **separate** from project export options:
 
 Interactive export and batch therefore share the same project-tab values **as they appear in the UI at queue/run time** — changing the Project tab after queueing but before batch run affects the batch.
 
+### Export queue UI (Sets / Variation / Version lists)
+
+- **Sets**, **Variation**, and **Version** scroll lists support **multi-select** (Ctrl/Shift).
+- Bottom toolbar **Add to queue as:** (Anim / Cutscene / Rig) calls `AddSelectedToExportQueue` — enqueues **all** selected items from the active file list (prefers a list with multi-selection; otherwise Version → Variation → Sets precedence).
+- Right-click **To Queue as:** on Sets / Version popups still calls `AddToExportQueue` — **single** primary selection only (unchanged). With multi-select active, the popup menu is deleted and not rebuilt (Builder scroll-list pattern).
+- Reference / Import / Replace / Load File remain single-selection operations.
+
 ### Legacy note
 
 Older Scene code synced some export toggles to option vars (`var_postEuler`, `var_removeNamespace`) and an Options menu; that menu block is commented out. **`LoadProject` still partially pushes `mDat.d_exportOptions` into those legacy vars**, but export reads **`d_tf['exportOptions']`**. After loading a project, `uiProject_fill()` is the authoritative sync into the widgets export uses.
@@ -345,6 +367,8 @@ Scene Project tab → `ExportScene` kwargs (representative):
 | Zero root | `zeroRoot` | Zero `rootMotion` translate/rotate on export members before delete |
 | Break texture links | `breakTextureLinks` | `BreakTextureLinks()` in Prep / static path |
 | Export shots to individual files | `exportShotsToIndividualFiles` | Per-shot FBX files vs single file |
+| No-shot-list export name | `noShotListExportName` | `asset` vs `sceneFile` stem when `shotList` is empty |
+| Parent export to world | `parentExportToWorld` | Unparent export set members before delete (default on) |
 | Sample by | `sampleBy` | Bake sample rate |
 | Euler / tangent / reducer / simplify | `euler`, `tangent`, `reducer`, `simplify` | Bake options |
 | Bake / export / delete set names | `bakeSetName`, `exportSetName`, `deleteSetName` | tdSet names (Scene option vars — **not** `[exportOptions]` in cfg) |
@@ -364,7 +388,7 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 | Item | Value |
 |------|-------|
 | **Setup** | `master` in `delete_tdSet`; `export_tdSet` = geo + `rootMotion_jnt` (children of `master`) |
-| **Expected** | Unparent export members → delete `master` → select export members → FBX |
+| **Expected** | When `parentExportToWorld=True`: unparent export members → delete `master` → select export members → FBX |
 | **Typical scene** | `Crate_rigRef.mb` referenced, `removeNamespace=True`, `zeroRoot=True` |
 | **Regression test** | Re-export from `*_baked.mb` (non-ref path) |
 
@@ -405,11 +429,11 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 
 | Anti-pattern | Symptom | Fix / contract |
 |--------------|---------|----------------|
-| Export members parented under node in `delete_tdSet` | Export targets vanish when `master` deleted | `export_unparent_members_to_world` before delete |
+| Export members parented under node in `delete_tdSet` | Export targets vanish when `master` deleted | Enable `parentExportToWorld` (default) so unparent runs before delete |
 | Using `exportObjs` hint as post-delete FBX root | `No object exists: master` | Select from `export_tdSet` via `export_select_targets_resolve` |
 | Reading `exportSetObjs[].mNode` after delete | `member_hints=[None, None]` | Capture hint strings before delete |
 | Global `*:delete_tdSet` in multi-rig prep | Wrong rig's delete set processed | Pass `resolved_set=` from hint namespaces |
-| Disabling unparent "temporarily" | Silent loss of export hierarchy | Keep unparent in both prep paths |
+| `parentExportToWorld=False` with export under delete targets | Silent loss of export hierarchy | Only disable when export members are not parented under anything in `delete_tdSet` |
 | Assuming bake strips namespace | Prefix still on during bake | Namespace strip is prep-stage only |
 | Mode 4 static expecting prep | No delete/export set processing | Static skips bake/prep by design |
 | `exportShotsToIndividualFiles` with empty `shotList` (old behavior) | Prep OK, no `FBXExport` log, batch `succeeded=1` | Fall back to single FBX at `exportFile`; guard fails if nothing written |
@@ -474,3 +498,5 @@ Run in Maya after export pipeline changes:
 | 2026-06-15 | Initial feature doc — modes, tdSets, prep invariants, namespace/path rules, pattern cards, troubleshooting (post delete-selection + unparent fixes) |
 | 2026-06-15 | Added Export Options Data Flow — schema, cfg, Project tab UI, RunExportCommand/batch payload wiring |
 | 2026-07-02 | Empty shot list fallback — single FBX when per-shot option on but no shots; `No FBX files written` guard |
+| 2026-07-13 | `noShotListExportName` (asset vs scene file stem) and `parentExportToWorld` export options |
+| 2026-07-20 | Multi-select on Sets/Variation/Version lists; toolbar **Add to queue as** bulk enqueue; right-click queue unchanged |

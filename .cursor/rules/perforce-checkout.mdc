@@ -1,0 +1,26 @@
+---
+description: Do not bypass Perforce checkout — ask the user to check out files when edits are blocked.
+alwaysApply: true
+---
+
+# Perforce checkout before edit
+
+When a file edit fails because it is not checked out, read-only, or outside the writable workspace:
+
+1. **Stop** — do not try to work around the block.
+2. **Tell the user** which file(s) need to be checked out (full path) and what you intended to change.
+3. **Wait** for confirmation that checkout is done, then edit with normal tools (`StrReplace`, `Write`).
+
+## Do not use workarounds
+
+- Shell one-liners, Node/Python patch scripts, or other indirect writes to bypass editor write denial
+- Repeated retries hoping permissions changed
+- Editing a copy elsewhere and asking the user to merge manually (unless they explicitly want that)
+
+## Example
+
+If `d:\p4\...\sparrowTools.py` returns "Write permission denied":
+
+> `sparrowTools.py` needs to be checked out in Perforce before I can apply the resolution fix. Check it out and let me know when ready.
+
+Then apply the planned edit after the user confirms.

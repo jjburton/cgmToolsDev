@@ -1,0 +1,16 @@
+---
+description: Maya cmds import alias — use mc, not cmds
+alwaysApply: true
+---
+
+# Maya cmds import convention
+
+In **cgmToolsPy3**, **ProjectScripts**, and other in-house Maya Python:
+
+- Import as **`import maya.cmds as mc`**
+- Call Maya commands as **`mc.ls()`**, **`mc.objExists()`**, etc.
+- Do **not** use `import maya.cmds as cmds` or bare `cmds.` in new or edited code.
+
+Match nearby modules (e.g. `MetahumanFacial.py`, `cgm/core/tools/`, `cgm/core/lib/`).
+
+`maya.mel as mel` is unchanged unless a file already uses a different local alias.
