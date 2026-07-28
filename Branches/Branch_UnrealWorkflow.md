@@ -3,18 +3,21 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: July 25, 2026 (mirror_get cgmDirectionModifier matching + animate context guard)  
+**Last Updated**: July 28, 2026 (mocapBakeTools local-TR align/snap/bake + `mocap_align_utils`)  
 **PR**: Pending
 
 ## 🎯 Goals
-Harden Scene export behavior so Unreal-oriented exports are consistent, repeatable, and predictable for animation and rig workflows. **Also:** MetaHuman / Fortnite facial solve — joint matching, control→bridge mapping, SDK transfer onto source rigs, and lightweight target-follow constraints (`ProjectScripts/MetahumanFacial.py`). Track export and facial issues in one place, with explicit validation criteria and PR-ready notes.
+Harden Scene export behavior so Unreal-oriented exports are consistent, repeatable, and predictable for animation and rig workflows. **Also:** MetaHuman / Fortnite facial solve — joint matching, control→bridge mapping, SDK transfer onto source rigs, and lightweight target-follow constraints (`ProjectScripts/MetahumanFacial.py`); **body rig align** via native `mocapBakeTools` local-TR capture/snap/bake (`mocap_align_utils`). Track export and facial/align issues in one place, with explicit validation criteria and PR-ready notes.
 
 ## 📚 Related Documentation
 - **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Canonical dev/TA spec: export modes, tdSet contract, prep order, namespace/path rules, troubleshooting
 - **[Feature_SimChain.md](../Features/Feature_SimChain.md)** - Canonical dev/TA spec: cgmSimChain / cgmDynFK hair + cloth attach, nCloth presets, connect/bake, Query Settings
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** - Module/puppet message graphs, `mirror_get` tag-matching contract, control rewire consumers
-- **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** - MetaHuman facial solve spec: two-hop SDK model, transfer_rig / constrain_rig, REST POSE invariants
+- **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** - MetaHuman facial solve + body align workflow (mocapBakeTools is canonical align/bake home)
+- **[Feature_MocapAlignSnap.md](../Features/Feature_MocapAlignSnap.md)** - Native mocapBakeTools local-TR align/snap/bake dual-path contract
 - **MetahumanFacial.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/MetahumanFacial.py` (Perforce) — facial SDK transfer / constrain (iteration home until core factors to py3)
+- **[mocapBakeTools.py](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py)** - Mocap / MetaHuman body align UI; dual-path bake (local TR when captured, legacy vector otherwise)
+- **[mocap_align_utils.py](../../cgmToolsPy3/cgm/core/lib/mocap_align_utils.py)** - CCL IO, skeleton-root resolve, local-TR capture/snap/bake orchestration
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** - `fortniteMetaHuman` pose-buffer schema
 - **[sdk_utils.py](../../cgmToolsPy3/cgm/core/lib/sdk_utils.py)** - Existing SDK patterns; candidate merge target when factoring facial helpers from ProjectScripts
 - **[Scene.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Scene.py)** - Main Scene UI, `RunExportCommand`, `ExportScene`, `BatchExport`, `SendToBuild`
@@ -59,6 +62,28 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
 
 ## 🗓️ Timeline
+
+### July 26–28, 2026 - mocapBakeTools local-TR align / snap / bake (`mocap_align_utils`)
+**What**: Shipped native body-align workflow in `mocapBakeTools`: capture parented local-TR offsets (`doLoc` at rotate pivot), single-frame snap, and timeline bake using the same locator math. Dual-path — when `localTranslate` / `localRotate` are unset, Manual Set / Set On Bake / vector bake behave as before. Snap skips missing local offsets and prints a full Script Editor missing-data report.  
+**Files**:
+- NEW: `cgm/core/lib/mocap_align_utils.py` — CCL load/save, skeleton-root / rig-NS resolve, `capture_alignment_offsets`, `snap_connections`, `bake_connections`
+- EXTENDED: `cgm/core/tools/mocapBakeTools.py` — Align UI (Rig NS, Skel Roots, Capture, Snap All/Sel); Tools menu debug locs; dual-path `bake()`; CCL via lib helpers
+- EXTENDED: `cgmToolsDev/Features/Feature_MocapAlignSnap.md`, `Feature_Metahuman.md` — implemented status; mocapBakeTools as canonical align/bake home
+
+**Features**:
+- Capture at bind pose → store `localTranslate` / `localRotate`; Snap all/selected (no keys)
+- Bake uses local-TR snap when offsets present; legacy `POS.set` + `SNAP.aim_atPoint` otherwise
+- Multi-skeleton: set Skel Roots (auto-fill when exactly one MH-style `root` detected); Capture/Snap blocked when >1 root and unset
+- CCL short-pattern save; load resolves under roots + namespace
+
+**Decisions**:
+- Keep Set Connection Pose UI; do not overwrite local TR with vector Manual Set / Set On Bake
+- Snap does **not** fall back to vector aim — full missing-data report instead
+- Orchestration only in `mocap_align_utils` — reuses `doLoc`, `movePointSnap` / `moveOrientSnap`, `TRANS.parent_set`, `NAMES`
+
+**Status**: ✅ Complete (Maya verification checklist in Feature_MocapAlignSnap — user runtime pass)
+
+---
 
 ### July 25, 2026 - mirror_get cgmDirectionModifier matching (FRNT vs none)
 **What**: Fixed bilateral module mirror lookup when a puppet has multiple same-name modules on one side differing only by **`cgmDirectionModifier`** (e.g. `L_coat_segment_part` vs `L_FRNT_coat_segment_part`). `mirror_get` previously omitted absent modifier tags from the match dict, so `L_coat_segment_part` matched both `R_coat_segment_part` and `R_FRNT_coat_segment_part` and raised `"Shouldn't have found more than one mirror module!"`. Animate marking-menu context then crashed with `'NoneType' object is not subscriptable` when `module_get` failed.  
@@ -824,7 +849,15 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [ ] Shelf / UI wrapper for probe → transfer → constrain
 - [ ] Persisted `bridgeMapping` per character variant
 - [ ] Full-face Maya regression scenes + batch/mayapy smoke
-- [ ] **Factor core helpers into cgm proper** — see Notes (target: `sdk_utils`, `mrs/lib/face_utils`; keep `d_wire` in ProjectScripts)
+- [ ] **Factor facial SDK core into cgm proper** — see Notes (target: `sdk_utils`, `mrs/lib/face_utils`; keep `d_wire` in ProjectScripts)
+
+### MetaHuman Body Align (mocapBakeTools)
+- [x] `mocap_align_utils` — CCL, resolve, local-TR capture / snap / bake
+- [x] mocapBakeTools Align UI + dual-path bake (legacy vector when offsets unset)
+- [x] Feature contracts (`Feature_MocapAlignSnap.md`, body-align section in `Feature_Metahuman.md`)
+- [ ] Maya verification checklist pass (foot IK + finger; multi-skeleton; legacy CCL)
+- [ ] Deprecate duplicate project-script align UI once parity confirmed
+- [ ] Optional Google Doc artist section / preset browser under `cgmDat/mocap/`
 
 ---
 
@@ -898,6 +931,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] nCloth presets exclude `isDynamic` (runtime switch, not fabric profile)
 - [x] cgmSimChain editable base name on loaded setup (`set_base_name`)
 - [x] `mirror_get` disambiguates modules with same name/type/direction but different `cgmDirectionModifier` (FRNT vs none); animate `context_get` guard when `module_get` fails
+- [x] mocapBakeTools local-TR align/snap/bake (`mocap_align_utils`); dual-path legacy vector bake when offsets unset
 - [x] MetaHuman facial skeleton prune to keep-list + root chain (`joint_utils.pruneSkeletonToJoints`)
 - [x] Maya Be Odd **Cascade UI Windows** dev menu action (`mayaBeOdd_utils` / `tool_chunks`)
 - [x] Send to Build / MRS Build path: stage logging, window placement, `fillDefaults` opt-in verbosity (`CGM_VERBOSE_FILL_DEFAULTS`)
@@ -934,7 +968,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 # Scene Export: Unreal workflow (rig stability, logging, bake/delete, MRS Build)
 
 ## Overview
-Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
+Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), **mocapBakeTools local-TR body align/snap/bake (`mocap_align_utils`, dual-path legacy vector bake)**, Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
 
 ## Major Changes
 
@@ -1018,6 +1052,12 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 ### 20. Maya Be Odd cascade UI windows (`mayaBeOdd_utils`, `tool_chunks`)
 - **Maya Be Odd → Cascade UI Windows** in cgmToolbox; dev ergonomics when many tool windows are open during export/rig debugging
 
+### 21. mocapBakeTools local-TR align / snap / bake (`mocap_align_utils`, `mocapBakeTools`)
+- NEW `mocap_align_utils`: CCL IO, skeleton-root / rig-NS resolve, capture (`doLoc` + local TR), snap (`movePointSnap` / `moveOrientSnap`), `bake_connections`
+- Align UI: Rig NS, Skel Roots, Capture, Snap All/Sel; Tools → debug locs
+- Dual-path `bake()`: local TR when present; else legacy `POS.set` + `aim_atPoint` unchanged
+- Snap without local offsets: skip + full Script Editor missing-data report
+
 ## Files Modified
 - `cgm/core/mrs/Scene.py`
 - `cgm/core/mrs/lib/batch_utils.py`
@@ -1031,6 +1071,7 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `cgm/core/classes/PostBake.py`
 - `cgm/core/tools/locinator.py`
 - `cgm/core/tools/mocapBakeTools.py`
+- ADDED: `cgm/core/lib/mocap_align_utils.py`
 - `cgm/core/tools/funcIterTime.py`
 - `cgm/core/lib/zoo/baseMelUI.py`
 - `cgm/core/tools/animFilterTool.py`
@@ -1121,6 +1162,9 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - **`mc.ls(..., long=True)`** — not `longPath` (Maya cmds flag name).
 - **`mirror_get`**: always match **`cgmPosition` / `cgmPositionModifier` / `cgmDirectionModifier`** via `getCGMNameTags(['cgmDirection'])` — absent tags are **`False`**, not “ignore in comparison”. Omitting unset attrs caused duplicate matches (e.g. `L_coat` matching both `R_coat` and `R_FRNT_coat`).
 - Animate **`context_get`**: treat failed **`module_get`** as `{}` when collecting controls — `mirror_get` exceptions must not cascade to `'NoneType' object is not subscriptable`.
+- **Body align offsets**: capture with **`doLoc` at rotate pivot**, parent to source joint, store **`localTranslate` / `localRotate`** — do not mix with legacy world-vector `positionOffset` / forward-up for the same links.
+- **mocapBakeTools dual-path**: no local TR → keep Manual Set / vector bake; with local TR → locator snap/bake. Snap never falls back to vector aim — report every skipped pair.
+- **Multi-MH scenes**: set **Skel Roots** before Capture/Snap; short CCL patterns alone are ambiguous without roots.
 
 ### Future Considerations
 - AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
@@ -1134,8 +1178,9 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Query Settings: optional copy-to-clipboard; full-profile export toggle (not only diff from `base`).
 - nCloth: `cotton_static` or similar only if artists need a documented “sim off” utility — still must not use `isDynamic` in fabric presets.
 - **Factor MetaHuman facial core into cgm proper** when API stabilizes: `get_driven_data` / SDK helpers → **`sdk_utils`**; joint match, bridge probe, rest/transfer helpers → **`mrs/lib/face_utils`**; thin **`tools/`** or ProjectScripts caller for orchestration; character **`d_wire`** maps stay project-specific. Do not split REST POSE + offset-locator sampling prematurely.
+- **Body align**: deprecate duplicate project-script align UI after Maya parity; optional Scene menu → mocapBakeTools; preset browser under `cgmDat/mocap/`; optional pre-export align bake hook.
 
 ---
 
-*Last Updated: July 25, 2026 (mirror_get cgmDirectionModifier matching + animate context guard)*  
+*Last Updated: July 28, 2026 (mocapBakeTools local-TR align/snap/bake + `mocap_align_utils`)*  
 *Branch Status: Active*

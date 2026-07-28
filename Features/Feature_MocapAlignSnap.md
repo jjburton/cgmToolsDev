@@ -2,10 +2,10 @@
 
 ## Status and Overview
 
-- **Status**: Planning (July 2026)
-- **Last Updated**: July 7, 2026
+- **Status**: Implemented (July 2026) — dual-path: local-TR when captured; legacy vector bake when not
+- **Last Updated**: July 26, 2026
 - **Audience**: Dev / TA — design contract for integrating skeleton→control align/snap/bake into **`mocapBakeTools`**
-- **Purpose**: Replace the legacy world-vector offset bake path with the validated **parented local-TR locator** workflow (capture once, snap per frame, key controls), while preserving the existing **CCL preset format** and link-list UI artists already use. Unifies single-frame preview snap and timeline bake in one shipped cgm tool.
+- **Purpose**: Replace the legacy world-vector offset bake path with the validated **parented local-TR locator** workflow (capture once, snap per frame, key controls), while preserving the existing **CCL preset format** and link-list UI artists already use. Unifies single-frame preview snap and timeline bake in one shipped cgm tool. **When `localTranslate` / `localRotate` are not set, Manual Set / Set On Bake / vector bake behave exactly as before.**
 
 **Maintenance rule**: Update this doc when `mocapBakeTools` offset capture, snap, bake loop, CCL schema, or resolution rules change. Body-align workflow context and pivot learnings live in [`Feature_Metahuman.md`](Feature_Metahuman.md) (body rig alignment section).
 
@@ -18,27 +18,20 @@
 
 ## Problem
 
-### What mocapBakeTools does today
+### What mocapBakeTools does (dual-path, July 2026)
 
-[`cgm/core/tools/mocapBakeTools.py`](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py) maps **source** drivers (typically mocap / MetaHuman joints) to **target** controls, then bakes keys over a frame range.
+[`cgm/core/tools/mocapBakeTools.py`](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py) maps **source** drivers (typically mocap / MetaHuman joints) to **target** controls, then snaps or bakes over a frame range. Offset helpers live in [`mocap_align_utils.py`](../../cgmToolsPy3/cgm/core/lib/mocap_align_utils.py).
 
-| Stage | Current behavior | Limitation |
-|-------|------------------|------------|
-| **Set connection pose** | `set_connection_offsets()` — world position delta + `offsetForward` / `offsetUp` in source space | Wrong or unstable on IK controls, offset pivots, and rigs where joint vs control rest frames differ |
-| **Bake** | Per frame: `POS.set` + `SNAP.aim_atPoint` using stored vectors | Same math as above; does not match marking-menu locator / rotate-pivot contract |
-| **Live constraints** | `pointConstraint` / `orientConstraint` `mo=True` | Preview path unrelated to bake math |
-| **CCL** | Six-element JSON; stores whatever strings are in source/target lists | Often long DAG paths; no skeleton-root disambiguation |
+| Stage | Local-TR path (preferred) | Legacy path (no local offsets) |
+|-------|---------------------------|--------------------------------|
+| **Capture** | **Capture offsets** — `doLoc` at rotate pivot, parent to source, store `localTranslate` / `localRotate` | **Manual Set** / Set On Bake — world delta + `offsetForward` / `offsetUp` |
+| **Snap** | Single-frame locator snap (`movePointSnap` / `moveOrientSnap`) | N/A — skip + full missing-data report |
+| **Bake** | Per-frame same snap + `setKeyframe` | `POS.set` + `SNAP.aim_atPoint` (unchanged) |
+| **CCL** | Short patterns + local TR; resolve via skeleton roots + rig NS | Six-element JSON; may still hold vector offsets |
 
 ### What we validated externally (July 2026)
 
-A project-script prototype (documented in [`Feature_Metahuman.md`](Feature_Metahuman.md)) proved:
-
-1. **Capture** — `doLoc()` on control at **rotate pivot**, parent to source joint, store **`localTranslate` / `localRotate`** under joint.
-2. **Snap (single frame)** — rebuild parented offset locator, `movePointSnap` / `moveOrientSnap` on target.
-3. **CCL** — short joint patterns + namespaced control names; resolve via **skeleton roots** + **rig namespace**.
-4. **Multi-skeleton scenes** — require explicit skeleton root selection before capture/snap.
-
-That logic must live in **cgmToolsPy3** and drive **both** preview snap and timeline bake inside mocapBakeTools.
+A project-script prototype (documented in [`Feature_Metahuman.md`](Feature_Metahuman.md)) proved the local-TR workflow; that logic now lives in **cgmToolsPy3** and drives preview snap and timeline bake inside mocapBakeTools.
 
 ---
 
@@ -144,8 +137,8 @@ Per [`cgm-module-placement`](../../.cursor/rules/cgm-module-placement.mdc):
 
 | Module | Responsibility |
 |--------|----------------|
-| **`cgm/core/lib/mocap_align_utils.py`** (new) | CCL load/save/normalize, pattern resolution, capture, single-frame snap, **per-frame bake sample**, connection dict helpers |
-| **`cgm/core/tools/mocapBakeTools.py`** | UI, link lists, calls into lib; thin `set_connection_offsets` / `bake` wrappers |
+| **`cgm/core/lib/mocap_align_utils.py`** | CCL load/save/normalize, pattern resolution, capture, single-frame snap, **per-frame bake sample**, connection dict helpers |
+| **`cgm/core/tools/mocapBakeTools.py`** | UI (Align local offsets + legacy Set Connection Pose), link lists, dual-path `bake()` |
 | **Project scripts** | Deprecate duplicate align UI once parity reached; may keep Scene menu entry that opens mocapBakeTools |
 
 Do **not** put resolution or offset math in `cgm_General` or vendored trees.
@@ -245,6 +238,8 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 **Exit criteria:** Lib imports from Maya; one body pair passes capture/snap.
 
+**Status: done (July 2026)** — orchestration over `doLoc` / `movePointSnap` / `moveOrientSnap`.
+
 ### Phase 2 — mocapBakeTools capture + snap (no bake change yet)
 
 1. Wire UI: namespace, skeleton roots, Capture offsets, Snap all/selected.
@@ -254,6 +249,8 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 **Exit criteria:** Load preset, capture, scrub skeleton, snap — matches project prototype.
 
+**Status: done (July 2026)** — Set Connection Pose kept; Snap skips missing local TR with full Script Editor report.
+
 ### Phase 3 — Bake integration
 
 1. Implement `bake_connections()` in lib.
@@ -262,12 +259,16 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 **Exit criteria:** Bake range on test scene matches single-frame snap at each frame; keys on targets only.
 
+**Status: done (July 2026)** — per-link dual path: local TR → `bake_connections`; else legacy vector bake. Set On Bake skips links that already have local TR.
+
 ### Phase 4 — Polish and deprecation
 
 1. Short-name save by default; mapping list or alias refresh shows resolved short names.
 2. Document in [`Feature_Metahuman.md`](Feature_Metahuman.md) that mocapBakeTools is the canonical align/bake home.
 3. Thin or remove duplicate project align UI; Scene menu opens mocapBakeTools or preloads preset path.
 4. Google Doc capture for artists (optional).
+
+**Status: partial** — short-name CCL save + MetaHuman doc note done; project-script UI deprecation deferred until Maya parity confirmed.
 
 ---
 
@@ -323,4 +324,5 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 | Date | Summary |
 |------|---------|
+| 2026-07-26 | Implemented dual-path in py3: `mocap_align_utils` + mocapBakeTools Align UI; local TR snap/bake; legacy path when offsets unset; full snap missing-data report |
 | 2026-07-07 | Initial plan — problem statement, lib factoring, UI/bake design, phases, migration, testing |

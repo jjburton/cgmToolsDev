@@ -26,7 +26,7 @@
 
 ### Code placement note
 
-Core solve logic currently lives in Perforce **project scripts** for fast iteration (`MetahumanFacial.py` for facial; body align and animation-import orchestration in separate project modules wired through Scene **Project Scripts**). **Reusable helpers should factor into `cgmToolsPy3`** once APIs stabilize — e.g. facial SDK helpers → `sdk_utils` / `mrs/lib/face_utils`; align offset capture, CCL load/save, and joint/control resolution → `cgm/core/lib/` — see **MetaHuman Facial Solve** deliverables and **Future Considerations** in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md).
+Facial solve logic still lives in Perforce **project scripts** for fast iteration (`MetahumanFacial.py`; animation-import orchestration in separate project modules wired through Scene **Project Scripts**). **Body align** capture / snap / bake helpers are shipped in **`cgmToolsPy3`**: `cgm.core.lib.mocap_align_utils` + `cgm.core.tools.mocapBakeTools` (canonical UI). Facial SDK helpers should still factor into `sdk_utils` / `mrs/lib/face_utils` when that API stabilizes — see **MetaHuman Facial Solve** deliverables and **Future Considerations** in [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md).
 
 Project scripts depend on **cgmTools on Maya `PYTHONPATH`** (`cgm.core`, `cgm.lib`, `other.metahuman_api`). They are **not** co-located with the cgm ship tree; CCL mapping **data** lives under character `cgmDat/mocap/` assets.
 
@@ -169,6 +169,8 @@ This is separate from facial SDK transfer but shares the **offset-locator** ment
 
 ### Workflow (artist / TA)
 
+**Canonical tool**: `cgm.core.tools.mocapBakeTools` (Align local-offsets section). Helpers live in `cgm.core.lib.mocap_align_utils`.
+
 1. **Scene setup** — MetaHuman skeleton (Body / Face roots) and custom anim rig referenced in the same scene.
 2. **Skeleton roots** — Select the MH skeleton root transform(s) used for this shot / character and register them in the align UI. Required when **more than one MetaHuman skeleton** exists in the scene (duplicate `foot_l`-style names otherwise resolve to the wrong hierarchy).
 3. **Rig namespace** — Set the anim rig namespace (e.g. `Hondo:`) so control names resolve.
@@ -176,6 +178,7 @@ This is separate from facial SDK transfer but shares the **offset-locator** ment
 5. **Bind pose** — With rig and skeleton in the intended aligned rest pose, **capture offsets** for all pairs (or selection).
 6. **Preview / animate** — Scrub skeleton or retarget motion; **snap** mapped controls (all or selected). Optional **debug locators** parented under joints for inspection.
 7. **Save preset** — Write updated `.ccl` with captured `localTranslate` / `localRotate` for reuse.
+8. **Bake** — Timeline bake uses the same local-TR snap math when offsets are captured; without local offsets, mocapBakeTools keeps the legacy vector Manual Set / bake path.
 
 ### CCL mapping conventions (July 2026)
 
@@ -389,14 +392,13 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 - [ ] Persisted `bridgeMapping` asset per character variant
 - [ ] Bridge → joint second-hop audit (today: transfer samples target joint motion via locators, not a separate bridge→joint curve walk)
 - [ ] Batch / mayapy path for regression scenes
-- [ ] **Factor core helpers into cgm proper** (`sdk_utils`, `mrs/lib/face_utils`; align CCL + offset capture → `lib/`) — see [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md)
+- [ ] **Factor core helpers into cgm proper** (`sdk_utils`, `mrs/lib/face_utils`) — see [`Branch_UnrealWorkflow.md`](../Branches/Branch_UnrealWorkflow.md); align CCL + offset capture → `mocap_align_utils` **done** July 2026
 - [ ] Artist manual section (Google Doc capture when UI exists)
 - [x] Body align: parented local-TR offset capture + snap (July 2026)
 - [x] CCL short-name convention + skeleton-root disambiguation (July 2026)
 - [x] `doLoc` rotate-pivot default aligned with marking-menu locators (July 2026 — cgm core)
 - [ ] Body + hand finger mappings in per-character CCL assets (ongoing as rigs land)
-- [ ] Optional mocapBakeTools timeline bake integration for align presets (not required for manual snap preview)
-- [ ] **Native align/snap/bake in mocapBakeTools** — see [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md)
+- [x] **Native align/snap/bake in mocapBakeTools** — [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) (July 2026). Canonical home; dual-path keeps legacy vector bake when local offsets unset. Project-script align UI deprecation deferred until Maya parity confirmed.
 
 ---
 
@@ -418,6 +420,7 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 
 | Date | Summary |
 |------|---------|
+| 2026-07-26 | mocapBakeTools is canonical body align/snap/bake home (`mocap_align_utils`); dual-path legacy when local offsets unset |
 | 2026-07-07 | Body rig align workflow: CCL short-name conventions, skeleton-root scoping, local-TR offset capture (`rp` / `doLoc`), snap reporting; animation import overview; multi-skeleton and pivot learnings in rejected approaches |
 | 2026-06-22 | Branch timeline consolidated under UnrealWorkflow; factor-to-cgm note |
 | 2026-06-22 | Initial feature doc — two-hop SDK model, transfer_rig / constrain_rig pipelines, REST POSE invariants, offset locators, deleteUnused safety, rejected approaches, verification checklist |
