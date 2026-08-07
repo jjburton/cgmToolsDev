@@ -2,8 +2,8 @@
 
 ## Status and Overview
 
-- **Status**: Implemented (July 2026) — dual-path: local-TR when captured; legacy vector bake when not
-- **Last Updated**: July 26, 2026
+- **Status**: Implemented and Maya-verified (August 2026) — dual-path: local-TR when captured; legacy vector bake when not
+- **Last Updated**: August 5, 2026
 - **Audience**: Dev / TA — design contract for integrating skeleton→control align/snap/bake into **`mocapBakeTools`**
 - **Purpose**: Replace the legacy world-vector offset bake path with the validated **parented local-TR locator** workflow (capture once, snap per frame, key controls), while preserving the existing **CCL preset format** and link-list UI artists already use. Unifies single-frame preview snap and timeline bake in one shipped cgm tool. **When `localTranslate` / `localRotate` are not set, Manual Set / Set On Bake / vector bake behave exactly as before.**
 
@@ -106,6 +106,7 @@ Inherited from [`Feature_Metahuman.md`](Feature_Metahuman.md) — **do not diver
 | Locator creation | `cgmObject.doLoc()` on **target** control; **rotate pivot** placement |
 | Parent | To **source** joint; preserve world transform |
 | Storage | `localTranslate`, `localRotate` on locator under joint |
+| Snap / bake rebuild | **Same as capture** — `doLoc()` on target again, parent to source, apply saved local TR. **Do not** use plain `spaceLocator` (wrong `rotateOrder` / `rotateAxis` → world offset) |
 | Snap position | `cgm.lib.position.movePointSnap` (rotate pivot) |
 | Snap rotation | `cgm.lib.position.moveOrientSnap` |
 | Meta wrap | `cgmObject(longName)` only — not `validateObjArg(setClass=True)` on anim controls |
@@ -127,7 +128,9 @@ Existing six-element array unchanged:
 | `localTranslate`, `localRotate` | Preferred | New capture output |
 | `positionOffset`, `offsetForward`, `offsetUp` | Legacy | Load OK; snap/bake warns until re-captured |
 
-On save: emit short patterns only (see MetaHuman feature doc CCL conventions).
+On save: compact source patterns under Skel Roots — **leaf when unique**, minimal pipe chain when not. **Skel Roots required to save**; load unchanged for existing files.
+
+**Save compaction (Aug 2026):** No hardcoded joint allowlist. `_minimal_unique_source_pattern` validates leaf uniqueness under configured roots; `validate_connections_for_save` ensures compacted patterns resolve to the same joints. `resolve_connections` uses `_pattern_for_resolve` so loaded CCL literals are never rewritten on load/reresolve.
 
 ---
 
@@ -149,15 +152,18 @@ Do **not** put resolution or offset math in `cgm_General` or vendored trees.
 |----------|---------|
 | `load_ccl(path)` / `save_ccl(path, data)` | JSON six-element IO |
 | `ccl_to_connections(data, rig_ns, skel_roots, skel_ns)` | Normalize + resolve |
-| `connections_to_ccl(connections, rig_ns)` | Short-pattern export |
-| `resolve_skeleton_joint(pattern, skel_roots, skel_ns)` | Scoped joint lookup |
+| `connections_to_ccl(connections, rig_ns, skel_roots)` | Short-pattern export (compaction requires `skel_roots`) |
+| `validate_connections_for_save(connections, skel_roots, …)` | Pre-save: roots set, patterns resolve equivalently |
+| `resolve_connections(connections, rig_ns, skel_roots, skel_ns)` | Re-resolve patterns in place; sets `resolved`; clears stale `alignLocator` when source changes |
+| `resolve_skeleton_joint(pattern, skel_roots, skel_ns)` | Scoped joint lookup (ranked `Body\|…` / `Face\|…` suffix match) |
 | `resolve_rig_control(pattern, rig_ns)` | Namespaced control lookup |
+| `source_pattern_needs_skel_roots(pattern, skel_ns)` | UI gating when multiple MH skeletons share leaf names |
 | `capture_alignment_offsets(connections)` | Bind-pose capture in place |
 | `snap_connections(connections, indices=None)` | Single frame; returns result dict |
 | `bake_connections(connections, start, end)` | Timeline loop: snap + keyframe |
-| `_align_ccl_source_pattern` / `_align_ccl_target_pattern` | Short-name helpers (may be module-private) |
+| `_align_ccl_source_pattern` / `_align_ccl_target_pattern` | Short-name helpers (module-private) |
 
-Project-script implementations become the reference port; behavior should match unless noted in PR.
+Project-script implementations were the reference port; py3 lib reached Maya parity August 2026.
 
 ---
 
@@ -173,8 +179,14 @@ Keep existing **source / target lists**, **link**, **bake range**, and **CCL loa
 | **Preview** | **Snap all** / **Snap selected** | No keys; report to Script Editor |
 | **Debug** | **Create locs** / **Delete locs** (optional) | Persistent offset locators per link |
 | **Bake** | Existing bake button | Calls `bake_connections()` using locator snap |
+| **Display** | **Setup → Show short names** | List aliases use `cgmObject.p_nameShort` when enabled (`mocap_show_short_names`) |
+| **Lists** | Target list index labels | Each target row prefixed with 0-based index (e.g. `[0] body_C0`); survives short-name `ns:base` scroll-list display |
+| **Lists** | Source link index labels | Linked sources show driven target indices (e.g. `spine_cog_anim -> [0],[1]`) |
+| **Lists** | Target list RMB reorder | Move Up/Dn, Move to Top/Bottom, Set Index… (0-based); remaps link indices; order saved in CCL `target_items` |
 
-OptionVar candidates: `mocap_rig_namespace`, `mocap_skel_roots`, `mocap_use_local_offsets` (default 1).
+OptionVar candidates: `mocap_rig_namespace`, `mocap_skel_roots`, `mocap_show_short_names`, `mocap_use_local_offsets` (default 1).
+
+**Dev reload**: `tool_calls.mocapBakeTool()` and **Setup → Reload** call `reload_dependencies()` — reload `mocap_align_utils` before `mocapBakeTools` during iteration.
 
 **“Set connection pose”** — either:
 
@@ -205,7 +217,7 @@ for frame in bake_range:
 
 Notes:
 
-- Rebuild or update offset locators **once** before bake chunk; update parent if source moved (joint animation).
+- Rebuild or update offset locators **once** before bake chunk; **`_get_or_build_snap_locator`** syncs parent + local TR (same doLoc rebuild as snap).
 - Locator local TR stays constant; joint motion drives world locator pose.
 - Single `undoInfo` open/close around full bake (existing pattern).
 - `cgmGEN.playback_stop()` before bake (existing).
@@ -268,7 +280,7 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 3. Thin or remove duplicate project align UI; Scene menu opens mocapBakeTools or preloads preset path.
 4. Google Doc capture for artists (optional).
 
-**Status: partial** — short-name CCL save + MetaHuman doc note done; project-script UI deprecation deferred until Maya parity confirmed.
+**Status: partial** — short-name CCL save + MetaHuman doc note done; **Setup → Show short names** for link lists (Aug 2026); **Maya snap parity confirmed** vs sparrowTools / loaded CCL; project-script UI deprecation deferred until team standardizes on mocapBakeTools.
 
 ---
 
@@ -324,5 +336,8 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 | Date | Summary |
 |------|---------|
+| 2026-08-05 | List index display — targets `[n]` prefix; linked sources `name -> [n],…`; target RMB reorder (Move Up/Dn, Top/Bottom, Set Index); short-name display fix for index prefix |
+| 2026-08-05 | CCL save: skel-root uniqueness compaction (no MH allowlist); save blocked without roots; `_pattern_for_resolve` preserves loaded patterns on load/reresolve |
+| 2026-08-05 | Snap parity fix: doLoc rebuild for snap/bake/debug locs (rotateAxis invariant); sparrow resolution + `resolve_connections`; re-resolve before align ops; `reload_dependencies`; Setup → Show short names — user Maya verified |
 | 2026-07-26 | Implemented dual-path in py3: `mocap_align_utils` + mocapBakeTools Align UI; local TR snap/bake; legacy path when offsets unset; full snap missing-data report |
 | 2026-07-07 | Initial plan — problem statement, lib factoring, UI/bake design, phases, migration, testing |

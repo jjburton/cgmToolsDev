@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: July 20, 2026
+- **Last Updated**: August 4, 2026
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
@@ -101,7 +101,7 @@ High-level order inside `ExportScene`:
 3. Camera handling — constrained cameras may become `exportCam`
 4. Mode resolution and path build (`exportAnimPath`, `exportAssetPath`, cutscene nesting)
 5. Rename scene to `*_baked.mb` (safety copy target)
-6. **`Bake(exportObjs, …)`** — unless `exportStatic`
+6. **`Bake(exportObjs, …)`** — unless `exportStatic`; frame range from `AnimList` shot list when present (see **Shot list and bake frame range** below)
 7. **`ensure_fbx_plugin`** — before any FBX write
 8. **Per export hint** (`for obj in exportObjs`):
    - Referenced → `Prep(…)`
@@ -111,6 +111,35 @@ High-level order inside `ExportScene`:
    - `mc.select(exportTransforms, hi=True)`
    - FBX export (per mode path rules)
 9. Export result summary (`log_export_results_summary`)
+
+---
+
+### Shot list and bake frame range
+
+`AnimListNode.subAnimList` (via [`Shots.py`](../../cgmToolsPy3/cgm/core/mrs/Shots.py) `AnimList`) stores shots as:
+
+```text
+{ "shotName": [start, end, length] }
+```
+
+| Index | Meaning |
+|-------|---------|
+| `[0]` | Start frame |
+| `[1]` | End frame |
+| `[2]` | Length (`end - start`); UI convenience — **not** a timeline frame |
+
+Legacy 2-element entries `[start, end]` may still exist; indices 0 and 1 remain start/end.
+
+Before `Bake()`, `ExportScene` loads `AnimList()` and computes the bake range:
+
+- `_start` = **minimum** of all shots' `[0]` (start)
+- `_end` = **maximum** of all shots' `[1]` (end)
+- Sets `mc.playbackOptions(minTime=…, maxTime=…)` when both are set
+- Empty `shotList` → `_start` / `_end` stay `None`; `Bake()` falls back to timeline range
+
+**Normative rule**: use `shot[1][0]` and `shot[1][1]` only. **Never** `min(shot[1])` / `max(shot[1])` on the full triple — length can be smaller than start (e.g. `[1673, 1805, 132]` would wrongly bake from frame 132).
+
+FBX take splitting (`FBXExportSplitAnimationIntoTakes`) and export result recording already use `[0]` / `[1]`; bake must match.
 
 ---
 
@@ -437,6 +466,7 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 | Assuming bake strips namespace | Prefix still on during bake | Namespace strip is prep-stage only |
 | Mode 4 static expecting prep | No delete/export set processing | Static skips bake/prep by design |
 | `exportShotsToIndividualFiles` with empty `shotList` (old behavior) | Prep OK, no `FBXExport` log, batch `succeeded=1` | Fall back to single FBX at `exportFile`; guard fails if nothing written |
+| `min(shot[1])` / `max(shot[1])` on 3-element shot value | `Bake \| start:` equals frame **count** not shot start (e.g. 132 instead of 1673) | Use `shot[1][0]` and `shot[1][1]` only |
 
 ---
 
@@ -455,6 +485,7 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 
 **Useful success markers**:
 
+- `ExportScene >> Bake | start: {N} | end: {M}` — must match shot list starts/ends (not frame count)
 - `Prep\|unparent \| unparented to world`
 - `delete set resolved: {Ns}:delete_tdSet`
 - `Prep\|select \| resolved N export target(s)`
@@ -474,6 +505,7 @@ Run in Maya after export pipeline changes:
 5. **Static (mode 4)** — no prep logs; FBX still writes
 6. **Batch mayapy** — one-item smoke; FBX plugin loaded before Scene import
 7. **Mode 0 bake** — bake + prep run; no FBX write
+8. **Shot list bake range** — scene with `AnimListNode` shot e.g. `[1673, 1805, 132]` → log `ExportScene >> Bake | start: 1673 | end: 1805` (not 132); multi-shot unions min start / max end
 
 ---
 
@@ -500,3 +532,4 @@ Run in Maya after export pipeline changes:
 | 2026-07-02 | Empty shot list fallback — single FBX when per-shot option on but no shots; `No FBX files written` guard |
 | 2026-07-13 | `noShotListExportName` (asset vs scene file stem) and `parentExportToWorld` export options |
 | 2026-07-20 | Multi-select on Sets/Variation/Version lists; toolbar **Add to queue as** bulk enqueue; right-click queue unchanged |
+| 2026-08-04 | Shot list bake frame range — `[start, end, length]` contract; anti-pattern for `min/max(shot[1])`; verification checklist item (user verified in Maya) |

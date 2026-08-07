@@ -180,13 +180,15 @@ This is separate from facial SDK transfer but shares the **offset-locator** ment
 7. **Save preset** — Write updated `.ccl` with captured `localTranslate` / `localRotate` for reuse.
 8. **Bake** — Timeline bake uses the same local-TR snap math when offsets are captured; without local offsets, mocapBakeTools keeps the legacy vector Manual Set / bake path.
 
+**List display**: **Setup → Show short names** toggles source/target list labels to `cgmObject.p_nameShort` (optionVar `mocap_show_short_names`). Internal link data and CCL save still use resolved paths / patterns. **Index labels (Aug 2026)**: each target row shows a 0-based prefix (`[0] control`); linked sources append driven target indices (`spine_cog_anim -> [0],[1]`). Set Index and reorder use the same numbering.
+
 ### CCL mapping conventions (July 2026)
 
 Keep preset files **small and portable** — resolve at runtime, do not store scene DAG long paths.
 
 | Field | Convention | Resolved via |
 |-------|------------|--------------|
-| **Source (joint)** | `Body\|…` / `Face\|…` chains for spine/clavicle/head; **leaf names** for limbs and fingers (`foot_l`, `thumb_01_r`, `hand_r`, …) | Skeleton roots set in UI + suffix match under those roots |
+| **Source (joint)** | **Shortest unique pattern under Skel Roots**: leaf when unique (e.g. `foot_l`), else minimal pipe chain (e.g. `Body\|spine_04`) | Skeleton roots + `resolve_skeleton_joint` |
 | **Target (control)** | Namespaced short name only (`Namespace:control_anim`) | Rig namespace field |
 | **Follow** | `po` = position + rotation; `o` = rotation only | Per-pair `setPosition` / `setRotation` in connection dict |
 | **Offsets** | `localTranslate`, `localRotate` on locator **parented to source joint** | Captured in bind pose; legacy `positionOffset` / forward-up vectors are deprecated for this workflow |
@@ -200,9 +202,11 @@ Same pivot discipline as marking-menu **Locator → Selected** (`LOC.create` use
 1. **`doLoc()` on the anim control** — locator matches control world orientation; placement uses **rotate pivot (`rp`)**.
 2. **Parent locator to source joint** — preserve world transform (`maintainOffset` parenting).
 3. **Store** locator **`localTranslate` / `localRotate`** under that joint.
-4. **Snap** — rebuild (or reuse) parented locator with saved local TR; **`movePointSnap`** / **`moveOrientSnap`** on the control from locator world pivots/rotation.
+4. **Snap / bake** — rebuild parented locator with **`doLoc()` on the anim control** (same rotate pivot / `rotateOrder` / `rotateAxis` as capture), apply saved local TR, then **`movePointSnap`** / **`moveOrientSnap`** on the control from locator world pivots/rotation. Persistent debug locators use the same rebuild path.
 
 Use **`cgmObject(longName)`** for meta wrapping on production controls — avoid `validateObjArg(..., setClass=True)` on rig controls with locked `mClass`.
+
+**Save**: Skel Roots **required** to write a CCL; compaction validates uniqueness under those roots. **Load** of existing presets unchanged.
 
 ### Multi-skeleton scenes
 
@@ -398,7 +402,7 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 - [x] CCL short-name convention + skeleton-root disambiguation (July 2026)
 - [x] `doLoc` rotate-pivot default aligned with marking-menu locators (July 2026 — cgm core)
 - [ ] Body + hand finger mappings in per-character CCL assets (ongoing as rigs land)
-- [x] **Native align/snap/bake in mocapBakeTools** — [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) (July 2026). Canonical home; dual-path keeps legacy vector bake when local offsets unset. Project-script align UI deprecation deferred until Maya parity confirmed.
+- [x] **Native align/snap/bake in mocapBakeTools** — [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) (July 2026). Canonical home; dual-path keeps legacy vector bake when local offsets unset. **Maya parity vs sparrowTools / loaded CCL verified Aug 2026** (doLoc snap rebuild). Project-script align UI deprecation deferred until team standardizes on mocapBakeTools.
 
 ---
 
@@ -420,6 +424,9 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 
 | Date | Summary |
 |------|---------|
+| 2026-08-05 | CCL save uses skel-root uniqueness validation (no MH allowlist); save requires roots; existing CCL load unchanged |
+| 2026-08-05 | List index labels + target RMB reorder (Move Up/Dn, Top/Bottom, Set Index); short-name index display fix |
+| 2026-08-05 | Body align snap parity: doLoc rebuild; `resolve_connections`; tool reload; Setup → Show short names — user Maya verified |
 | 2026-07-26 | mocapBakeTools is canonical body align/snap/bake home (`mocap_align_utils`); dual-path legacy when local offsets unset |
 | 2026-07-07 | Body rig align workflow: CCL short-name conventions, skeleton-root scoping, local-TR offset capture (`rp` / `doLoc`), snap reporting; animation import overview; multi-skeleton and pivot learnings in rejected approaches |
 | 2026-06-22 | Branch timeline consolidated under UnrealWorkflow; factor-to-cgm note |

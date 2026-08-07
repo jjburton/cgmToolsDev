@@ -3,11 +3,11 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: July 28, 2026 (mocapBakeTools local-TR align/snap/bake + `mocap_align_utils`)  
+**Last Updated**: August 6, 2026 (MRS/Fortnite skeleton maps + `connect_fn_skeleton_to_mrs` — `mrs_fortnite_utils`)  
 **PR**: Pending
 
 ## 🎯 Goals
-Harden Scene export behavior so Unreal-oriented exports are consistent, repeatable, and predictable for animation and rig workflows. **Also:** MetaHuman / Fortnite facial solve — joint matching, control→bridge mapping, SDK transfer onto source rigs, and lightweight target-follow constraints (`ProjectScripts/MetahumanFacial.py`); **body rig align** via native `mocapBakeTools` local-TR capture/snap/bake (`mocap_align_utils`). Track export and facial/align issues in one place, with explicit validation criteria and PR-ready notes.
+Harden Scene export behavior so Unreal-oriented exports are consistent, repeatable, and predictable for animation and rig workflows. **Also:** MetaHuman / Fortnite facial solve — joint matching, control→bridge mapping, SDK transfer onto source rigs, and lightweight target-follow constraints (`ProjectScripts/MetahumanFacial.py`); **body rig align** via native `mocapBakeTools` local-TR capture/snap/bake (`mocap_align_utils`); **MRS ↔ Fortnite / Unreal mannequin skeleton** joint name maps, rename helpers, and **`connect_fn_skeleton_to_mrs`** (MRS drives FN via point/orient constraints + remapped scale attrs — `ProjectScripts/mrs_fortnite_utils.py`). Track export, facial/align, and skeleton-connect issues in one place, with explicit validation criteria and PR-ready notes.
 
 ## 📚 Related Documentation
 - **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Canonical dev/TA spec: export modes, tdSet contract, prep order, namespace/path rules, troubleshooting
@@ -18,6 +18,8 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **MetahumanFacial.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/MetahumanFacial.py` (Perforce) — facial SDK transfer / constrain (iteration home until core factors to py3)
 - **[mocapBakeTools.py](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py)** - Mocap / MetaHuman body align UI; dual-path bake (local TR when captured, legacy vector otherwise)
 - **[mocap_align_utils.py](../../cgmToolsPy3/cgm/core/lib/mocap_align_utils.py)** - CCL IO, skeleton-root resolve, local-TR capture/snap/bake orchestration
+- **mrs_fortnite_utils.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/mrs_fortnite_utils.py` (Perforce) — Unreal/MRS/FN joint maps, rename/verify helpers, **`connect_fn_skeleton_to_mrs`**
+- **biped.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/biped.py` (Perforce) — character MRSPOST defaults; re-exports `mrs_fortnite_utils` for legacy `import biped` callers
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** - `fortniteMetaHuman` pose-buffer schema
 - **[sdk_utils.py](../../cgmToolsPy3/cgm/core/lib/sdk_utils.py)** - Existing SDK patterns; candidate merge target when factoring facial helpers from ProjectScripts
 - **[Scene.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Scene.py)** - Main Scene UI, `RunExportCommand`, `ExportScene`, `BatchExport`, `SendToBuild`
@@ -29,17 +31,19 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[batch_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py)** - Mayapy batch preflight (`ensure_fbx_plugin` before Scene import)
 - **[project_utils.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/project_utils.py)** - Lazy `get_fbx_versions()` (no import-time FBX MEL probe)
 - **[animFilterTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/animFilterTool.py)** - Anim post filters UI (`VERIFY_CLOSE` / `confirmClose`)
+- **[anim_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/anim_utils.py)** — `closest_euler_solution`, `fix_selected_rotation_key`, `fix_selected_rotation_animation` (quaternion alternate + ±360 search; frame-to-frame continuity for full rotation curves)
 - **[baseMelUI.py](../../../repos/cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)** - `BaseMelWindow` close hooks (`VERIFY_CLOSE`, `restoreAfterCloseCancelled`)
 - **[cgm_General.py](../../../repos/cgmToolsPy3/cgm/core/cgm_General.py)** - Shared helpers (`playback_stop`, logging); `ensure_fbx_plugin`, FBX export preamble/selection helpers
 - **[PostBake.py](../../../repos/cgmToolsPy3/cgm/core/classes/PostBake.py)** - Post filters bake loop (AnimFilter dragger/spring/etc.)
 - **[locinator.py](../../../repos/cgmToolsPy3/cgm/core/tools/locinator.py)** - `bake_match` timeline bake
 - **[curve_Utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/curve_Utils.py)** - `align_eps_by_lane_projection`, `distribute`
 - **[shape_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/shape_utils.py)** - `get_nonintermediate` (canonical live shape resolution)
-- **[toolbox.py](../../../repos/cgmToolsPy3/cgm/core/tools/toolbox.py)** - Snap **Ratio** row; Controls **tweak** row (`buildRow_tweakCurve`)
+- **[toolbox.py](../../../repos/cgmToolsPy3/cgm/core/tools/toolbox.py)** - Snap **Ratio** row; Controls **tweak** row (`buildRow_tweakCurve`); **Anim** tab **Anim Utils** row — **Fix Rotation:** `[Current]` / `[Animation]`
 - **[snapTools.py](../../../repos/cgmToolsPy3/cgm/core/tools/snapTools.py)** - Snap **Ratio** row (shared with toolbox)
 - **[joint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/joint_utils.py)** - `pruneSkeletonToJoints` (MetaHuman / facial skeleton strip to keep-list + root chain)
 - **[mayaBeOdd_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaBeOdd_utils.py)** - Maya Be Odd helpers (`cascade_mc_windows`, outliner/panel cleanup)
-- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio**; **Point Special → Ground**; Loc **Ground Pos**; `buildRows_ratio_arrange`; **Maya Be Odd → Cascade UI Windows**
+- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio**; **Point Special → Ground**; Loc **Ground Pos**; `buildRows_ratio_arrange`; **Maya Be Odd → Cascade UI Windows**; cgmToolbox **Select\***; `uiSection_animUtils` — **Fix Rotation Key** / **Fix Rotation Animation** (Other → Anim + anim marking menu Utilities)
+- **[contextual_utils.py](../../../repos/cgmToolsPy3/cgm/core/tools/markingMenus/lib/contextual_utils.py)** - Context queries (`get_list`, `select`) for **Select\*** and marking menus; hierarchy-sorted via **`search_utils.sort_by_hierarchy`**
 - **[snap_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/snap_utils.py)** - `to_ground`, `ground_position_get`
 - **[snap_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/snap_calls.py)** - `get_special_pos` (`groundPos`), `snap_action` ground mode
 - **[position_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/position_utils.py)** - `scene_up_axis_get`, `ground_plane_up_index`, `position_project_to_ground_plane`, scene-up **bottom**/**top** in `get_bb_pos`
@@ -48,7 +52,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[constraint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/constraint_utils.py)** — `attach_toShape(..., surfaceTrack=)` (follicle | rivet | uvPin); Rigging Utils **Attach by** surface-track items
 - **[dynamic_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/dynamic_utils.py)** — `map_cloth_surface`, `get_mapped_cloth`, `attach_to_cloth_dynFK`, `setup_sim_dynFK`, `cgmDynFK.bake_nodes`, `set_base_name`, `chainMode='clothAttach'`
 - **[dynFKTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/dynFKTool.py)** (`cgmSimChain`) - **Init Sim Setup**, Details **Cloth** `>>` + **Fabric** / **Solver** menus (explicit apply only), **Cloth track**, **Attach to Cloth**, editable **Base Name**, **Tools → Query Settings**, target bake + post-bake `targets_disconnect`, `reload_dependencies()`
-- **[tool_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_calls.py)** — `cgmSimChain()` reloads backend modules via `cgmGEN._reloadMod` before opening UI
+- **[tool_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_calls.py)** — `mocapBakeTool()` reloads `mocap_align_utils` then `mocapBakeTools` via `cgmGEN._reloadMod` before opening UI; `fixRotationKey()` / `fixRotationAnimation()` reload `anim_utils` before running
 - **[module_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/module_utils.py)** — `mirror_get`, `siblings_get`, module parent/children wiring
 - **[animate_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/animate_utils.py)** — Animate context cache (`module_get`, `context_get`, mirror module expansion)
 - **[cgmNCloth_presets.py](../../../repos/cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** - Layered profiles: **fabric** (`silk`, `cotton`, `denim`, …), **solver** (`solver_balanced`, `solver_quality`, `solver_high`, …), **wind** (`wind_calm`, `wind_flag`); `d_profileKind` registry
@@ -62,6 +66,129 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
 
 ## 🗓️ Timeline
+
+### August 6, 2026 (d) - MRS/Fortnite skeleton maps + connect (`mrs_fortnite_utils`)
+**What**: Factored Unreal mannequin ↔ MRS skin joint naming out of **`biped.py`** into **`mrs_fortnite_utils.py`**: reference lists (`l_unreal_biped`, `l_mrs_biped`), forward/inverse body maps, MetaHuman face → FN map, rename/verify helpers. Added **`connect_fn_skeleton_to_mrs`** — validate FN + MRS roots, require every mapped FN joint under the FN hierarchy to resolve its MRS driver, then **point + orient** constraints (MRS → FN, `maintainOffset=True`). Scale uses **direct attribute connections** with axis remap (driver `z→x`, `y→y`, `x→z`) instead of `scaleConstraint` — joint orient differs between rigs. Corrected **upperarm twist** drivers: `upperarm_twist_01_*` + `upperarm_*` → `*_shoulder_sknJnt`; `upperarm_twist_02_*` → `*_shoulder_roll_sknJnt` (not `*_shoulder_roll_1_sknJnt`).
+
+**Files**:
+- NEW: `ProjectScripts/mrs_fortnite_utils.py` — maps, `verify_unreal_to_mrs_joints`, `rename_*`, `connect_fn_skeleton_to_mrs`, `_connect_remapped_scale`
+- EXTENDED: `ProjectScripts/biped.py` — thin re-export shim (`import mrs_fortnite_utils as MRSFNUTIL`)
+
+**Features**:
+- **`connect_fn_skeleton_to_mrs(fnRoot, mrsRoot, check_only=True)`** — dry-run reports `ok` / `missing_mrs`; aborts before any constraints if a driver is missing
+- Root resolution: explicit kwargs or two selected skeleton roots (auto-detect MRS vs FN by mapping name hits)
+- **`d_unreal_to_mrs_biped`** is canonical for connect (many Unreal names → one MRS joint allowed)
+- Scale remap constant **`_SCALE_ATTR_REMAP`** — unlock + `connectAttr` per channel; report lists source/destination plugs
+
+**Decisions**:
+- Keep maps in **ProjectScripts** (not `cgmToolsPy3` ship tree) — Fortnite/MRS naming is project-specific
+- **`biped.py`** retains re-exports so existing `import biped` Maya sessions keep working; new callers import **`mrs_fortnite_utils`** directly
+- Rejected **`scaleConstraint`** for FN follow — axis mismatch from joint orient; remapped **`connectAttr`** instead
+
+**Status**: ✅ Code complete — Maya verify: `check_only=True` after upperarm twist fix; scale remap on representative limb chain
+
+---
+
+### August 6, 2026 (c) - Euler rotation key fix (`anim_utils`, toolbox, tool_calls)
+**What**: Ported project Euler cleanup utilities into core **`anim_utils`**: find the equivalent Euler solution (primary + alternate quaternion branch, ±360 per-channel candidates) closest to a reference, then re-key selected transforms. **Current** fixes rotation keys at the **current frame** toward `(0,0,0)`; **Animation** walks all rotation keys in time order (first frame toward zero, each next toward the previous solved values) for continuous curves without changing orientation. Wired through **`tool_calls`** with `_reloadMod` for iteration; exposed in cgmToolbox **Anim** tab **Anim Utils** section (**Fix Rotation:** `[Current]` `[Animation]`, Advanced Snap row layout) and **`uiSection_animUtils`** menu (Other → Anim + anim marking menu Utilities).
+
+**Files**:
+- EXTENDED: `cgm/core/lib/anim_utils.py` — `closest_euler_solution`, `fix_selected_rotation_key`, `fix_selected_rotation_animation` (+ private OM helpers)
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — `fixRotationKey()`, `fixRotationAnimation()`
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — `uiSection_animUtils` cgm divider + menu items
+- EXTENDED: `cgm/core/tools/toolbox.py` — `buildSection_animUtils` on **Anim** tab
+
+**Features**:
+- Same orientation, cleaner Euler channel values (gimbal / 360° wrap cleanup)
+- Locked or connected rotate channels warn and skip per attribute
+- Single undo chunk per operation
+
+**Decisions**:
+- Core math + Maya ops live in **`anim_utils`** (not `math_utils` / `anim_meta.py`)
+- Menu + toolbox call thin wrappers only; no dedicated tool window yet
+- Single-frame API accepts optional `reference=` tuple; UI uses default zero
+
+**Status**: ✅ Code complete — Maya verify: gimbal-flipped key at current frame; multi-key continuity; locked channel warning; reload without Maya restart
+
+---
+
+### August 6, 2026 - Scene rig subtype empty-folder sets-row buttons
+**What**: Fixed character **rig** browse (second column, `hasSub=False`) showing only **Add Set** (`new_dir`) at the bottom when the rig folder was empty or not yet created on disk. File actions (Save Maya here / Export / Save Version) were gated on existing `.ma/.mb` children; subtype switches also skipped a sets-row refresh after `LoadSubTypeList` / `LoadVersionList`.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_level_show_file_actions` (empty leaf dirs + not-yet-created save roots); `_sets_buttons_browse_directory` (selected set path when `hasSub`); `uiUpdate_setsButtons` uses browse dir; refresh from `SetSubType`, `LoadSubTypeList` (both `hasSub` paths)
+
+**Features**:
+- **Empty rig folder**: sets row shows **Add Set** plus Save Maya / Export / Save Version (same intent as `_version_column_should_show` for empty version parents)
+- **Not-yet-created subtype dir**: file actions offered when parent asset folder exists (first save can create `rig/`)
+- **Set selected under animation (`hasSub=True`)**: button visibility follows `path_set`, not always rig/subtype root
+- **Subtype tab switch / list refresh**: sets-row icons rebuild after rig list load, not only on asset select
+
+**Decisions**:
+- File actions on **leaf** browse levels (no child dirs) even with zero Maya files — do not require pre-existing scenes to show save/export
+- Pure **dirs-only** parent levels (subdirs, no loose files) still hide file actions at that row (file actions on child selection or version column)
+- Extends July 13 mixed-level button work; does not change mixed dir+file or variation-row behavior
+
+**Status**: ✅ Code complete — Maya verify: character + **rig** subtype, empty or missing `rig/` folder → full icon row at column 2 bottom
+
+---
+
+### August 6, 2026 (b) - CGM Select* hierarchy order (`search_utils`, `contextual_utils`)
+**What**: **CGM → Select\*** (and marking-menu callers of `MMCONTEXT.get_list`) returned joints and other filtered nodes in selection/accumulation order, not DAG order — awkward for joint chains and multi-select under one root. Added depth-first **`sort_by_hierarchy`** and apply at end of **`get_list`** before return.  
+**Files**:
+- EXTENDED: `cgm/core/lib/search_utils.py` — `sort_by_hierarchy` (DFS from in-set roots; Maya sibling order via `listRelatives(children=True)`)
+- EXTENDED: `cgm/core/tools/markingMenus/lib/contextual_utils.py` — `get_list` calls `SEARCH.sort_by_hierarchy` on result list
+
+**Features**:
+- **Select\* → children / heirarchy / selection / scene → Joints** (and other type filters): `mc.select` order follows outliner parent → child
+- Marking menus and **`func_process`** paths that use `get_list` inherit the same ordering
+
+**Decisions**:
+- Do not use zoo **`sortByHierarchy`** (depth-only parent count) — insufficient for sibling order within a level
+- Sort after optional **`getTransform`** normalization so transform paths still reflect DAG order
+
+**Status**: ✅ Code complete — Maya verify: **Select\* → children → Joints** on spine/arm; multi-root selection
+
+---
+
+### August 5, 2026 (c) - mocap align list index display + target reorder (`mocapBakeTools`)
+**What**: Target list order matters for CCL and artist workflow. Added **target RMB reorder** (Move Up/Dn, Move to Top/Bottom, Set Index — 0-based, matches on-screen indices). List labels now show **0-based indices**: each target row `[n] name`; linked sources `name -> [n],…`. Index prefix survives **Show short names** (`ns:base` scroll-list display quirk).
+
+**Files**:
+- EXTENDED: `cgm/core/tools/mocapBakeTools.py` — `_format_target_list_alias`, `_apply_parent_target_list_order`, target popup reorder menu
+- EXTENDED: `Features/Feature_MocapAlignSnap.md`, `Feature_Metahuman.md`, this branch doc
+
+**Status**: ✅ Complete (user verified)
+
+---
+
+### August 5, 2026 (b) - CCL source pattern generalization (`mocap_align_utils`)
+**What**: Replaced MetaHuman-specific `_ALIGN_CCL_LEAF_SOURCES` allowlist with **skel-root-scoped uniqueness validation** on save only. Leaf names saved when unique under roots; otherwise minimal pipe chain. Save blocked without Skel Roots. **Existing `.ccl` files load unchanged** — `resolve_connections` uses `_pattern_for_resolve` (no compaction on load).
+
+**Status**: ✅ Complete (backward compat: load path frozen)
+
+---
+
+### August 5, 2026 - mocap align snap parity + list UX (`mocap_align_utils`, `mocapBakeTools`)
+**What**: Fixed body-align snap/bake to match validated **sparrowTools** / project-script behavior when loading working CCL `localTranslate` / `localRotate`. Snap was rebuilding offset locators with plain `spaceLocator` instead of **`doLoc` on the target control** — same local TR under different `rotateOrder` / `rotateAxis` produced a consistent world-space offset on every link. Ported sparrow resolution (`Body|…` ranked suffix match, joints-only under roots, `resolve_connections`), re-resolve before Capture/Snap/Bake, safer offset merge on UI sync, and hot-reload of `mocap_align_utils` on tool open / **Setup → Reload**. Added **Setup → Show short names** (`mocap_show_short_names`) for source/target list display via `cgmObject.p_nameShort`.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/mocap_align_utils.py` — `resolve_connections`, `source_pattern_needs_skel_roots`, doLoc-based `_build_parented_offset_locator` / `_get_or_build_snap_locator`, hierarchy pattern resolve (sparrow parity)
+- EXTENDED: `cgm/core/tools/mocapBakeTools.py` — `_reresolve_connection_data`, `reload_dependencies()`, link-index offset preservation, short-name list toggle
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — reload align lib before mocap bake tool
+- EXTENDED: `Features/Feature_MocapAlignSnap.md`, `Feature_Metahuman.md`, this branch doc
+
+**Features**:
+- Loaded CCL with existing local offsets snaps correctly without re-capture (Maya verified)
+- Debug locators and snap use identical doLoc rebuild + `_sync_locator_to_conn`
+- Dev iteration: align lib reload without Maya restart
+
+**Decisions**:
+- Snap/bake **must** rebuild locators with `doLoc` on target — never `spaceLocator` + saved local TR alone
+- Resolution logic lives in py3 lib; project-script align UI remains reference until explicit deprecation
+
+**Status**: ✅ Complete (user Maya verification — snap matches sparrowTools / debug locs)
+
+---
 
 ### July 26–28, 2026 - mocapBakeTools local-TR align / snap / bake (`mocap_align_utils`)
 **What**: Shipped native body-align workflow in `mocapBakeTools`: capture parented local-TR offsets (`doLoc` at rotate pivot), single-frame snap, and timeline bake using the same locator math. Dual-path — when `localTranslate` / `localRotate` are unset, Manual Set / Set On Bake / vector bake behave as before. Snap skips missing local offsets and prints a full Script Editor missing-data report.  
@@ -240,7 +367,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 **Features**:
 - **Mixed subtype level**: sets row shows dir + file icon buttons together; folder select keeps version column; file select hides version column but keeps file buttons on sets row
 - **Mixed set + variants**: variation row shows Add Variation + file buttons when variant subdirs and loose files coexist under `path_set`
-- **Files-only / dirs-only**: prior single-mode behavior preserved (file buttons only vs dir buttons only)
+- **Files-only / dirs-only**: prior single-mode behavior preserved (file buttons only vs dir buttons only); **August 6** — empty leaf dirs (e.g. new `rig/`) also show file actions on the sets row
 - **Metadata on loose variation files**: file select in variation list drives `getMetaDataFromFile` via `versionFile` file-path resolution
 
 **Decisions**:
@@ -249,6 +376,23 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - Variation column uses same dynamic row pattern as sets (`mRow_variationButtons` + `uiUpdate_variationButtons`)
 
 **Status**: ✅ Complete — user verified in Maya
+
+---
+
+### August 4, 2026 - Shot list bake frame range fix
+**What**: Fixed `ExportScene` using `min(shot[1])` / `max(shot[1])` for bake range, which treated 3-element shot `[start, end, length]` frame **count** as the start frame (e.g. bake 132–1805 instead of 1673–1805).  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — bake range uses `shot[1][0]` / `shot[1][1]` (matches FBX takes and Shots UI)
+- EXTENDED: `Features/Feature_SceneExportFlow.md` — shot list format, normative bake rule, anti-pattern, verification checklist
+
+**Features**:
+- **Single-shot / multi-shot bake**: union of shot starts/ends; playback range set before bake
+- **Legacy 2-element shots** `[start, end]` unchanged (indices 0 and 1)
+
+**Decisions**:
+- Bake range must use shot indices `[0]`/`[1]` only — never `min`/`max` the full triple (length is not a timeline frame)
+
+**Status**: ✅ Complete — user verified in Maya (Hondo Marketing shot `[1673, 1805, 132]` → `Bake | start: 1673 | end: 1805`)
 
 ---
 
@@ -855,9 +999,21 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] `mocap_align_utils` — CCL, resolve, local-TR capture / snap / bake
 - [x] mocapBakeTools Align UI + dual-path bake (legacy vector when offsets unset)
 - [x] Feature contracts (`Feature_MocapAlignSnap.md`, body-align section in `Feature_Metahuman.md`)
-- [ ] Maya verification checklist pass (foot IK + finger; multi-skeleton; legacy CCL)
-- [ ] Deprecate duplicate project-script align UI once parity confirmed
+- [x] Maya verification — loaded CCL snap parity vs sparrowTools; doLoc rebuild fix (Aug 2026)
+- [x] CCL save: uniqueness validation under Skel Roots (no MH allowlist); save requires roots
+- [x] Setup → Show short names for source/target lists (`mocap_show_short_names`)
+- [x] Target list RMB reorder — Move Up/Dn, Top/Bottom, Set Index (order saved in CCL)
+- [x] List index labels — targets `[n]`; linked sources `name -> [n],…` (0-based, matches Set Index)
+- [ ] Deprecate duplicate project-script align UI once team standardizes on mocapBakeTools
 - [ ] Optional Google Doc artist section / preset browser under `cgmDat/mocap/`
+
+### MRS / Fortnite skeleton connect (`mrs_fortnite_utils`)
+- [x] Extract joint maps + rename/verify from `biped.py` → `mrs_fortnite_utils.py` (Aug 2026)
+- [x] `connect_fn_skeleton_to_mrs` — validate all mapped pairs; point + orient constraints (MRS drives FN)
+- [x] Remapped scale **`connectAttr`** (driver z→x, y→y, x→z) — replaces scaleConstraint
+- [x] Upperarm twist mapping fix (`twist_01` → shoulder, `twist_02` → shoulder_roll)
+- [ ] Maya regression: full-body connect on representative Hondo + FN mannequin scene
+- [ ] Optional face pass wiring via `d_metahuman_face_to_FN` (connect currently body map only)
 
 ---
 
@@ -909,8 +1065,10 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] Cutscene `deleteMesh` + stale `exportTransforms` after Prep (`_export_transforms_after_mesh_strip`)
 - [x] Version-column save/export when versions live under `path_asset` (`_version_files_parent_directory`)
 - [x] Mixed browse levels (dirs + loose `.ma/.mb` at same path): sets/variation icon rows and version column visibility (`uiUpdate_setsButtons`, `uiUpdate_variationButtons`, `_version_column_should_show`)
+- [x] Rig subtype empty / missing-folder sets row showed Add Set only — no Save Maya / Export / Save Version (`_level_show_file_actions`, `_sets_buttons_browse_directory`, subtype-list refresh)
 - [x] Export queue bulk add from multi-selected Sets/Variation/Version files (toolbar **Add to queue as**; RMB queue single-file only)
 - [x] Animate mirror context on rigs with duplicate module names + direction modifiers (`mirror_get` tag matching; `animate_utils.context_get` guard)
+- [x] **Shot list bake frame range** — `min(shot[1])` on 3-element shots used length as start; fixed to `shot[1][0]`/`[1]` (`ExportScene` bake + playback range)
 
 ### Low
 - [x] Playback stopped before frame-scrub bakes (`cgmGEN.playback_stop` + PostBake / Locinator / bakeAndPrep / mocap / funcIterTime)
@@ -934,6 +1092,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] mocapBakeTools local-TR align/snap/bake (`mocap_align_utils`); dual-path legacy vector bake when offsets unset
 - [x] MetaHuman facial skeleton prune to keep-list + root chain (`joint_utils.pruneSkeletonToJoints`)
 - [x] Maya Be Odd **Cascade UI Windows** dev menu action (`mayaBeOdd_utils` / `tool_chunks`)
+- [x] CGM **Select\*** context queries return hierarchy-ordered lists (`search_utils.sort_by_hierarchy`, `contextual_utils.get_list`)
 - [x] Send to Build / MRS Build path: stage logging, window placement, `fillDefaults` opt-in verbosity (`CGM_VERBOSE_FILL_DEFAULTS`)
 - [x] Batch rig master rebuild when prerig vis/settings messages are absent (`RigBlocks` / `getMessageAsMeta` vs `False`)
 
@@ -951,8 +1110,10 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **Multi-ref cutscene + deleteMesh**: ✅ Code-path validated; per-rig delete set + post-strip selection refresh.
 - **Version column (no subtype tabs / version in column 2)**: ✅ Save/export paths aligned with `LoadVersionList`.
 - **Mixed browse level (set folders + loose `.ma/.mb`)**: ✅ User verified — dir + file buttons together; version column follows folder vs file selection.
+- **Character rig subtype (empty / missing `rig/` folder, column 2)**: ⚠️ Code-path fixed — verify Add Set + Save Maya / Export / Save Version icon row after subtype switch.
 - **Export queue multi-select (toolbar Add to queue as)**: ✅ User verified — multiple version files enqueue in one action; RMB suppressed on multi-select.
 - **Per-shot individual FBX (exportShotsToIndividualFiles)**: ✅ User verified (Crate closed/opening/open/closing); export summary at batch end.
+- **Shot list bake frame range (AnimList → ExportScene bake)**: ✅ User verified — high frame-number shot `[1673, 1805, 132]` bakes 1673–1805 (not 132–1805).
 - **Read-only synced FBX in depot**: ✅ Fail before FBX with path listed; `.bak` cleanup when deletable (manual `p4 edit` still required).
 - **Static export + texture-link option behavior**: ⚠️ Not changed in this pass; requires runtime verification.
 - **Cross-mode path consistency**: ⚠️ Requires runtime verification with project data variants.
@@ -968,7 +1129,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 # Scene Export: Unreal workflow (rig stability, logging, bake/delete, MRS Build)
 
 ## Overview
-Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), **mocapBakeTools local-TR body align/snap/bake (`mocap_align_utils`, dual-path legacy vector bake)**, Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
+Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), **shot list bake frame range fix** (`shot[1][0]`/`[1]` not `min/max(shot[1])`), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), **mocapBakeTools local-TR body align/snap/bake (`mocap_align_utils`, dual-path legacy vector bake)**, Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
 
 ## Major Changes
 
@@ -1053,10 +1214,15 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - **Maya Be Odd → Cascade UI Windows** in cgmToolbox; dev ergonomics when many tool windows are open during export/rig debugging
 
 ### 21. mocapBakeTools local-TR align / snap / bake (`mocap_align_utils`, `mocapBakeTools`)
-- NEW `mocap_align_utils`: CCL IO, skeleton-root / rig-NS resolve, capture (`doLoc` + local TR), snap (`movePointSnap` / `moveOrientSnap`), `bake_connections`
-- Align UI: Rig NS, Skel Roots, Capture, Snap All/Sel; Tools → debug locs
+- NEW `mocap_align_utils`: CCL IO, skeleton-root / rig-NS resolve, capture (`doLoc` + local TR), snap (`movePointSnap` / `moveOrientSnap`), `bake_connections`, `resolve_connections`
+- Align UI: Rig NS, Skel Roots, Capture, Snap All/Sel; target list RMB reorder + index labels (`[n]` / `-> [n]`); Tools → debug locs; Setup → Show short names
 - Dual-path `bake()`: local TR when present; else legacy `POS.set` + `aim_atPoint` unchanged
 - Snap without local offsets: skip + full Script Editor missing-data report
+- **Aug 2026 parity**: snap/bake rebuild locators via `doLoc` on target (rotateAxis invariant); sparrow-ranked joint resolve; `reload_dependencies()` on tool open / Reload
+
+### 22. CGM Select* hierarchy order (`search_utils`, `contextual_utils`)
+- `sort_by_hierarchy`: depth-first from in-set roots (parent before child; Maya sibling order)
+- `get_list` applies sort for all context modes (`selection`, `children`, `heirarchy`, `scene`) — cgmToolbox **Select\*** and marking menus
 
 ## Files Modified
 - `cgm/core/mrs/Scene.py`
@@ -1071,12 +1237,14 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `cgm/core/classes/PostBake.py`
 - `cgm/core/tools/locinator.py`
 - `cgm/core/tools/mocapBakeTools.py`
+- `cgm/core/tools/lib/tool_calls.py`
 - ADDED: `cgm/core/lib/mocap_align_utils.py`
 - `cgm/core/tools/funcIterTime.py`
 - `cgm/core/lib/zoo/baseMelUI.py`
 - `cgm/core/tools/animFilterTool.py`
 - `cgm/core/lib/curve_Utils.py`
 - `cgm/core/lib/search_utils.py`
+- `cgm/core/tools/markingMenus/lib/contextual_utils.py`
 - `cgm/core/tools/toolbox.py`
 - `cgm/core/tools/snapTools.py`
 - `cgm/core/tools/lib/tool_chunks.py`
@@ -1163,8 +1331,15 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - **`mirror_get`**: always match **`cgmPosition` / `cgmPositionModifier` / `cgmDirectionModifier`** via `getCGMNameTags(['cgmDirection'])` — absent tags are **`False`**, not “ignore in comparison”. Omitting unset attrs caused duplicate matches (e.g. `L_coat` matching both `R_coat` and `R_FRNT_coat`).
 - Animate **`context_get`**: treat failed **`module_get`** as `{}` when collecting controls — `mirror_get` exceptions must not cascade to `'NoneType' object is not subscriptable`.
 - **Body align offsets**: capture with **`doLoc` at rotate pivot**, parent to source joint, store **`localTranslate` / `localRotate`** — do not mix with legacy world-vector `positionOffset` / forward-up for the same links.
+- **FN skeleton connect (`connect_fn_skeleton_to_mrs`)**: MRS joint is **driver**, FN/Unreal joint is **driven**; use **`d_unreal_to_mrs_biped`** (not the one-to-one `d_mrs_to_unreal_biped` inverse). **`check_only=True`** before first connect on a new character pairing.
+- **FN scale follow**: do not use **`scaleConstraint`** when joint orients differ — connect driver **`scaleZ→scaleX`**, **`scaleY→scaleY`**, **`scaleX→scaleZ`** on the driven joint (`_connect_remapped_scale` in **`mrs_fortnite_utils`**).
+- **Upperarm twist drivers**: `upperarm_twist_01_*` shares **`_*_shoulder_sknJnt`** with `upperarm_*`; `upperarm_twist_02_*` → **`_*_shoulder_roll_sknJnt`** (not `*_shoulder_roll_1_sknJnt`).
+- **Body align snap/bake**: rebuild offset locators with **`doLoc` on the target control** before applying saved local TR — plain **`spaceLocator`** ignores control **`rotateOrder` / `rotateAxis`** and produces a consistent world-space error even when CCL offsets are correct.
 - **mocapBakeTools dual-path**: no local TR → keep Manual Set / vector bake; with local TR → locator snap/bake. Snap never falls back to vector aim — report every skipped pair.
 - **Multi-MH scenes**: set **Skel Roots** before Capture/Snap; short CCL patterns alone are ambiguous without roots.
+- **mocap align dev reload**: `tool_calls.mocapBakeTool()` and **Setup → Reload** call **`reload_dependencies()`** — reload **`mocap_align_utils`** before **`mocapBakeTools`** or Maya keeps a stale module missing new APIs (e.g. `resolve_connections`).
+- **CCL save compaction**: under Skel Roots, save **leaf when unique** else **minimal pipe chain** — validated with `validate_connections_for_save`; no hardcoded finger/limb allowlist. **Load path never compacts** existing pattern strings.
+- **`sortByHierarchy`** (zoo `apiExtensions`) sorts by **parent depth only** — not outliner-equivalent sibling order; use **`SEARCH.sort_by_hierarchy`** (DFS from in-set roots) for joint/type selection lists.
 
 ### Future Considerations
 - AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
@@ -1178,9 +1353,9 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Query Settings: optional copy-to-clipboard; full-profile export toggle (not only diff from `base`).
 - nCloth: `cotton_static` or similar only if artists need a documented “sim off” utility — still must not use `isDynamic` in fabric presets.
 - **Factor MetaHuman facial core into cgm proper** when API stabilizes: `get_driven_data` / SDK helpers → **`sdk_utils`**; joint match, bridge probe, rest/transfer helpers → **`mrs/lib/face_utils`**; thin **`tools/`** or ProjectScripts caller for orchestration; character **`d_wire`** maps stay project-specific. Do not split REST POSE + offset-locator sampling prematurely.
-- **Body align**: deprecate duplicate project-script align UI after Maya parity; optional Scene menu → mocapBakeTools; preset browser under `cgmDat/mocap/`; optional pre-export align bake hook.
+- **Body align**: deprecate duplicate project-script align UI once team standardizes on mocapBakeTools; optional Scene menu → mocapBakeTools; preset browser under `cgmDat/mocap/`; optional pre-export align bake hook.
 
 ---
 
-*Last Updated: July 28, 2026 (mocapBakeTools local-TR align/snap/bake + `mocap_align_utils`)*  
+*Last Updated: August 6, 2026 (CGM Select* hierarchy order)*  
 *Branch Status: Active*

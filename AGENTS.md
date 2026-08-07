@@ -22,7 +22,7 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 7. **MetaHuman facial solve design contract**: [`Features/Feature_Metahuman.md`](Features/Feature_Metahuman.md) — joint matching, bridge mapping, `transfer_rig` / `constrain_rig`, rest-pose invariants. Timeline on [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md). Primary code in Perforce `ProjectScripts/MetahumanFacial.py` (factor core to cgm when API stabilizes).
 
-8. **Mocap align snap / bake design contract**: [`Features/Feature_MocapAlignSnap.md`](Features/Feature_MocapAlignSnap.md) — **implemented** local-TR locator align, single-frame snap, and dual-path timeline bake in `mocapBakeTools` (`mocap_align_utils`). Update when changing offset capture, CCL schema, or bake loop. Timeline: [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md).
+8. **Mocap align snap / bake design contract**: [`Features/Feature_MocapAlignSnap.md`](Features/Feature_MocapAlignSnap.md) — **implemented and Maya-verified** local-TR locator align, single-frame snap, and dual-path timeline bake in `mocapBakeTools` (`mocap_align_utils`). Snap/bake must rebuild locators via `doLoc` on target (rotateAxis invariant). Reload align lib on tool open (`tool_calls.mocapBakeTool`). Update when changing offset capture, CCL schema, or bake loop. Timeline: [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md).
 
 9. **MRS module wiring design contract**: [`Features/Feature_MRSWiring.md`](Features/Feature_MRSWiring.md) — block/module/puppet message graphs, build sync, control rewire, attach points. Update when changing `puppet_utils`, `module_utils`, or `moduleTarget_wire_from_blockParent`.
 
