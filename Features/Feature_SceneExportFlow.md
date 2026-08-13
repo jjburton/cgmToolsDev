@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: August 4, 2026
+- **Last Updated**: August 13, 2026 (P4 cross-ref: project save shipped; export prepare next)
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
@@ -27,7 +27,7 @@
 
 ### Out of scope
 
-- P4 checkout integration — see [`Plan_ExportP4Integration.md`](../Plans/Plan_ExportP4Integration.md)
+- P4 checkout on **FBX export** (optional, opt-in) — **not wired yet**; see [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md). Project **File → Save** P4 prepare is shipped separately (`prepare_output_for_write`).
 - Artist Google Doc wording (this doc can seed that later)
 - Set Tools UI quirks, skin import clutter, missing Maya plugins (`mtoa`, `TitanDDS`, etc.)
 - Post-bake anim filters (`PostBake.py`, AnimFilter tool) except where they affect scene state before export
@@ -69,7 +69,7 @@ flowchart TD
 | [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `RunExportCommand`, `BatchExport`, `ExportScene`, export root discovery, mode flags, FBX pathing, `_export_transforms_after_mesh_strip` |
 | [`cgm/core/tools/bakeAndPrep.py`](../../cgmToolsPy3/cgm/core/tools/bakeAndPrep.py) | `Bake`, `Prep`, `export_prep_non_referenced`, tdSet helpers, unparent/constraints/select helpers |
 | [`cgm/core/mrs/lib/batch_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py) | mayapy preflight — `ensure_fbx_plugin` **before** `import Scene` |
-| [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | Writable FBX path checks, `.bak` sidecar cleanup, `ExportOutputNotWritableError` |
+| [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | **`prepare_output_for_write(mDat=)`** (project save; P4 when `versionControl=perforce`); export writability, `.bak` sidecar cleanup, `ExportOutputNotWritableError`; **`prepare_export_output_for_write()` planned** for FBX |
 | [`cgm/core/cgm_General.py`](../../cgmToolsPy3/cgm/core/cgm_General.py) | `ensure_fbx_plugin`, `fbx_export_preamble`, `fbx_export_selection`, export result summary |
 
 ---
@@ -82,7 +82,7 @@ Modes come from `RunExportCommand` (`Scene.py` mode arg) or `ExportScene(mode=�
 |------|----------|------|------|-----|------------------|
 | 0 | bake | Yes | Yes | No | `exportFBXFile=False` — bake + prep only; writes `*_baked.mb` rename target |
 | 1 | export | Yes | Yes | Yes | Single-asset anim; multi-root **prompts** cutscene confirm |
-| 2 | cutscene | Yes | Yes | Yes | `exportAsCutscene`, `deleteMesh=True`, per-shot FBX under animation folder |
+| 2 | cutscene | Yes | Yes | Yes | `exportAsCutscene`, per-shot FBX under animation folder; mesh strip from project **`deleteMesh`** (default off) |
 | 3 | rig | Yes | Yes | Yes | `exportAsRig`; multi-root → **one** combined FBX at asset path |
 | 4 | static | No | No | Yes | Skips bake and prep; optional `BreakTextureLinks` only |
 
@@ -106,8 +106,8 @@ High-level order inside `ExportScene`:
 8. **Per export hint** (`for obj in exportObjs`):
    - Referenced → `Prep(…)`
    - Non-referenced → `export_prep_non_referenced(…)`
-   - Optional `deleteMesh` strip on resolved export transforms
-   - `_export_transforms_after_mesh_strip` when `deleteMesh`
+   - Optional **`deleteMesh`** strip on resolved export transforms (anim/cutscene only; see project option)
+   - `_export_transforms_after_mesh_strip` when `deleteMesh`; direct `export_tdSet` members are never stripped
    - `mc.select(exportTransforms, hi=True)`
    - FBX export (per mode path rules)
 9. Export result summary (`log_export_results_summary`)
@@ -336,11 +336,13 @@ flowchart LR
 | `removeNameSpace` | bool | False | → `removeNamespace` kwarg |
 | `zeroRoot` | bool | True | → `zeroRoot` |
 | `postEuler` | bool | True | → `euler` |
+| `fixRotation` | bool | False | → `fixRotation`; runs `anim_utils.fix_rotation_animation` on bake members **after** euler filter, **before** tangent / simplify / reducer |
 | `postTangent` | `none` / `auto` / `linear` / `step` | `auto` | → `tangent` (`none` → False in RunExportCommand) |
 | `sampleBy` | float | 1.0 | Bake sample rate |
 | `reducer` | bool | False | Bake |
 | `simplify` | bool | False | Bake |
 | `exportShotsToIndividualFiles` | bool | False | Per-shot FBX vs single file |
+| `deleteMesh` | bool | False | Strip mesh before anim/cutscene FBX; rig/static ignore — mesh removal there is **delete set only** |
 | `noShotListExportName` | `asset` / `sceneFile` | `asset` | Single-file FBX stem when `shotList` is empty (anim/cutscene only) |
 | `parentExportToWorld` | bool | True | Unparent `export_tdSet` members to world before delete |
 | `breakTextureLinks` | bool | True | Prep / static |
@@ -354,8 +356,9 @@ Add a new export option by extending `_exportOptionSettings`, then wiring the wi
 |-------------------------------|---------------------------|
 | `removeNameSpace` | `removeNamespace` |
 | `postEuler` | `euler` |
+| `fixRotation` | `fixRotation` |
 | `postTangent` | `tangent` |
-| `zeroRoot`, `sampleBy`, `simplify`, `reducer`, `exportShotsToIndividualFiles`, `breakTextureLinks`, `noShotListExportName`, `parentExportToWorld` | same name |
+| `zeroRoot`, `sampleBy`, `simplify`, `reducer`, `exportShotsToIndividualFiles`, `deleteMesh`, `breakTextureLinks`, `noShotListExportName`, `parentExportToWorld` | same name |
 
 ### Not in `exportOptions`
 
@@ -382,7 +385,7 @@ Interactive export and batch therefore share the same project-tab values **as th
 
 ### Legacy note
 
-Older Scene code synced some export toggles to option vars (`var_postEuler`, `var_removeNamespace`) and an Options menu; that menu block is commented out. **`LoadProject` still partially pushes `mDat.d_exportOptions` into those legacy vars**, but export reads **`d_tf['exportOptions']`**. After loading a project, `uiProject_fill()` is the authoritative sync into the widgets export uses.
+Older Scene code synced some export toggles to option vars (`var_postEuler`, `var_removeNamespace`) and an Options menu; that menu block is commented out and the unreachable `LoadProject` tail sync was removed. Export reads **`d_tf['exportOptions']` only**. After loading a project, `uiProject_fill()` is the authoritative sync into the widgets export uses.
 
 ---
 
@@ -399,14 +402,16 @@ Scene Project tab → `ExportScene` kwargs (representative):
 | No-shot-list export name | `noShotListExportName` | `asset` vs `sceneFile` stem when `shotList` is empty |
 | Parent export to world | `parentExportToWorld` | Unparent export set members before delete (default on) |
 | Sample by | `sampleBy` | Bake sample rate |
-| Euler / tangent / reducer / simplify | `euler`, `tangent`, `reducer`, `simplify` | Bake options |
+| Post euler filter | `euler` | Maya `filterCurve` on baked rotate channels |
+| Fix rotation | `fixRotation` | `anim_utils.fix_rotation_animation` on bake transforms (after euler, before tangent / simplify / reducer) |
+| Post tangent / reducer / simplify | `tangent`, `reducer`, `simplify` | Bake post-process |
 | Bake / export / delete set names | `bakeSetName`, `exportSetName`, `deleteSetName` | tdSet names (Scene option vars — **not** `[exportOptions]` in cfg) |
 | Batch `worldUp` | applied in `BatchExport` | From `mDat.d_world`, not exportOptions |
 | Batch summary | `logExportSummary=False` | Suppresses per-scene duplicate summary in batch |
 
 See **Export Options Data Flow** above for schema, cfg persistence, and UI wiring.
 
-Cutscene mode forces `deleteMesh=True` in code (mode 2).
+**`deleteMesh` project option** (Scene Project tab → FBX output, default **False**): when **True**, anim (mode 1) and cutscene (mode 2) strip mesh descendants before FBX via `bakeAndPrep.delete_mesh_under_transforms` (skips direct `export_tdSet` members). Rig (mode 3) and static (mode 4) **always** force `deleteMesh=False` regardless of project setting — mesh removal in those modes is only via `delete_tdSet` in Prep.
 
 ---
 
@@ -435,7 +440,7 @@ Cutscene mode forces `deleteMesh=True` in code (mode 2).
 |------|-------|
 | **Setup** | Multiple `*:export_tdSet` (e.g. `Crane:`, `CrateBase:`); one hint per namespace |
 | **Expected** | Per-rig delete sets via `resolve_td_set_for_asset` — no cross-rig delete bleed |
-| **Mesh** | `deleteMesh=True` strips geo; `_export_transforms_after_mesh_strip` falls back to export set members |
+| **Mesh** | Project **`deleteMesh=True`** strips geo (not direct export-set members); default **False** keeps mesh; `_export_transforms_after_mesh_strip` falls back to export set members when strip runs |
 
 ### Pattern: Non-ref baked file
 
@@ -500,7 +505,7 @@ Run in Maya after export pipeline changes:
 
 1. **Crate referenced** — `Crate_rigRef.mb`, `removeNamespace=True`, `zeroRoot=True` → `{asset}_rig.fbx` or anim FBX without `master` errors
 2. **Crate baked re-export** — `*_baked.mb` non-ref path
-3. **Cutscene two-namespace** — Crane + CrateBase, `deleteMesh`, per-shot files under `flow/`
+3. **Cutscene two-namespace** — Crane + CrateBase, optional `deleteMesh`, per-shot files under `flow/`
 4. **Rig multi-root** — single combined FBX
 5. **Static (mode 4)** — no prep logs; FBX still writes
 6. **Batch mayapy** — one-item smoke; FBX plugin loaded before Scene import
@@ -512,7 +517,7 @@ Run in Maya after export pipeline changes:
 ## Related Documentation
 
 - **[Branch_UnrealWorkflow.md](../Branches/Branch_UnrealWorkflow.md)** — timeline of export fixes and PR notes
-- **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** — planned P4 checkout for FBX output
+- **[Feature_PerforceIntegration.md](Feature_PerforceIntegration.md)** — optional P4 layer: **project save prepare shipped** (`prepare_output_for_write`); **FBX export prepare next** (`prepare_export_output_for_write`, `useP4OnExport`); see [`Branch_p4.md`](../Branches/Branch_p4.md)
 - **[NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature doc conventions (this file lives under `Features/` at cgmToolsDev root)
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — branch doc format
 
@@ -527,6 +532,7 @@ Run in Maya after export pipeline changes:
 
 | Date | Summary |
 |------|---------|
+| 2026-08-13 | P4 cross-ref — project save uses `prepare_output_for_write`; export P4 prepare still planned |
 | 2026-06-15 | Initial feature doc — modes, tdSets, prep invariants, namespace/path rules, pattern cards, troubleshooting (post delete-selection + unparent fixes) |
 | 2026-06-15 | Added Export Options Data Flow — schema, cfg, Project tab UI, RunExportCommand/batch payload wiring |
 | 2026-07-02 | Empty shot list fallback — single FBX when per-shot option on but no shots; `No FBX files written` guard |

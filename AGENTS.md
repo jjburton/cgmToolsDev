@@ -26,6 +26,10 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 9. **MRS module wiring design contract**: [`Features/Feature_MRSWiring.md`](Features/Feature_MRSWiring.md) — block/module/puppet message graphs, build sync, control rewire, attach points. Update when changing `puppet_utils`, `module_utils`, or `moduleTarget_wire_from_blockParent`.
 
+10. **cgm tool UI design contract**: [`Features/Feature_CgmToolUI.md`](Features/Feature_CgmToolUI.md) — parallel list data vs scroll display, selection by index, CCL/preset save rules, scroll-list pitfalls. Living doc — extend when establishing list/UI patterns in tools. See also [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) for link-list + CCL example.
+
+11. **Perforce integration design contract**: [`Features/Feature_PerforceIntegration.md`](Features/Feature_PerforceIntegration.md) — optional P4 layer (no P4 = no behavior change), `cgm.core.lib.perforce`, **`path_utils.prepare_output_for_write(mDat=)`** for project save (Slice B shipped), FBX export prepare hook next. Timeline on [`Branches/Branch_p4.md`](Branches/Branch_p4.md). Update when changing save/export P4 wiring or `perforce.py`.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.

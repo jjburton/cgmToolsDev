@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Implemented and Maya-verified (August 2026) — dual-path: local-TR when captured; legacy vector bake when not
-- **Last Updated**: August 5, 2026
+- **Last Updated**: August 12, 2026
 - **Audience**: Dev / TA — design contract for integrating skeleton→control align/snap/bake into **`mocapBakeTools`**
 - **Purpose**: Replace the legacy world-vector offset bake path with the validated **parented local-TR locator** workflow (capture once, snap per frame, key controls), while preserving the existing **CCL preset format** and link-list UI artists already use. Unifies single-frame preview snap and timeline bake in one shipped cgm tool. **When `localTranslate` / `localRotate` are not set, Manual Set / Set On Bake / vector bake behave exactly as before.**
 
@@ -11,6 +11,7 @@
 
 **Related docs**
 
+- [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) — parallel list / scroll display patterns (canonical data vs aliases)
 - [`Feature_Metahuman.md`](Feature_Metahuman.md) — MetaHuman pipelines; body align offset contract (`localTranslate` / `localRotate`, rotate pivot, skeleton roots)
 - [`Feature_SceneExportFlow.md`](Feature_SceneExportFlow.md) — export bake/prep (orthogonal; mocap align may run **before** export in some shots)
 
@@ -96,6 +97,17 @@ flowchart LR
 | **Follow mode** | `setPosition` + `setRotation` → legacy `constraintType` `po` / `o` in CCL target data |
 | **Offset locator** | Temporary or persistent debug loc; parented to **source** joint with saved local TR; world pose drives snap |
 | **Resolution** | Patterns in CCL; long paths only in memory after resolve |
+| **Source drivers** | MH skeleton joints **and** mocap driver transforms (e.g. `C_ArtSpine_*`) under Skel Roots — scoped joint+transform search when global short-name lookup fails |
+
+### Source resolution (normative)
+
+| Step | Rule |
+|------|------|
+| Pattern for resolve | Always use stored CCL `sourcePattern` / `source_pattern` — never strip an existing scene path to short name on reresolve |
+| Global match | Exact path or unique short-name hit via `mc.ls` |
+| MH hierarchy | `Body\|…` / `Face\|…` pipe chains ranked against joints under Skel Roots |
+| Mocap drivers | When global lookup fails, search **joints + transforms** under Skel Roots for unique leaf short name (ArtSpine / ArtLeg controls parented under mocap skeleton root) |
+| Ambiguity | Multiple hits globally or under roots → unresolved; Mapping Report shows hit counts |
 
 ### Offset contract (normative)
 
@@ -130,7 +142,7 @@ Existing six-element array unchanged:
 
 On save: compact source patterns under Skel Roots — **leaf when unique**, minimal pipe chain when not. **Skel Roots required to save**; load unchanged for existing files.
 
-**Save compaction (Aug 2026):** No hardcoded joint allowlist. `_minimal_unique_source_pattern` validates leaf uniqueness under configured roots; `validate_connections_for_save` ensures compacted patterns resolve to the same joints. `resolve_connections` uses `_pattern_for_resolve` so loaded CCL literals are never rewritten on load/reresolve.
+**Save compaction (Aug 2026):** No hardcoded joint allowlist. **Save validation uses the same resolve gate as Mapping Report** (`conn.resolved` after `resolve_connections`, else `connection_resolve_diagnostics`). Short source patterns that already resolve under Skel Roots are saved as-is; only full DAG paths run `_minimal_unique_source_pattern`. `resolve_connections` uses `_pattern_for_resolve` so loaded CCL literals are never rewritten on load/reresolve.
 
 ---
 
@@ -155,11 +167,14 @@ Do **not** put resolution or offset math in `cgm_General` or vendored trees.
 | `connections_to_ccl(connections, rig_ns, skel_roots)` | Short-pattern export (compaction requires `skel_roots`) |
 | `validate_connections_for_save(connections, skel_roots, …)` | Pre-save: roots set, patterns resolve equivalently |
 | `resolve_connections(connections, rig_ns, skel_roots, skel_ns)` | Re-resolve patterns in place; sets `resolved`; clears stale `alignLocator` when source changes |
-| `resolve_skeleton_joint(pattern, skel_roots, skel_ns)` | Scoped joint lookup (ranked `Body\|…` / `Face\|…` suffix match) |
+| `resolve_skeleton_joint(pattern, skel_roots, skel_ns)` | Scoped source driver lookup (joints + transforms under roots; MH pipe chains) |
 | `resolve_rig_control(pattern, rig_ns)` | Namespaced control lookup |
+| `connection_pattern_key(conn)` | Normalized (source, target) key for UI ↔ connection_data merge |
+| `format_mapping_line` / `format_mapping_report` | Mapping report text (Tools menu) |
+| `connection_resolve_diagnostics(conn, …)` | Per-pair resolve failure reasons |
 | `source_pattern_needs_skel_roots(pattern, skel_ns)` | UI gating when multiple MH skeletons share leaf names |
 | `capture_alignment_offsets(connections)` | Bind-pose capture in place |
-| `snap_connections(connections, indices=None)` | Single frame; returns result dict |
+| `snap_connections(connections, indices=None, …)` | Single frame; result includes `unchanged` / `unchanged_details` |
 | `bake_connections(connections, start, end)` | Timeline loop: snap + keyframe |
 | `_align_ccl_source_pattern` / `_align_ccl_target_pattern` | Short-name helpers (module-private) |
 
@@ -178,13 +193,16 @@ Keep existing **source / target lists**, **link**, **bake range**, and **CCL loa
 | **Offsets** | **Capture offsets** | Replaces or supplements “Set connection pose”; writes `localTranslate` / `localRotate` |
 | **Preview** | **Snap all** / **Snap selected** | No keys; report to Script Editor |
 | **Debug** | **Create locs** / **Delete locs** (optional) | Persistent offset locators per link |
+| **Tools** | **Mapping Report…** | Modal scroll report: resolved/MISSING per pair, local TR status, resolve failure reasons |
 | **Bake** | Existing bake button | Calls `bake_connections()` using locator snap |
 | **Display** | **Setup → Show short names** | List aliases use `cgmObject.p_nameShort` when enabled (`mocap_show_short_names`) |
 | **Lists** | Target list index labels | Each target row prefixed with 0-based index (e.g. `[0] body_C0`); survives short-name `ns:base` scroll-list display |
 | **Lists** | Source link index labels | Linked sources show driven target indices (e.g. `spine_cog_anim -> [0],[1]`) |
 | **Lists** | Target list RMB reorder | Move Up/Dn, Move to Top/Bottom, Set Index… (0-based); remaps link indices; order saved in CCL `target_items` |
+| **Lists** | List data vs display | `cgmListItem.item` holds CCL patterns/DAG strings only; `alias` is rebuilt in `refresh_aliases()` and is the sole scroll-list string (Builder-style parallel lists). Index labels live in aliases and `links` indices — never in saved pattern strings |
+| **CCL session** | Status bar + **Setup → Recent** | Last saved/loaded `.ccl` path in `mocap_last_ccl` optionVar; autoload on tool open when file exists; clear button drops autoload without wiping lists |
 
-OptionVar candidates: `mocap_rig_namespace`, `mocap_skel_roots`, `mocap_show_short_names`, `mocap_use_local_offsets` (default 1).
+OptionVar candidates: `mocap_rig_namespace`, `mocap_skel_roots`, `mocap_show_short_names`, `mocap_use_local_offsets` (default 1), `mocap_last_ccl`.
 
 **Dev reload**: `tool_calls.mocapBakeTool()` and **Setup → Reload** call `reload_dependencies()` — reload `mocap_align_utils` before `mocapBakeTools` during iteration.
 
@@ -236,7 +254,7 @@ Performance: ~N links × M frames locators — acceptable for typical body (~50�
 | Mixed skeletons in scene | User must set skeleton roots (same as MetaHuman align doc) |
 | `doLoc` pivot fix in cgm core | Required dependency — rotate pivot default (July 2026) |
 
-Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short names; mocapBakeTools default file dialog can point at project dat path via optionVar later.
+Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short names; mocapBakeTools remembers the last saved/loaded path in **`mocap_last_ccl`** and autoloads on tool open when the file still exists. **Setup → Recent** lists recent paths (`mocapBakeTool_CCLRecent` pathList). A preset browser under `cgmDat/mocap/` remains future work.
 
 ---
 
@@ -280,7 +298,7 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 3. Thin or remove duplicate project align UI; Scene menu opens mocapBakeTools or preloads preset path.
 4. Google Doc capture for artists (optional).
 
-**Status: partial** — short-name CCL save + MetaHuman doc note done; **Setup → Show short names** for link lists (Aug 2026); **Maya snap parity confirmed** vs sparrowTools / loaded CCL; project-script UI deprecation deferred until team standardizes on mocapBakeTools.
+**Status: partial** — short-name CCL save + MetaHuman doc note done; **Setup → Show short names** for link lists (Aug 2026); **Maya snap parity confirmed** vs sparrowTools / loaded CCL; **last CCL autoload + status bar + Recent menu** (Aug 12, 2026); project-script UI deprecation deferred until team standardizes on mocapBakeTools.
 
 ---
 
@@ -296,6 +314,12 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 6. Load **legacy** CCL (vector offsets); warnings; re-capture; bake succeeds.
 7. Two skeletons in scene; without roots — capture/snap blocked or warns; with roots — correct hierarchy.
 8. CCL save/reload round-trip; file stays short; offsets preserved.
+9. CCL with mocap driver sources (`C_ArtSpine_*`, `R_ArtLeg_*`) under Skel Roots — Mapping Report shows OK; Snap All resolves (no SKIP unresolved).
+10. Save CCL → close/reopen tool → autoloads links; status bar shows truncated path; **Setup → Recent** has entry.
+11. Load different CCL from dialog → `mocap_last_ccl` and status update.
+12. Pick from **Setup → Recent** → loads without file dialog.
+13. Status bar **Clear** → reopen tool → no autoload (lists unchanged).
+14. Delete CCL file on disk → reopen tool → silent skip (no error spam).
 
 ### Regression
 
@@ -336,6 +360,10 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 | Date | Summary |
 |------|---------|
+| 2026-08-12 | Last CCL autoload: `mocap_last_ccl` optionVar + `post_init`; status bar (path/clear/folder); **Setup → Recent** via pathList; persist on save/load |
+| 2026-08-12 | CCL save compaction: `_minimal_unique_source_pattern` uses `_nodes_under_roots` (parity with resolve) — ArtSpine/mocap transform drivers save as unique leaf patterns |
+| 2026-08-11 | List data architecture: `cgmListItem.item` = CCL patterns only; aliases display-only (Builder parallel-list pattern); removed defensive UI-index strip from align utils; target scroll `itemAsStr` patch for `[n]` display only |
+| 2026-08-11 | Source resolve: skel-root transform fallback for mocap drivers (ArtSpine); `_pattern_for_resolve` preserves CCL patterns; normalized merge; Tools → Mapping Report; snap unchanged detection + resolve reasons in report |
 | 2026-08-05 | List index display — targets `[n]` prefix; linked sources `name -> [n],…`; target RMB reorder (Move Up/Dn, Top/Bottom, Set Index); short-name display fix for index prefix |
 | 2026-08-05 | CCL save: skel-root uniqueness compaction (no MH allowlist); save blocked without roots; `_pattern_for_resolve` preserves loaded patterns on load/reresolve |
 | 2026-08-05 | Snap parity fix: doLoc rebuild for snap/bake/debug locs (rotateAxis invariant); sparrow resolution + `resolve_connections`; re-resolve before align ops; `reload_dependencies`; Setup → Show short names — user Maya verified |

@@ -1,3 +1,5 @@
+> **Superseded by** [`Features/Feature_PerforceIntegration.md`](../Features/Feature_PerforceIntegration.md) — kept for history. Active work on [`Branch_p4.md`](../Branches/Branch_p4.md).
+
 # Plan: Export Perforce (P4) Integration
 
 ## Purpose

@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: August 6, 2026 (MRS/Fortnite skeleton maps + `connect_fn_skeleton_to_mrs` — `mrs_fortnite_utils`)  
+**Last Updated**: August 12, 2026 (MRS batch error reporting + proxyMesh fail-fast)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -15,6 +15,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** - Module/puppet message graphs, `mirror_get` tag-matching contract, control rewire consumers
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** - MetaHuman facial solve + body align workflow (mocapBakeTools is canonical align/bake home)
 - **[Feature_MocapAlignSnap.md](../Features/Feature_MocapAlignSnap.md)** - Native mocapBakeTools local-TR align/snap/bake dual-path contract
+- **[Feature_CgmToolUI.md](../Features/Feature_CgmToolUI.md)** - cgm tool UI patterns: parallel lists, scroll display vs canonical data, CCL save rules (living doc)
 - **MetahumanFacial.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/MetahumanFacial.py` (Perforce) — facial SDK transfer / constrain (iteration home until core factors to py3)
 - **[mocapBakeTools.py](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py)** - Mocap / MetaHuman body align UI; dual-path bake (local TR when captured, legacy vector otherwise)
 - **[mocap_align_utils.py](../../cgmToolsPy3/cgm/core/lib/mocap_align_utils.py)** - CCL IO, skeleton-root resolve, local-TR capture/snap/bake orchestration
@@ -22,18 +23,21 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **biped.py** - `SourceArt-DDE/TechAnimation/Maya/ProjectScripts/biped.py` (Perforce) — character MRSPOST defaults; re-exports `mrs_fortnite_utils` for legacy `import biped` callers
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** - `fortniteMetaHuman` pose-buffer schema
 - **[sdk_utils.py](../../cgmToolsPy3/cgm/core/lib/sdk_utils.py)** - Existing SDK patterns; candidate merge target when factoring facial helpers from ProjectScripts
-- **[Scene.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Scene.py)** - Main Scene UI, `RunExportCommand`, `ExportScene`, `BatchExport`, `SendToBuild`
+- **[Scene.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Scene.py)** - Main Scene UI, `RunExportCommand`, `ExportScene`, `BatchExport`, `SendToBuild`, `reloadSceneStuff`
+- **[scene_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/scene_utils.py)** - Scene Utils menu (`buildMenu_utils`, World Match / Query, **Switch Up**)
 - **[Builder.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Builder.py)** - `ui_toStandAlone` (MRS Build), `uiFunc_process` batch / logging
 - **[Project.py](../../../repos/cgmToolsPy3/cgm/core/tools/Project.py)** - `Project.data`, `fillDefaults` (project picker / version menus)
 - **[RigBlocks.py](../../../repos/cgmToolsPy3/cgm/core/mrs/RigBlocks.py)** - `cgmRigMaster.rebuildMasterShapes` (batch rig / master controls)
 - **[bakeAndPrep.py](../../../repos/cgmToolsPy3/cgm/core/tools/bakeAndPrep.py)** - Bake, Prep, `ProcessDeleteSet`, `resolve_td_set_for_asset`, texture breaking
 - **[path_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/path_utils.py)** - Export output writability check, `.bak` sidecar cleanup, `ExportOutputNotWritableError`, non-writable path session list
-- **[batch_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py)** - Mayapy batch preflight (`ensure_fbx_plugin` before Scene import)
+- **[batch_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py)** - `process_blocks_rig` batch post-process; `_run_batch_post_stage` stage banners; mayapy preflight (`ensure_fbx_plugin` before Scene import)
+- **[puppet_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/puppet_utils.py)** - `proxyMesh_verify` (fail-fast), `puppetMesh_create`, `_validate_puppet_settings_control`
+- **[attribute_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/attribute_utils.py)** - `connect()` structured `connectAttr` failure messages
 - **[project_utils.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/project_utils.py)** - Lazy `get_fbx_versions()` (no import-time FBX MEL probe)
 - **[animFilterTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/animFilterTool.py)** - Anim post filters UI (`VERIFY_CLOSE` / `confirmClose`)
 - **[anim_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/anim_utils.py)** — `closest_euler_solution`, `fix_selected_rotation_key`, `fix_selected_rotation_animation` (quaternion alternate + ±360 search; frame-to-frame continuity for full rotation curves)
 - **[baseMelUI.py](../../../repos/cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)** - `BaseMelWindow` close hooks (`VERIFY_CLOSE`, `restoreAfterCloseCancelled`)
-- **[cgm_General.py](../../../repos/cgmToolsPy3/cgm/core/cgm_General.py)** - Shared helpers (`playback_stop`, logging); `ensure_fbx_plugin`, FBX export preamble/selection helpers
+- **[cgm_General.py](../../../repos/cgmToolsPy3/cgm/core/cgm_General.py)** - Shared helpers (`playback_stop`, logging); `ensure_fbx_plugin`, FBX export preamble/selection helpers; **`exception_already_logged` / `cgmException` hints + `@Timer` dedup**
 - **[PostBake.py](../../../repos/cgmToolsPy3/cgm/core/classes/PostBake.py)** - Post filters bake loop (AnimFilter dragger/spring/etc.)
 - **[locinator.py](../../../repos/cgmToolsPy3/cgm/core/tools/locinator.py)** - `bake_match` timeline bake
 - **[curve_Utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/curve_Utils.py)** - `align_eps_by_lane_projection`, `distribute`
@@ -57,15 +61,163 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[animate_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/animate_utils.py)** — Animate context cache (`module_get`, `context_get`, mirror module expansion)
 - **[cgmNCloth_presets.py](../../../repos/cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** - Layered profiles: **fabric** (`silk`, `cotton`, `denim`, …), **solver** (`solver_balanced`, `solver_quality`, `solver_high`, …), **wind** (`wind_calm`, `wind_flag`); `d_profileKind` registry
 - **[transform_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/transform_utils.py)** - `ground_position_get` re-export
-- **[mayaSettings_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaSettings_utils.py)** - `sceneUp_get()` (Maya `upAxis`)
+- **[mayaSettings_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaSettings_utils.py)** - `sceneUp_get` / `sceneUp_set` (Maya `upAxis`); **`sceneUp_switch()`** (Y↔Z toggle + ViewCube-safe viewport home)
 - **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, golden/finger presets
 - **[general_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/general_utils.py)** - `ratio()` shim to `alongRatio`
 - **[block_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** - `prerig_handlesLayoutRatio`, `prerig_arrangeRatio_menuDict`
 - **[ml_breakdown.py](../../../repos/cgmToolsPy3/cgm/core/lib/ml_tools/ml_breakdown.py)** - Optional diagnostics touchpoint
 - **[NewBranch_Guide.md](./NewBranch_Guide.md)** - Branch documentation format reference
-- **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)** - P4 checkout/add for FBX export (planning)
+- **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** - Optional P4 checkout/add for FBX export (active — [`Branch_p4.md`](Branch_p4.md))
 
 ## 🗓️ Timeline
+
+### August 12, 2026 (c) - MRS batch error reporting (`process_blocks_rig`, `proxyMesh_verify`)
+**What**: Jonesy / Send to Build batch runs with incomplete puppet settings (`settingsControl2` missing `proxyLock` / `skeleton`) produced a Script Editor wall: same exception repeated for every finger block (~210s), triple `@Timer` / `cgmExceptCB` headers, then a misleading second failure in `puppetMesh_create` (Red9 `AttributeError: skeleton`). Tightened reporting and fail-fast behavior so one root cause prints once and batch stops at the first bad proxyMesh block.
+
+**Files**:
+- EXTENDED: `cgm/core/cgm_General.py` — `exception_already_logged`, `_mark_exception_logged`; `@Timer` / `@Func` skip duplicate dumps; `cgmException(..., stage=)` + `_format_maya_error_hint` for missing puppet settings attrs (`proxyLock`, `skeleton`, procedural `settingsControl2`)
+- EXTENDED: `cgm/core/lib/attribute_utils.py` — `connect()`: structured `connectAttr failed: source '…' -> dest '…'` on missing attrs/nodes
+- EXTENDED: `cgm/core/mrs/lib/puppet_utils.py` — `proxyMesh_verify`: correct log label, **re-raise on first block** (was swallow-and-continue); `_validate_puppet_settings_control` preflight before `puppetMesh_create` touches `.skeleton`
+- EXTENDED: `cgm/core/mrs/lib/batch_utils.py` — `_run_batch_post_stage` with `FAILED during: {stage}` banners for `proxyMesh` / `puppetMesh`; top handler skips duplicate `cgmException` when already reported
+- EXTENDED: `cgm/lib/guiFactory.py` — guard `$gMainProgressBar` MEL eval (batch/no-UI contexts)
+
+**Features**:
+- One full exception + one traceback per failure instance across inner `cgmExceptCB` and outer `@Timer` wrappers
+- Actionable hint when puppet `controlSettings` is incomplete (ties to Apr 23 procedural `rebuildMasterShapes` fallback — separate fix still pending)
+- Batch stops at first `proxyMesh` failure; `puppetMesh` no longer runs after a broken proxy pass
+
+**Decisions**:
+- Fail fast on first proxy block (not dedupe-and-continue) — user choice for batch post-process
+- Do not remove inner `cgmExceptCB` from block modules; global dedup handles the double-print
+- Root fix for hollow procedural settings control remains out of scope (see Apr 23 `rebuildMasterShapes` entry)
+
+**Status**: ✅ Code complete — Maya verify: re-run `process_blocks_rig` on Jonesy with broken settings; expect single report + stop at `proxyMesh`
+
+---
+
+### August 12, 2026 (b) - mocapBakeTools last CCL autoload + session UI (`mocapBakeTools`)
+**What**: Artists reopening mocapBakeTools now resume the last saved/loaded `.ccl` automatically (mirrors `animFilterTool` `LastLoaded` pattern). Added status bar (truncated path, clear autoload link, open folder), **Setup → Recent** submenu via `pathList`, and `mocap_last_ccl` optionVar persisted on successful save/load. Status **Clear** drops autoload without wiping source/target lists. Silent skip when stored path is missing on disk.
+
+**Files**:
+- EXTENDED: `cgm/core/tools/mocapBakeTools.py` — `post_init` autoload; `uiFunc_load_data(filepath=…)`; status row; recent menu
+- EXTENDED: `Features/Feature_MocapAlignSnap.md`, `Feature_CgmToolUI.md`, `Feature_Metahuman.md`, this branch doc
+
+**Features**:
+- Last CCL autoload on tool open when file exists
+- Recent CCL picker without file dialog
+- Visible loaded-file path in UI (discoverability)
+
+**Decisions**:
+- Single global last path (not per-scene) — same tradeoff as animFilter; preset browser under `cgmDat/mocap/` remains future work
+- Clear List on source/target scrolls does **not** clear autoload — only status-bar Clear
+- Reload / Reset re-applies autoload intentionally
+
+**Status**: ✅ Code complete — Maya verify: save/load round-trip, reopen autoload, Recent menu, clear-last, missing file skip
+
+---
+
+### August 12, 2026 - mocap align CCL save compaction for transform drivers (`mocap_align_utils`)
+**What**: CCL save blocked with `Cannot build unique source pattern for … under skeleton roots` for ArtSpine controls and joint-named mocap drivers unique under Skel Roots. Resolve (Aug 11) used `_nodes_under_roots`; save compaction still used `_joints_under_roots` only. `_minimal_unique_source_pattern` now compacts via `_nodes_under_roots` / `_nodes_matching_chain_suffix`; errors when source is outside root scope.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/mocap_align_utils.py`
+- EXTENDED: `Features/Feature_MocapAlignSnap.md`
+
+**Status**: ✅ Code complete — Maya verify: save CCL with ArtSpine + joint sources, reload, snap
+
+---
+
+### August 11, 2026 (c) - Export **Fix rotation** project option (`fixRotation`, `anim_utils`, `bakeAndPrep`)
+**What**: Added project-scoped **`fixRotation`** export option (Scene Project tab → `[exportOptions]` in `.cfg`, default **False**). When enabled, export bake runs `anim_utils.fix_rotation_animation` on bake-set members **after** post euler `filterCurve` and **before** tangent / simplify / reducer. Extracted node-list API from `fix_selected_rotation_animation` for export callers (`undo=False`, no refresh). Removed stale unreachable `LoadProject` sync to commented-out export option vars — export reads `d_tf['exportOptions']` only (via `uiProject_fill` on load).
+
+**Files**:
+- EXTENDED: `cgm/core/tools/lib/project_utils.py` — `_exportOptionSettings` `fixRotation`
+- EXTENDED: `cgm/assets/example_project.cfg` — `fixRotation = False`
+- EXTENDED: `cgm/core/lib/anim_utils.py` — `fix_rotation_animation(nodes, undo, refresh, verbose)`; wrapper unchanged for Anim Utils
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `fixRotation` kwarg; ordered post-bake step
+- EXTENDED: `cgm/core/mrs/Scene.py` — `ExportScene`, `RunExportCommand`, `batch_buildFile`, `BatchExport`; removed dead optionVar sync
+- EXTENDED: `Features/Feature_SceneExportFlow.md` — schema, matrix, legacy note
+
+**Features**:
+- Per-project opt-in rotation curve normalization on export bake (same math as Anim Utils **Fix Rotation Animation**)
+- Interactive + batch/mayapy payloads include `fixRotation`
+
+**Decisions**:
+- Default **False** — no behavior change for existing projects until enabled
+- No new Scene option vars; project tab widgets only
+- Bake order: euler → fixRotation → tangent → simplify → reducer
+
+**Status**: ⚠️ Code complete — Maya verify: cfg round-trip, export with toggle on/off, batch payload
+
+---
+
+### August 11, 2026 (d) - Export **Delete mesh** project option (`deleteMesh`)
+**What**: Replaced hardcoded cutscene `deleteMesh=True` with a project-scoped **`deleteMesh`** export option (Scene Project tab → FBX output, default **False**). Anim (mode 1) and cutscene (mode 2) honor the project setting; rig (mode 3) and static (mode 4) always force `deleteMesh=False` — mesh removal there remains **delete_tdSet** only. Strip uses `bakeAndPrep.delete_mesh_under_transforms` and skips direct `export_tdSet` members (e.g. SkinHelper).
+
+**Files**:
+- EXTENDED: `cgm/core/tools/lib/project_utils.py` — `_exportOptionSettings` `deleteMesh`
+- EXTENDED: `cgm/assets/example_project.cfg` — `deleteMesh = False`
+- EXTENDED: `cgm/core/tools/bakeAndPrep.py` — `export_set_member_paths_set`, `delete_mesh_under_transforms`
+- EXTENDED: `cgm/core/mrs/Scene.py` — `RunExportCommand`, `batch_buildFile`, mayapy payload, `BatchExport`, mode guard; removed mode-2 hardcode
+- EXTENDED: `Features/Feature_SceneExportFlow.md` — schema, mode table, cutscene mesh contract
+
+**Features**:
+- Default **False** keeps mesh in anim/cutscene FBX (fixes accidental SkinHelper strip)
+- Opt-in mesh strip for legacy anim-only cutscene pipelines
+
+**Decisions**:
+- Same kwarg name as existing `ExportScene(deleteMesh=…)` — no inverted alias
+- Rig/static never run mesh-strip loop regardless of project checkbox
+
+**Status**: ⚠️ Code complete — Maya verify: cutscene with default off (mesh kept); toggle on strips geo; rig/static unchanged
+
+---
+
+### August 11, 2026 - mocap align source resolve + list data architecture (`mocap_align_utils`, `mocapBakeTools`)
+**What**: Fixed snap when CCL **sources** are mocap **driver transforms** under Skel Roots (e.g. `C_ArtSpine_A_Body_Ctrl`) — not only joints. `resolve_skeleton_joint` now searches joints + transforms scoped to roots (sparrow / Rig Align parity). Added **Tools → Mapping Report** (resolved/MISSING per pair, local TR status, resolve failure reasons) and richer snap reports (unchanged-pair detection). Refactored link-list UI to **Builder-style parallel lists**: `cgmListItem.item` = CCL pattern or DAG string only; `.alias` rebuilt in `refresh_aliases()` for scroll labels; list indices live in `parent_links` and display aliases — **never** in saved pattern strings. Removed defensive `_strip_ui_list_index_prefix` from align lib and shadow `cclPattern` on list rows. Target scroll keeps display-only `_patch_target_scroll_item_as_str` so `[n]` prefixes survive `MelObjectScrollList` namespace strip. New living doc **`Feature_CgmToolUI.md`** captures data-vs-display contract for future tools.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/mocap_align_utils.py` — `_nodes_under_roots`, transform fallback in `resolve_skeleton_joint`, `format_mapping_report`, `connection_resolve_diagnostics`, snap unchanged detection; removed `_strip_ui_list_index_prefix`
+- EXTENDED: `cgm/core/tools/mocapBakeTools.py` — Mapping Report menu; load/save via `.item` only; `_sync_connection_data_from_ui` pattern-key merge; `_patch_target_scroll_item_as_str` (display layer)
+- NEW: `cgmToolsDev/Features/Feature_CgmToolUI.md` — parallel list patterns, anti-patterns, reference implementations (Builder, mocapBakeTools)
+- EXTENDED: `Features/Feature_MocapAlignSnap.md`, `AGENTS.md` — cross-links
+
+**Features**:
+- Snap resolves mocap driver controls under Skel Roots with same CCL as sparrowTools Rig Align (user verified)
+- Mapping Report for TA debugging without Script Editor spelunking
+- Target list `[n]` index labels display correctly in short-name mode; CCL patterns stay clean on save/load
+
+**Decisions**:
+- Never store scroll-list decoration in CCL or `cgmListItem.item`; rebuild aliases on display toggle
+- Do not regex-strip UI prefixes from saved patterns — prevent pollution at source (see `Feature_CgmToolUI.md`)
+- Load populates pattern strings in `.item`; runtime resolve in `resolve_connections` at Capture/Snap/Bake only
+
+**Status**: ✅ Complete (user verified — snap fix, target index display, clean CCL round-trip)
+
+---
+
+### August 11, 2026 (b) - Scene Utils **Switch Up** (Y↔Z scene up + viewport home)
+**What**: Added **Utils → Switch Up** on the Scene tool to toggle Maya **scene** up axis between Y and Z (`upAxis` + `rotateView`), then reset the active viewport like ViewCube **Home** / **GoToDefaultView**. Does **not** read or write project `mDat.d_world['worldUp']` — that remains the job of **World Match** and batch export `worldUp`. Iteration fixed menu-focus pitfalls: viewport reset must target a **modelPanel** camera via `hotkeyCurrentCamera`, not `getPanel -withFocus` when the Scene UI has focus; restores factory `homeCommand` on default cameras and `viewManip -resetHome/-resetFront` so native ViewCube home is not left in a bad state.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/mayaSettings_utils.py` — `sceneUp_switch()`, `_viewport_go_default_view()` (Maya `viewSet -home` + `animateRoll`), `_restore_default_camera_home_commands()`, `_reset_viewcube_home_state()`, `_model_panel_for_viewport()`
+- EXTENDED: `cgm/core/mrs/lib/scene_utils.py` — **Switch Up** under Utils **Maya Settings..** (before Global Settings)
+- EXTENDED: `cgm/core/mrs/Scene.py` — `reloadSceneStuff()` includes **`MAYASET`** (`mayaSettings_utils`) for dev iteration
+
+**Features**:
+- One-click Y-up ↔ Z-up for Unreal (Y-up) vs Maya-default (Z-up) scene work without changing project defaults
+- Post-toggle viewport uses same path as Maya **Default View** hotkey (`hotkeyCurrentCamera` + `viewSet -home`), deferred after `upAxis`
+- **Reload SceneStuff** picks up `sceneUp_switch` changes without full Maya restart
+
+**Decisions**:
+- Scene-only toggle via `sceneUp_set` / `mc.upAxis(ax=…, rv=1)` — **never** call `fncMayaSett_do` or mutate project `worldUp`
+- Do not call bare `viewSet(home=True)` from menu focus (wrong panel); resolve model panel explicitly
+- Do not use `viewManip -goHome` alone — ViewCube house icon maps to **`viewSet -home`** on the panel camera (see Maya `defaultRunTimeCommands.mel` **GoToDefaultView**)
+- After up-axis change, re-apply factory `homeCommand` strings on `persp` / `top` / `front` / `side` before deferred home view
+
+**Status**: ⚠️ Code complete — Maya verify: Switch Up + native ViewCube home still behave correctly in persp after repeated toggles (user reported home-button regression during iteration; latest path targets modelPanel + homeCommand restore)
+
+---
 
 ### August 6, 2026 (d) - MRS/Fortnite skeleton maps + connect (`mrs_fortnite_utils`)
 **What**: Factored Unreal mannequin ↔ MRS skin joint naming out of **`biped.py`** into **`mrs_fortnite_utils.py`**: reference lists (`l_unreal_biped`, `l_mrs_biped`), forward/inverse body maps, MetaHuman face → FN map, rename/verify helpers. Added **`connect_fn_skeleton_to_mrs`** — validate FN + MRS roots, require every mapped FN joint under the FN hierarchy to resolve its MRS driver, then **point + orient** constraints (MRS → FN, `maintainOffset=True`). Scale uses **direct attribute connections** with axis remap (driver `z→x`, `y→y`, `x→z`) instead of `scaleConstraint` — joint orient differs between rigs. Corrected **upperarm twist** drivers: `upperarm_twist_01_*` + `upperarm_*` → `*_shoulder_sknJnt`; `upperarm_twist_02_*` → `*_shoulder_roll_sknJnt` (not `*_shoulder_roll_1_sknJnt`).
@@ -1004,6 +1156,11 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] Setup → Show short names for source/target lists (`mocap_show_short_names`)
 - [x] Target list RMB reorder — Move Up/Dn, Top/Bottom, Set Index (order saved in CCL)
 - [x] List index labels — targets `[n]`; linked sources `name -> [n],…` (0-based, matches Set Index)
+- [x] Source resolve: transforms under Skel Roots (mocap driver controls, not joints-only)
+- [x] Tools → Mapping Report; snap resolve diagnostics + unchanged-pair detection
+- [x] List data vs display — `cgmListItem.item` canonical patterns; aliases display-only (`Feature_CgmToolUI.md`)
+- [x] CCL save compaction uses `_nodes_under_roots` (transform drivers + joints; parity with resolve)
+- [x] Last CCL autoload on tool open (`mocap_last_ccl` optionVar); status bar + **Setup → Recent** menu
 - [ ] Deprecate duplicate project-script align UI once team standardizes on mocapBakeTools
 - [ ] Optional Google Doc artist section / preset browser under `cgmDat/mocap/`
 
@@ -1079,6 +1236,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] Nested-ref bake/export/delete tdSet resolution (`resolve_td_set_for_asset`)
 - [x] Mayapy FBX import order + lazy FBX version probe (no `FBXExportFileVersion` spam at batch start)
 - [x] Ground snap / `groundPos` respect Maya scene up (Y-up and Z-up; unified helpers in `position_utils` / `snap_utils`)
+- [x] Scene Utils **Switch Up** — Y↔Z scene up toggle without project `worldUp` change; deferred ViewCube-safe default view (`sceneUp_switch`, `reloadSceneStuff` + `MAYASET`)
 - [x] nCloth preset profiles + apply helper with scene-up nucleus gravity (`nCloth_utils`, `cgmNCloth_presets`)
 - [x] cgmSimChain cloth map + attach (`attach_to_cloth_dynFK` / `attach_toShape` surface tracks, `dynFKTool` Cloth `>>` / Attach to Cloth, follicle / rivet / uvPin)
 - [x] cgmSimChain Init Sim + layered nCloth Fabric/Solver presets + `solver_high` (`setup_sim_dynFK`, split menus, `profile_load` layering)
@@ -1090,6 +1248,8 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] cgmSimChain editable base name on loaded setup (`set_base_name`)
 - [x] `mirror_get` disambiguates modules with same name/type/direction but different `cgmDirectionModifier` (FRNT vs none); animate `context_get` guard when `module_get` fails
 - [x] mocapBakeTools local-TR align/snap/bake (`mocap_align_utils`); dual-path legacy vector bake when offsets unset
+- [x] mocap align transform source resolve + Mapping Report + parallel list data architecture (Aug 11, 2026)
+- [x] mocapBakeTools last CCL autoload + status bar + **Setup → Recent** (Aug 12, 2026)
 - [x] MetaHuman facial skeleton prune to keep-list + root chain (`joint_utils.pruneSkeletonToJoints`)
 - [x] Maya Be Odd **Cascade UI Windows** dev menu action (`mayaBeOdd_utils` / `tool_chunks`)
 - [x] CGM **Select\*** context queries return hierarchy-ordered lists (`search_utils.sort_by_hierarchy`, `contextual_utils.get_list`)
@@ -1115,6 +1275,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **Per-shot individual FBX (exportShotsToIndividualFiles)**: ✅ User verified (Crate closed/opening/open/closing); export summary at batch end.
 - **Shot list bake frame range (AnimList → ExportScene bake)**: ✅ User verified — high frame-number shot `[1673, 1805, 132]` bakes 1673–1805 (not 132–1805).
 - **Read-only synced FBX in depot**: ✅ Fail before FBX with path listed; `.bak` cleanup when deletable (manual `p4 edit` still required).
+- **Scene Utils Switch Up + ViewCube home**: ⚠️ Code complete — verify Y↔Z toggle leaves project `worldUp` unchanged (Query / World Match); native ViewCube home still works after repeated Switch Up (Aug 11 iteration).
 - **Static export + texture-link option behavior**: ⚠️ Not changed in this pass; requires runtime verification.
 - **Cross-mode path consistency**: ⚠️ Requires runtime verification with project data variants.
 
@@ -1129,7 +1290,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 # Scene Export: Unreal workflow (rig stability, logging, bake/delete, MRS Build)
 
 ## Overview
-Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), **shot list bake frame range fix** (`shot[1][0]`/`[1]` not `min/max(shot[1])`), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), **mocapBakeTools local-TR body align/snap/bake (`mocap_align_utils`, dual-path legacy vector bake)**, Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
+Improves Scene export reliability for Unreal-oriented workflows: rig single-file behavior, clearer errors, non-referenced namespace and bake/delete parity with referenced `Prep`, nested-ref tdSet resolution (`resolve_td_set_for_asset`), writable-path pre-check and batch non-writable reporting (P4 checkout deferred), FBX plugin bootstrap for mayapy batch, export success summary (shots, frames, paths, UP axis), **shot list bake frame range fix** (`shot[1][0]`/`[1]` not `min/max(shot[1])`), multi-reference cutscene delete-set isolation and post-`deleteMesh` selection recovery, Scene column save/export icon rows with save-here filename stubs and version-directory parity, **export queue multi-select bulk enqueue (toolbar) with Builder-style file-list popup rebuild**, **Scene Utils Switch Up** (Y↔Z scene up toggle without changing project `worldUp`; ViewCube-safe deferred default view), global `playback_stop` before frame-scrub bakes, AnimFilter verify-close on window **X**, structured logging for batch and delete-set cleanup, Send to Build / MRS Build observability, quieter project `fillDefaults`, batch rig master control when prerig helper messages are missing, **MRS batch post-process error dedup + proxyMesh fail-fast (Aug 12)**, prerig ratio arrange + curve EP lane tools, scene-up-aware ground snap (Z-up fix for Point Special **Ground**, `groundPos`, master-block placement), MetaHuman facial skeleton prune (`pruneSkeletonToJoints`), **mocapBakeTools local-TR body align/snap/bake (`mocap_align_utils`, dual-path legacy vector bake; Aug 11 transform source resolve, Mapping Report, parallel list UI / `Feature_CgmToolUI`)**, Maya Be Odd cascade UI windows dev action, and removal of unused `Scene2.py`.
 
 ## Major Changes
 
@@ -1159,6 +1320,12 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 
 ### 7. Batch rig master (`RigBlocks.py`)
 - Missing prerig `controlVis` / `controlSettings` messages: procedural helper instead of `False.doDuplicate()`
+
+### 7b. MRS batch post-process error reporting (`cgm_General`, `batch_utils`, `puppet_utils`, Aug 12)
+- `cgmException` / `@Timer`: one report per exception instance; hints for incomplete puppet `controlSettings` (`proxyLock`, `skeleton`)
+- `proxyMesh_verify`: fail fast on first block (no per-finger repeat spam)
+- `process_blocks_rig`: `FAILED during: {stage}` banners; skip duplicate top-level dump when already logged
+- `attribute_utils.connect`: readable `connectAttr failed: source → dest` messages
 
 ### 8. Cleanup
 - Removed `cgm/core/mrs/Scene2.py` (unused backup; no in-repo imports)
@@ -1215,10 +1382,12 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 
 ### 21. mocapBakeTools local-TR align / snap / bake (`mocap_align_utils`, `mocapBakeTools`)
 - NEW `mocap_align_utils`: CCL IO, skeleton-root / rig-NS resolve, capture (`doLoc` + local TR), snap (`movePointSnap` / `moveOrientSnap`), `bake_connections`, `resolve_connections`
-- Align UI: Rig NS, Skel Roots, Capture, Snap All/Sel; target list RMB reorder + index labels (`[n]` / `-> [n]`); Tools → debug locs; Setup → Show short names
+- Align UI: Rig NS, Skel Roots, Capture, Snap All/Sel; target list RMB reorder + index labels (`[n]` / `-> [n]`); Tools → debug locs + **Mapping Report**; Setup → Show short names
 - Dual-path `bake()`: local TR when present; else legacy `POS.set` + `aim_atPoint` unchanged
 - Snap without local offsets: skip + full Script Editor missing-data report
 - **Aug 2026 parity**: snap/bake rebuild locators via `doLoc` on target (rotateAxis invariant); sparrow-ranked joint resolve; `reload_dependencies()` on tool open / Reload
+- **Aug 11, 2026**: transform-under-root source resolve (mocap drivers); `cgmListItem` parallel lists (`.item` = patterns, `.alias` = scroll only); `Feature_CgmToolUI.md` design contract
+- **Aug 12, 2026**: last CCL autoload (`mocap_last_ccl`); status bar + **Setup → Recent** (`mocapBakeTool_CCLRecent` pathList); clear autoload without wiping lists
 
 ### 22. CGM Select* hierarchy order (`search_utils`, `contextual_utils`)
 - `sort_by_hierarchy`: depth-first from in-set roots (parent before child; Maya sibling order)
@@ -1239,6 +1408,7 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `cgm/core/tools/mocapBakeTools.py`
 - `cgm/core/tools/lib/tool_calls.py`
 - ADDED: `cgm/core/lib/mocap_align_utils.py`
+- ADDED: `cgmToolsDev/Features/Feature_CgmToolUI.md`
 - `cgm/core/tools/funcIterTime.py`
 - `cgm/core/lib/zoo/baseMelUI.py`
 - `cgm/core/tools/animFilterTool.py`
@@ -1281,6 +1451,7 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Mode-incompatible options must be ignored rather than partially honored.
 - Shared helpers (`ProcessDeleteSet`, `resolve_td_set_for_asset`) keep referenced vs non-referenced paths consistent.
 - Parse DAG nodes with `split('|')[-1]` before inferring namespace/bake/delete set names.
+- **cgm tool scroll lists**: parallel canonical data + display strings — `cgmListItem.item` or `_ml_loaded[i]` for ops/save; aliases / `_l_strings` for scroll only; selection via **`getSelectedIdxs()`**, never parse row labels. See **`Feature_CgmToolUI.md`** (Builder `cgmScrollList`, mocapBakeTools link lists).
 
 ### Lessons Learned
 - A small conditional guard can remove high-impact ambiguity in file-output behavior.
@@ -1339,11 +1510,15 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - **Multi-MH scenes**: set **Skel Roots** before Capture/Snap; short CCL patterns alone are ambiguous without roots.
 - **mocap align dev reload**: `tool_calls.mocapBakeTool()` and **Setup → Reload** call **`reload_dependencies()`** — reload **`mocap_align_utils`** before **`mocapBakeTools`** or Maya keeps a stale module missing new APIs (e.g. `resolve_connections`).
 - **CCL save compaction**: under Skel Roots, save **leaf when unique** else **minimal pipe chain** — validated with `validate_connections_for_save`; no hardcoded finger/limb allowlist. **Load path never compacts** existing pattern strings.
+- **mocap align list rows**: **`cgmListItem.item`** holds CCL patterns/DAG paths only; **`alias`** is rebuilt in **`refresh_aliases()`** — index labels (`[n]`, `-> [n]`) are display-only. **`parent_links`** is the only persisted index map. Do not strip UI decoration from patterns in lib code.
+- **mocap align source resolve**: under Skel Roots, search **joints and transforms** — mocap driver controls (`C_ArtSpine_*`, etc.) are valid CCL sources, not joints-only.
+- **mocap align save compaction**: `_minimal_unique_source_pattern` must use **`_nodes_under_roots`** (same as resolve) — joints-only compaction blocks save for transform drivers even when unique under roots.
+- **`MelObjectScrollList.itemAsStr`**: strips to segment after last `:` — breaks leading `[n]` on non-namespaced rows; patch **`itemAsStr`** on that scroll instance or use alias-only **`setItems`** (see **`Feature_CgmToolUI.md`**).
 - **`sortByHierarchy`** (zoo `apiExtensions`) sorts by **parent depth only** — not outliner-equivalent sibling order; use **`SEARCH.sort_by_hierarchy`** (DFS from in-set roots) for joint/type selection lists.
 
 ### Future Considerations
 - AnimFilter: conditional confirm (e.g. only when `_actionList` is non-empty or file dirty) via `confirmClose()` override.
-- Optional **`p4 edit`** before export — see **[Plan_ExportP4Integration.md](../Plans/Plan_ExportP4Integration.md)**
+- Optional **`p4 edit`** before export — see **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** (active on **[Branch_p4.md](Branch_p4.md)**)
 - Rig FBX: confirm `_rig_fbx_export_to_path` no-takes path on same builds as anim export.
 - Consider a UI hint/disable state for options not applicable to selected mode.
 - Curve tweak row: optional `rebuild` toggle for distribute; lane-align `samples` / `refine_steps` exposed in UI if artists need tuning.
@@ -1357,5 +1532,5 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 
 ---
 
-*Last Updated: August 6, 2026 (CGM Select* hierarchy order)*  
+*Last Updated: August 12, 2026 (mocap align CCL save compaction for transform drivers)*  
 *Branch Status: Active*

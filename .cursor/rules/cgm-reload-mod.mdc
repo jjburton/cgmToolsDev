@@ -1,0 +1,38 @@
+---
+description: Module reload — use cgmGEN._reloadMod only (py2/py3)
+alwaysApply: true
+---
+
+# cgm module reload convention
+
+In **cgmToolsPy3**, **ProjectScripts**, **cgmToolsDev** docs, and other in-house Maya Python:
+
+- Reload modules with **`cgmGEN._reloadMod(module)`** after importing **`cgm.core.cgm_General as cgmGEN`** (match the file’s existing import style).
+- **`cgmGEN._reloadMod`** is the project wrapper around reload (`importlib.reload` on py3, `reload()` on py2) — use it so code stays dual-version safe.
+
+## Do not use
+
+- `importlib.reload(...)`
+- bare **`reload(...)`** (py2 built-in)
+- `imp.reload(...)`
+- telling the user to reload via **`importlib.reload`** in docs, comments, or Script Editor snippets
+
+## Do use
+
+```python
+import cgm.core.cgm_General as cgmGEN
+import cgm.core.lib.perforce as P4UTIL
+
+cgmGEN._reloadMod(P4UTIL)
+```
+
+For session cache modules (e.g. **`cgm.core.lib.perforce_session`**), flush the same way:
+
+```python
+import cgm.core.lib.perforce_session as P4SESSION
+cgmGEN._reloadMod(P4SESSION)
+```
+
+Or call project helpers that already wrap this (e.g. **`P4UTIL.reload_session_cache()`**).
+
+Match nearby callers (`tool_calls.py`, tool **`Setup → Reload`**, `reloadSceneStuff()`, `cgm.core._reload()`).

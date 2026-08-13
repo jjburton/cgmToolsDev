@@ -174,13 +174,13 @@ This is separate from facial SDK transfer but shares the **offset-locator** ment
 1. **Scene setup** — MetaHuman skeleton (Body / Face roots) and custom anim rig referenced in the same scene.
 2. **Skeleton roots** — Select the MH skeleton root transform(s) used for this shot / character and register them in the align UI. Required when **more than one MetaHuman skeleton** exists in the scene (duplicate `foot_l`-style names otherwise resolve to the wrong hierarchy).
 3. **Rig namespace** — Set the anim rig namespace (e.g. `Hondo:`) so control names resolve.
-4. **Load mapping preset** — Per-character `.ccl` file (mocapBakeTools-compatible JSON): skeleton joint pattern → anim control, plus follow mode per pair.
+4. **Load mapping preset** — Per-character `.ccl` file (mocapBakeTools-compatible JSON): skeleton joint pattern → anim control, plus follow mode per pair. Tool **autoloads the last saved/loaded CCL** on open when the file still exists (`mocap_last_ccl`); **Setup → Recent** switches presets without a file dialog.
 5. **Bind pose** — With rig and skeleton in the intended aligned rest pose, **capture offsets** for all pairs (or selection).
 6. **Preview / animate** — Scrub skeleton or retarget motion; **snap** mapped controls (all or selected). Optional **debug locators** parented under joints for inspection.
 7. **Save preset** — Write updated `.ccl` with captured `localTranslate` / `localRotate` for reuse.
 8. **Bake** — Timeline bake uses the same local-TR snap math when offsets are captured; without local offsets, mocapBakeTools keeps the legacy vector Manual Set / bake path.
 
-**List display**: **Setup → Show short names** toggles source/target list labels to `cgmObject.p_nameShort` (optionVar `mocap_show_short_names`). Internal link data and CCL save still use resolved paths / patterns. **Index labels (Aug 2026)**: each target row shows a 0-based prefix (`[0] control`); linked sources append driven target indices (`spine_cog_anim -> [0],[1]`). Set Index and reorder use the same numbering.
+**List display**: **Setup → Show short names** toggles source/target list labels to `cgmObject.p_nameShort` (optionVar `mocap_show_short_names`). Internal link data and CCL save still use resolved paths / patterns. **Index labels (Aug 2026)**: each target row shows a 0-based prefix (`[0] control`); linked sources append driven target indices (`spine_cog_anim -> [0],[1]`). Set Index and reorder use the same numbering. **Session (Aug 2026)**: status bar shows loaded CCL path; clear button drops autoload without wiping lists.
 
 ### CCL mapping conventions (July 2026)
 
@@ -424,6 +424,7 @@ MF.constrain_rig(faceRoot, targetRoot, deleteUnused=True)
 
 | Date | Summary |
 |------|---------|
+| 2026-08-12 | mocapBakeTools last CCL autoload (`mocap_last_ccl`); status bar + Setup → Recent; workflow step 4 updated |
 | 2026-08-05 | CCL save uses skel-root uniqueness validation (no MH allowlist); save requires roots; existing CCL load unchanged |
 | 2026-08-05 | List index labels + target RMB reorder (Move Up/Dn, Top/Bottom, Set Index); short-name index display fix |
 | 2026-08-05 | Body align snap parity: doLoc rebuild; `resolve_connections`; tool reload; Setup → Show short names — user Maya verified |
