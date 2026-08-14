@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Active — Slice B project save shipped; **FBX export prepare hook next** |
-| **Last Updated** | August 13, 2026 (project save prepare: confirm + out-of-date gate) |
+| **Last Updated** | August 13, 2026 (P4 cache log noise; export prepare next) |
 | **Owners** | TBD |
 | **Audience** | Dev / TA — design contract for optional P4 incorporation in cgm tools |
 | **Branch** | [`Branch_p4.md`](../Branches/Branch_p4.md) |
@@ -146,14 +146,16 @@ When Project **General → versionControl = perforce** and cgmP4 / Project P4 ro
 | Step | Module | Behavior |
 |------|--------|----------|
 | Gate | `scene_list_p4_enabled` | `project_uses_perforce(mDat)` + `query_project_p4_status()['connected']` |
-| Batch query | `query_files_status(paths)` | One `p4 fstat` per column refresh |
+| Batch query | `query_files_status(paths)` | Cache-first batch `p4 fstat`; chunked misses only |
 | Classify | `classify_file_status_ui(file_dat)` | → color key or `None` (synced default) |
 | Label | `file_status_ui_suffix(file_dat, key)` | → `(locked-by-other)`, `(checked-out)`, etc. |
 | Apply | `scene_list_apply_p4_file_itc` | Sets `row.itc`, `row.alias`, `row.data['p4Status']`; `.item` unchanged |
 
 **Status keys and colors** — see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) Scene browser P4 table. **Locked** (`lockedByOther`) takes priority over checkout/sync. **Unknown** = local file not on depot (yellow, not gray). Synced at head: off-white, no suffix.
 
-**Refresh**: column reload re-runs fstat; no live P4 subscription in v1.
+**Refresh / cache** (August 2026): `query_files_status` stores results in `perforce_session._CACHE['fstat_by_path']` keyed by `(user, client, normpath)`. **Navigation** reuses cache (fast revisit). Column **Refresh** icon / popup **Refresh** calls `invalidate_fstat_directory(search_dir)` for **that column only**, then reloads. **P4 popup writes** call `invalidate_fstat_paths` on affected files; deferred reload of owning column via `_scene_p4_after_write(list_key=)`. Full `flush_status_cache()` for cgmP4 global Refresh / connection change only. External depot changes stay stale until column Refresh — no live P4 subscription in v1. Reload from popup menus is **deferred** (`Scene._defer_ui`) so `iconTextScrollList -removeAll` does not run during `QMenu::exec` (see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) popup pitfall).
+
+**Right-click menu** (SubType / Variation / Version file popups): when `versionControl=perforce`, **Perforce** section with Checkout (`edit`), Add (`add`), Revert, Sync (`sync_file`), Submit (`submit_paths`). Omitted when VC off; disabled when disconnected. After successful write: path-scoped fstat invalidation + deferred column reload. See [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md).
 
 ### Failure modes observed (Unreal workflow branch)
 
@@ -178,11 +180,11 @@ When Project **General → versionControl = perforce** and cgmP4 / Project P4 ro
 | File | Responsibility |
 |------|----------------|
 | [`cgm/core/lib/perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) | Subprocess `p4` wrapper — **only** module that spawns `p4`; connectivity + write APIs shipped |
-| [`cgm/core/lib/perforce_session.py`](../../cgmToolsPy3/cgm/core/lib/perforce_session.py) | Session `_CACHE` — survives `perforce.py` reload; flush via `flush_status_cache()` or `cgmGEN._reloadMod(perforce_session)` |
+| [`cgm/core/lib/perforce_session.py`](../../cgmToolsPy3/cgm/core/lib/perforce_session.py) | Session `_CACHE` — connection info + **`fstat_by_path`**; flush via `flush_status_cache()` or `cgmGEN._reloadMod(perforce_session)` |
 | [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | **`prepare_output_for_write(mDat=)`** global save prepare (fstat, out-of-date block, checkout confirm); `PathWritePrepareError`; FBX sidecars + writability |
 | [`cgm/core/cgm_Dat.py`](../../cgmToolsPy3/cgm/core/cgm_Dat.py) | `data.write()` calls global prepare before ConfigObj/JSON write |
 | [`cgm/core/tools/Project.py`](../../cgmToolsPy3/cgm/core/tools/Project.py) | `data.write()` + General **versionControl** / P4 status row; Scene **File → Save** path |
-| [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `uiProject_saveAndRefresh` — aborts refresh on failed save; export UX (P4 export **not wired yet**) |
+| [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `uiProject_saveAndRefresh` — aborts refresh on failed save; Scene browser P4 popup + deferred column reload (`_defer_ui`); export UX (P4 export **not wired yet**) |
 | [`cgm/core/cgm_General.py`](../../cgmToolsPy3/cgm/core/cgm_General.py) | `fbx_export_selection` — export caller (P4 prepare **next**) |
 | [`cgm/core/tools/lib/project_utils.py`](../../cgmToolsPy3/cgm/core/tools/lib/project_utils.py) | `project_uses_perforce(mDat)`; `versionControl` in `d_project` schema |
 | [`cgm/core/tools/lib/tool_calls.py`](../../cgmToolsPy3/cgm/core/tools/lib/tool_calls.py) | `cgmP4Tool()` — reuses window; no reload on open |
@@ -204,16 +206,18 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `query_opened(p4_user, p4_client)` | `p4 -u -c -ztag opened` grouped by changelist |
 | `query_pending_changes(p4_user, p4_client)` | `p4 -u -c changes -s pending` |
 | `query_file_status(path, …)` / `query_path(path, …)` | `p4 fstat` — inClient, checkedOut, outOfDate, synced, lockedByOther, statusSummary |
-| `query_files_status(paths, …)` | Batch `p4 fstat` — dict normpath → same shape as `query_file_status` (Scene browser column load) |
+| `query_files_status(paths, …)` | Batch `p4 fstat` — cache-first; dict normpath → same shape as `query_file_status` (Scene browser column load) |
+| `invalidate_fstat_paths(paths, …)` | Drop cached fstat for specific paths (P4 writes) |
+| `invalidate_fstat_directory(dir_path, …)` | Drop cached fstat for all paths under a directory (Scene column Refresh) |
 | `classify_file_status_ui(file_dat)` | Map fstat dict → Scene UI key: `locked_by_other` \| `checked_out` \| `marked_for_add` \| `out_of_sync` \| `unknown` \| `None` |
 | `file_status_ui_suffix(file_dat, status_key)` | Display-only alias parenthetical, e.g. `(locked-by-other)` |
 | `is_under_client(path, …)` | True when path is in current client workspace view |
 | `query_path_report(path, …)` | Logs formatted path status; returns structured dict |
 | `format_file_status(file_dat)` | One-line summary string for UI/logs |
-| `query_connection(p4_user, p4_client, scene_path=None, force=False)` | Composes connection + opened + pending + scene fstat; session cache keyed by user/client/scene |
+| `query_connection(p4_user, p4_client, scene_path=None, force=False)` | Composes connection + opened + pending + scene fstat; session cache keyed by user/client/scene; cache hit/miss at **`log.debug` only** |
 | `query_status_report(p4_user, p4_client, …)` | Queries + logs formatted report; returns structured dict |
 | `log_status_report(dat)` | Logs formatted report from an existing dict (no p4 queries) |
-| `query_project_p4_status(p4_user, p4_client, force=False, …)` | Lightweight connected/label dict for Project General UI (no logging; uses session cache when warm) |
+| `query_project_p4_status(p4_user, p4_client, force=False, …)` | Lightweight connected/label dict for Project General UI + Scene P4 column gate; **no routine logging** (cache hit/miss at `log.debug`; user reports via `query_status_report` / Print Log) |
 | `flush_status_cache()` | Clear session cache in place (`perforce_session.clear()`) — write paths, Refresh |
 | `reload_session_cache()` | Flush buffer via `cgmGEN._reloadMod(perforce_session)` and rebind — dev / manual flush |
 
@@ -249,6 +253,7 @@ User-invoked from cgmP4 (and Script Editor). Clears session cache on success.
 | `edit_or_add(path, …)` | edit if on depot, else add |
 | `revert(path, …)` | `p4 revert` |
 | `revert_change(change, …)` | `p4 revert -c` — entire changelist (including default) |
+| `sync_file(path, …)` | `p4 sync` — single file to head |
 | `sync_workspace(force=False, …)` | `p4 sync` on client root (`...`) — whole workspace |
 | `submit_change(change, …)` | `p4 submit` or `p4 submit -c CHANGE` |
 | `submit_paths(paths, change, …)` | `p4 submit [ -c CL ] path …` — selected files only |
@@ -330,7 +335,7 @@ Implement inside **`cgm.core.lib.perforce`**, not zooPy `getDefaultWorkingDir()`
 | `cgmVar_p4_client` | Maya optionVar (string) | empty | Saved from cgmP4; read by `resolve_connection()` |
 | `d_project['versionControl']` | project JSON (General) | **`none`** | `perforce` enables P4 for project; status row in Project General |
 | `CGM_EXPORT_P4` | env `1`/`true`/`yes` | unset | Override for batch farm (export slice — planned) |
-| P4 session cache | `cgm.core.lib.perforce_session` | — | Module `_CACHE` holds `is_available`, `connection_info`, and full `query_connection` report keyed by `(user, client, scene_path)`. **Not** reloaded on cgmP4 open or `perforce.py` reload — survives both. Cleared in place on P4 writes (`flush_status_cache()`). Full flush: `reload_session_cache()` or `cgmGEN._reloadMod(perforce_session)`; cgmP4 **Setup → Reload** reloads session + perforce + p4Tool |
+| P4 session cache | `cgm.core.lib.perforce_session` | — | Module `_CACHE` holds `is_available`, `connection_info`, and full `query_connection` report keyed by `(user, client, scene_path)`. **Not** reloaded on cgmP4 open or `perforce.py` reload — survives both. Cleared in place on P4 writes (`flush_status_cache()`). Full flush: `reload_session_cache()` or `cgmGEN._reloadMod(perforce_session)`; cgmP4 **Setup → Reload** reloads session + perforce + p4Tool. **Logging:** cache hit/miss in `query_connection` / `query_project_p4_status` is `log.debug` — avoid `log.info` on hot paths (Scene calls project status many times per column refresh) |
 | P4 offline / unavailable | — | skip silently | Fall back to `path_utils` writability check only |
 | `confirm_p4` on `prepare_output_for_write` | function kwarg | **`True`** | Interactive save shows checkout/add confirm; set **`False`** for batch export/farm |
 
@@ -454,6 +459,9 @@ Record decisions in the **Decisions log** as they are resolved.
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-08-13 | P4 cache log noise | `query_project_p4_status` / `query_connection` cache messages → `log.debug`; Scene `HasSub` debug warnings removed |
+| 2026-08-13 | Scene scroll-list popup crash fix | `_defer_ui` for P4 post-write + popup Refresh; `_refresh_searchable_display` guard before `ra=True` |
+| 2026-08-13 | Scene browser P4 popup menu | `sync_file`; Scene Revert/Sync/Submit on file scroll popups |
 | 2026-08-13 | Scene browser P4 suffix + locked | `file_status_ui_suffix`, `locked_by_other` red, unknown yellow, alias `(status)` |
 | 2026-08-13 | Scene browser P4 file colors | `query_files_status`, `classify_file_status_ui`; Scene LoadSubType/Variation/Version |
 | 2026-08-13 | Slice B project save | `prepare_output_for_write`: fstat, out-of-date block, checkout/add confirm; wired Project + cgm_Dat + Scene File → Save |

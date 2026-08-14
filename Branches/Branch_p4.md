@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: August 12, 2026  
-**Last Updated**: August 13, 2026 (Scene browser P4 suffix + locked; export wire next)  
+**Last Updated**: August 13, 2026 (P4 + Scene log noise cleanup; export wire next)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -22,6 +22,44 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - **`.cursor/rules/perforce-checkout.mdc`** - Agent workflow when py3 files need P4 checkout before edit
 
 ## 🗓️ Timeline
+
+---
+
+### August 13, 2026 (m) - P4 + Scene Script Editor log noise cleanup
+**What**: Removed high-chatter **info/warning** lines that fired on normal Scene browser use (P4 column gates, asset popup build). Cache hits and lightweight status probes stay silent at default log level.  
+**Files**:
+- EXTENDED: `cgm/core/lib/perforce.py` — `query_project_p4_status` / `query_connection` cache hit + fetch messages → `log.debug` (doc already said project probe has no logging)
+- EXTENDED: `cgm/core/mrs/Scene.py` — removed leftover debug `log.warning` in `HasSub` (called once per subtype in asset popup loop)
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Branch_p4.md`
+
+**Symptoms fixed**:
+- Repeated `# cgm.core.lib.perforce : Using cached Perforce status (project)` on column load / P4 tint pass
+- Repeated `# Warning: cgm.core.mrs.Scene : HasSub ||||||||| laksj;flaksjdfkl; >> …` when opening asset list popup
+
+**Decisions**:
+- Session cache working as intended is **not** artist-visible — reserve `log.info` for user-initiated reports (`query_status_report`, Print Log, path query)
+- Hot-path helpers (`query_project_p4_status`, `scene_list_p4_enabled`) must not warn/info per call
+
+**Status**: ✅ Shipped
+
+---
+
+### August 13, 2026 (l) - Scene browser scroll-list popup crash fix
+**What**: Intermittent Maya **ACCESS_VIOLATION** when P4 popup actions (Revert/Sync/etc.) or column **Refresh** rebuilt the owning `iconTextScrollList` synchronously — `ra=True` → `QTreeWidget::clear()` while Qt popup menu still active. Fixed with deferred column reload + Builder-style refresh guard.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_defer_ui()` (`mc.evalDeferred` + `cgmGEN.Callback`); `_refresh_searchable_display` disables `b_selCommandOn`, `deselectAll` before `ra=True`; P4 post-write + popup/column Refresh wired through `_defer_ui`
+- EXTENDED: `Features/Feature_CgmToolUI.md`, `Features/Feature_PerforceIntegration.md`, `Branch_p4.md`
+
+**Root cause**:
+- P4 menu callback → `_scene_p4_after_write()` → `LoadVersionList()` → `_refresh_searchable_display()` → `sl(e=True, ra=True)` on the **same widget** that owns the right-click popup, during `QMenu::exec` — Qt selection-model reentrancy crash (not a Python logic bug)
+
+**Fix**:
+- Defer list reload to next idle tick: `_scene_p4_after_write`, popup **Refresh**, column refresh icon, asset-list popup Refresh
+- Harden `_refresh_searchable_display`: temp `b_selCommandOn=False`, `deselectAll` before `ra=True`, restore in `finally` (match `BlockScrollList.rebuild`)
+
+**Status**: ✅ Shipped — user verified Revert path no longer crashes
+
+**See also**: [`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md) (popup + `ra=True` pitfall)
 
 ---
 
@@ -46,6 +84,45 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 **Status**: ✅ Shipped — user verified in Maya
 
 **See also**: [`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md) (pattern contract)
+
+---
+
+### August 13, 2026 (m) - Scene browser P4 fstat session cache
+**What**: Scene navigation in P4 mode caches `p4 fstat` results per `(user, client, path)` in `perforce_session._CACHE`. Navigation reuses cache (no subprocess when revisiting a folder). Column **Refresh** icon / popup **Refresh** invalidates **that column's directory only** (`invalidate_fstat_directory`) then reloads. P4 popup writes invalidate affected paths only; full `flush_status_cache()` reserved for cgmP4 global Refresh / connection change. Deduped duplicate `LoadVersionList` on set→variation navigation.  
+**Files**:
+- EXTENDED: `cgm/core/lib/perforce_session.py` — `fstat_by_path` in `_CACHE`
+- EXTENDED: `cgm/core/lib/perforce.py` — cache-first `query_files_status` / `query_file_status` (chunked misses); `invalidate_fstat_paths`, `invalidate_fstat_directory`; write APIs invalidate fstat selectively
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_refreshSubTypeList` / `_refreshVariationList` / `_refreshVersionList`, `_invalidate_p4_directory_for_column`, `_scene_p4_after_write(list_key=)`; `_version_list_refreshed` dedupe
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Features/Feature_CgmToolUI.md`
+
+**Decisions**:
+- Stale P4 colors after external depot changes (P4V, other user) until artist hits column Refresh — no background polling in v1
+- Navigation does not invalidate cache; Refresh explicitly drops directory entries then re-fstats
+
+**Status**: ✅ Code complete — verify revisit speed + per-column Refresh scope
+
+---
+
+### August 13, 2026 (k1) - Scene browser P4 menu: Checkout + Add
+**What**: Perforce popup gains **Checkout** (`p4 edit`) and **Add** (`p4 add`) before Revert/Sync/Submit; fstat validation + confirm (out-of-date blocks checkout; on-depot blocks add).  
+**Files**: `Scene.py`, `Feature_CgmToolUI.md`, `Feature_PerforceIntegration.md`  
+**Status**: ✅ Shipped
+
+---
+
+### August 13, 2026 (k) - Scene browser P4 right-click menu
+**What**: Perforce section on file scroll-list popups (SubType, Variation, Version): **Revert**, **Sync** (selected file), **Submit**. Built only when `versionControl=perforce`; items disabled when P4 not connected; enabled for file rows when connected.  
+**Files**:
+- NEW: `sync_file` in `cgm/core/lib/perforce.py`
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_append_p4_file_menu`, `uiFunc_p4_*`, select-handler enable refresh
+- EXTENDED: `Features/Feature_CgmToolUI.md`, `Features/Feature_PerforceIntegration.md`
+
+**Decisions**:
+- Sync = `p4 sync <path>` not whole workspace (artist out-of-date fix on selected row)
+- Submit uses `submit_paths([path])` with changelist confirm (match cgmP4)
+- Post-action: `flush_status_cache()` + **deferred** column reload via `_defer_ui` (P4 row colors refresh; avoids popup reentrancy crash — see entry (l))
+
+**Status**: ✅ Code complete — verify Maya checklist in plan
 
 ---
 
@@ -340,8 +417,9 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 ### Testing
 - [ ] Regression: no p4 on PATH, flag off — identical to today
 - [ ] Project save (VC=perforce): out-of-date block, checkout confirm, cancel, already-open, locked-by-other, P4 offline
+- [x] Scene browser: P4 popup Revert/Sync/Checkout/Submit + popup Refresh — no Maya crash on column reload (deferred `_defer_ui`)
 - [ ] P4-enabled export: synced read-only FBX auto-edit, new file add, batch rollup (after export wire)
-- [x] Documentation updated for Slice B + session cache
+- [x] Documentation updated for Slice B + session cache + scroll-list popup fix
 
 ---
 
@@ -423,11 +501,13 @@ None — P4 off by default; existing export behavior preserved.
 - Session cache module must **not** reload on cgmP4 open — use `cgmGEN._reloadMod(perforce_session)` only for dev flush
 - Perforce batch submit/revert maps cleanly to changelist sections with animFilter-style checkbox rows
 - Scene browser scroll lists: **`iconTextScrollList` display must use Builder `append` + per-row `itc`** — not raw `append=` + `clear()` that wipes `_ml_rows` before populate (see `Feature_CgmToolUI.md` Scene browser section)
+- **Never `ra=True` on a scroll list synchronously from its own popup menu** — defer reload with `mc.evalDeferred(..., lp=True)`; disable `b_selCommandOn` + `deselectAll` before clear (Maya/Qt crash in `QItemSelectionModel::clear`)
+- P4 session cache hits (`query_project_p4_status`, `query_connection`) → **`log.debug` only** — Scene column P4 gates call these many times per refresh; `log.info` spam is not actionable
 
 ### Future Considerations
 - Scene browser list row icons — **not supported** on Maya `iconTextScrollList`; use `+ name/` alias prefix + tint (see `Feature_CgmToolUI.md`)
 - Scene browser selection — **`itc` ≠ `hlc`**: saturated unselected text + dimmed `hlc` on select (`itc × 0.7`); Maya inverts selection row (see `Feature_CgmToolUI.md`, Builder `setHLC`)
-- Scene browser P4 file rows — batch `query_files_status`; five status tints + alias suffix when versionControl + connected (see entries (i)–(j), `Feature_CgmToolUI.md`)
+- Scene browser P4 file rows — batch fstat, tints + alias suffix (entries (i)–(j)); **right-click Revert/Sync/Submit** (entry (k)); popup reload deferred (entry (l))
 - Unknown / not-on-depot uses **yellow** not gray — off-white synced files too similar to gray
 - Scene Save Maya here / Save Version
 - MRS batch `_batch.py` writability (`batch_utils.py`)
@@ -437,5 +517,5 @@ None — P4 off by default; existing export behavior preserved.
 
 ---
 
-*Last Updated: August 13, 2026 (Scene browser P4 suffix + locked; export wire next)*  
+*Last Updated: August 13, 2026 (P4 + Scene log noise cleanup; export wire next)*  
 *Branch Status: Active — export prepare next*

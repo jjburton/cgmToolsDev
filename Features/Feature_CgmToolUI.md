@@ -121,10 +121,12 @@ Index labels (e.g. `[0] spine_cog_anim`) belong in **`.alias`**, not in `.item` 
 **Refresh contract** (mirror [`BlockScrollList.update_display`](../../cgmToolsPy3/cgm/core/mrs/Builder.py)):
 
 1. `_push_searchable_rows(searchableList, rows, store=True)` — store source rows when loading from disk.
-2. `_refresh_searchable_display(searchableList)` — filter `rows` → `ra=True` → **`sl.appendDisplayRow(label, itc, displayIndex)`** per row (Builder append + itc in one call).
+2. `_refresh_searchable_display(searchableList)` — filter `rows` → temp **`b_selCommandOn=False`**, **`deselectAll`**, then `ra=True` → **`sl.appendDisplayRow(label, itc, displayIndex)`** per row (Builder append + itc in one call); restore `b_selCommandOn` in `finally`.
 3. Set `sl._items` / `sl._ml_rows` from displayed rows after append loop.
 4. `sl._syncHLCFromSelection(dim=SCENE_LIST_HLC_DIM)` — restore readable selected-row color after rebuild (see below).
 5. `process_search_filter` / clear filter → `_refresh_searchable_display` only (do not overwrite stored `rows`).
+
+**Popup / menu reload**: When a scroll-list action (P4 Revert, popup **Refresh**, column refresh icon) must rebuild the **same** list, defer the load via `mc.evalDeferred(cgmGEN.Callback(...), lp=True)` — Scene uses `_defer_ui()`. Synchronous `ra=True` during `QMenu::exec` can crash Maya (`QTreeWidget::clear` / `QItemSelectionModel::clear`).
 
 **Selection**: `cgmScrollList.getSelectedItem()` / `getSelectedItems()` map selected index → `_ml_rows[i].item` (canonical). `selectByValue(canonical)` selects by alias internally.
 
@@ -186,9 +188,24 @@ Maya **inverts the selection row background**. Light `itc` values (pastel blue, 
 | `SCENE_LIST_ITC_P4_UNKNOWN` | `[1.0, 0.88, 0.0]` |
 | `SCENE_LIST_ITC_FILE` | `[0.85, 0.85, 0.85]` (synced default) |
 
-**Wiring**: `scene_list_apply_p4_file_itc` → batch `query_files_status` once per column load (`LoadSubTypeList`, `LoadVariationList`, `LoadVersionList` via `_apply_p4_file_row_colors`). Sets `row.itc`, `row.alias` via `scene_list_file_alias`, `row.data['p4Status']`. Suffix strings from [`perforce.file_status_ui_suffix`](../../cgmToolsPy3/cgm/core/lib/perforce.py). Dirs always `SCENE_LIST_ITC_DIR`. **`.item` stays canonical basename** — never parse suffix for paths, optionVars, or export. Search filter matches alias suffix text. Column Refresh re-queries fstat; colors stale until refresh if checkout changes elsewhere.
+**Wiring**: `scene_list_apply_p4_file_itc` → cache-first `query_files_status` once per column load (`LoadSubTypeList`, `LoadVariationList`, `LoadVersionList` via `_apply_p4_file_row_colors`). Sets `row.itc`, `row.alias` via `scene_list_file_alias`, `row.data['p4Status']`. Suffix strings from [`perforce.file_status_ui_suffix`](../../cgmToolsPy3/cgm/core/lib/perforce.py). Dirs always `SCENE_LIST_ITC_DIR`. **`.item` stays canonical basename** — never parse suffix for paths, optionVars, or export. Search filter matches alias suffix text. **Navigation** reuses fstat session cache (fast revisit). Column **Refresh** (icon or popup) invalidates P4 cache for **that column's directory only** (`_refreshSubTypeList` / `_refreshVariationList` / `_refreshVersionList`) then reloads; external depot changes stay stale until Refresh.
+
+**P4 right-click menu** (August 2026) — file scroll lists (`subTypeSearchList`, `variationList`, `versionList`), button 3 popup:
+
+| Gate | Behavior |
+|------|----------|
+| `versionControl != 'perforce'` | No Perforce section in menu |
+| `versionControl == 'perforce'`, P4 disconnected | Perforce divider + Revert / Sync / Submit shown, **`en=False`** |
+| Connected + **file** row selected | Items **`en=True`** |
+| Connected + **dir** row (SubType/Variation) | P4 items **`en=False`** |
+
+Menu items (in order): **Checkout** (`p4 edit`), **Add** (`p4 add`), **Revert**, **Sync**, **Submit**. Callbacks validate fstat before confirm (e.g. checkout blocked when out of date or not on depot; add blocked when already on depot).
+
+Actions call [`perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) write APIs on selected file path(s); confirm dialogs match cgmP4. After success: `invalidate_fstat_paths` + **deferred** reload of owning column via `_scene_p4_after_write(list_key=)` (refreshes P4 colors; avoids Qt popup reentrancy crash). Implemented in [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py): `_defer_ui`, `_append_p4_file_menu`, `uiFunc_p4_checkout_file`, `uiFunc_p4_add_file`, `uiFunc_p4_revert_file`, `uiFunc_p4_sync_file`, `uiFunc_p4_submit_file`.
 
 **Pitfall (blank lists)**: Widget-only `ra=True`, then `appendDisplayRow` (append + itc per display index). Do not wipe `_ml_rows` before populate.
+
+**Pitfall (Maya crash on popup refresh)**: Calling `ra=True` on an `iconTextScrollList` **from its own right-click menu callback** (P4 actions, popup Refresh) runs `QTreeWidget::clear` while the menu event loop is still active → intermittent `ACCESS_VIOLATION`. **Fix**: defer column reload (`_defer_ui` / `mc.evalDeferred`); in `_refresh_searchable_display`, disable `b_selCommandOn` and `deselectAll` before `ra=True` (Builder `rebuild` pattern).
 
 **Future**: real icons need PySide — out of scope for Mel columns.
 
@@ -368,6 +385,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | Resolve to long DAG on load into `.item` | Save compacts wrong; display toggles break | Keep pattern; resolve in connection pass |
 | Select-by-matching display string | Breaks when alias changes | `getSelectedIdxs()` |
 | Light pastel / white `itc` copied to `hlc` on select | Maya inverts selection row; text washes out | Saturated `itc` + dimmed `hlc` (`itc × 0.7`); see Builder `setHLC` |
+| Rebuild scroll list (`ra=True`) inside its popup menu callback | Qt reentrancy crash in `QItemSelectionModel::clear` | `mc.evalDeferred(..., lp=True)`; disable `b_selCommandOn` + `deselectAll` before clear |
 | `column_adj=False` to reduce vertical space | Shrinks row **width**; centered labels look wrong | `adj=True` + explicit label `h`, `row_spacing=0`, `expand=False` on stretch row |
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
 
@@ -380,7 +398,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | [`Builder.py`](../../cgmToolsPy3/cgm/core/mrs/Builder.py) | `cgmScrollList`, `_ml_loaded` + `_l_strings` | Block browser, filter, select by meta |
 | [`mocapBakeTools.py`](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py) | `cgmListItem`, dual lists + links, CCL | Align tab; target `itemAsStr` patch; last-CCL autoload + status bar |
 | [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) | LastLoaded optionVar + pathList recent | `post_init` autoload; status row with clear/explore |
-| [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()` |
+| [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_defer_ui` for popup/column reload |
 | [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | Collapsible header frames, status buffer, changelist batch UI | Status stretch row; animFilter-style CL header (checkbox + frame + **R**/**S**); alternating file row `bgc` |
 
 ---
@@ -423,6 +441,9 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-08-13 | Scene log noise: removed `HasSub` debug warnings (asset popup loop); P4 cache status at debug in perforce.py |
+| 2026-08-13 | Scene browser scroll-list popup crash fix: defer column reload from P4/Refresh menus; `_refresh_searchable_display` `b_selCommandOn` + `deselectAll` before `ra=True` |
+| 2026-08-13 | Scene browser P4 right-click menu: Checkout/Add/Revert/Sync/Submit on file popups when versionControl + connected |
 | 2026-08-13 | Scene browser P4: alias suffix `(status)`, locked red, unknown yellow; `file_status_ui_suffix`, `scene_list_file_alias` |
 | 2026-08-13 | Scene browser P4 file-row colors (versionControl + connected): batch fstat, status tints, `SceneListRow.data` |
 | 2026-08-13 | Scene browser selection highlight: `itc`/`hlc` contract (Builder `setHLC`, saturated base colors, `SCENE_LIST_HLC_DIM`); `_syncHLCFromSelection` |
