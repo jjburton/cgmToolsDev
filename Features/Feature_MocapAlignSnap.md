@@ -162,7 +162,7 @@ Do **not** put resolution or offset math in `cgm_General` or vendored trees.
 
 | Function | Purpose |
 |----------|---------|
-| `load_ccl(path)` / `save_ccl(path, data)` | JSON six-element IO |
+| `load_ccl(path)` / `save_ccl(path, data, skip_prepare=False)` | JSON six-element IO; P4 prepare in **`save_ccl`** unless UI already prepared |
 | `ccl_to_connections(data, rig_ns, skel_roots, skel_ns)` | Normalize + resolve |
 | `connections_to_ccl(connections, rig_ns, skel_roots)` | Short-pattern export (compaction requires `skel_roots`) |
 | `validate_connections_for_save(connections, skel_roots, …)` | Pre-save: roots set, patterns resolve equivalently |
@@ -201,6 +201,7 @@ Keep existing **source / target lists**, **link**, **bake range**, and **CCL loa
 | **Lists** | Target list RMB reorder | Move Up/Dn, Move to Top/Bottom, Set Index… (0-based); remaps link indices; order saved in CCL `target_items` |
 | **Lists** | List data vs display | `cgmListItem.item` holds CCL patterns/DAG strings only; `alias` is rebuilt in `refresh_aliases()` and is the sole scroll-list string (Builder-style parallel lists). Index labels live in aliases and `links` indices — never in saved pattern strings |
 | **CCL session** | Status bar + **Setup → Recent** | Last saved/loaded `.ccl` path in `mocap_last_ccl` optionVar; autoload on tool open when file exists; clear button drops autoload without wiping lists |
+| **CCL session** | **Setup → Save** / **Save As…** | **Save** writes loaded path (no dialog); **Save As…** file dialog; no path → Save As. P4 prepare runs **before** connection resolve (paths-first — see [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md)) |
 
 OptionVar candidates: `mocap_rig_namespace`, `mocap_skel_roots`, `mocap_show_short_names`, `mocap_use_local_offsets` (default 1), `mocap_last_ccl`.
 
@@ -320,6 +321,9 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 12. Pick from **Setup → Recent** → loads without file dialog.
 13. Status bar **Clear** → reopen tool → no autoload (lists unchanged).
 14. Delete CCL file on disk → reopen tool → silent skip (no error spam).
+15. **Setup → Save** on loaded depot CCL — no file dialog; overwrites same path.
+16. **Setup → Save As…** — dialog; new path becomes loaded + recent.
+17. Locked depot CCL (VC=perforce) — P4 checkout dialog appears immediately (not after long resolve delay); Cancel → no traceback.
 
 ### Regression
 
@@ -360,6 +364,7 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 | Date | Summary |
 |------|---------|
+| 2026-08-17 | **Setup → Save** / **Save As…**; paths-first P4 prepare before resolve; **`save_ccl(..., skip_prepare=True)`** from UI; clean checkout cancel |
 | 2026-08-12 | Last CCL autoload: `mocap_last_ccl` optionVar + `post_init`; status bar (path/clear/folder); **Setup → Recent** via pathList; persist on save/load |
 | 2026-08-12 | CCL save compaction: `_minimal_unique_source_pattern` uses `_nodes_under_roots` (parity with resolve) — ArtSpine/mocap transform drivers save as unique leaf patterns |
 | 2026-08-11 | List data architecture: `cgmListItem.item` = CCL patterns only; aliases display-only (Builder parallel-list pattern); removed defensive UI-index strip from align utils; target scroll `itemAsStr` patch for `[n]` display only |

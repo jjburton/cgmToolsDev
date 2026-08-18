@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: August 13, 2026
+- **Last Updated**: August 17, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -126,7 +126,7 @@ Index labels (e.g. `[0] spine_cog_anim`) belong in **`.alias`**, not in `.item` 
 4. `sl._syncHLCFromSelection(dim=SCENE_LIST_HLC_DIM)` — restore readable selected-row color after rebuild (see below).
 5. `process_search_filter` / clear filter → `_refresh_searchable_display` only (do not overwrite stored `rows`).
 
-**Popup / menu reload**: When a scroll-list action (P4 Revert, popup **Refresh**, column refresh icon) must rebuild the **same** list, defer the load via `mc.evalDeferred(cgmGEN.Callback(...), lp=True)` — Scene uses `_defer_ui()`. Synchronous `ra=True` during `QMenu::exec` can crash Maya (`QTreeWidget::clear` / `QItemSelectionModel::clear`).
+**Popup / menu reload**: When a scroll-list action (P4 Revert, popup **Refresh**, popup **Delete**, column refresh icon) must rebuild the **same** list, defer the load via `mc.evalDeferred(cgmGEN.Callback(...), lp=True)` — Scene uses `_defer_ui()`. Synchronous `ra=True` during `QMenu::exec` can crash Maya (`QTreeWidget::clear` / `QItemSelectionModel::clear`).
 
 **Selection**: `cgmScrollList.getSelectedItem()` / `getSelectedItems()` map selected index → `_ml_rows[i].item` (canonical). `selectByValue(canonical)` selects by alias internally.
 
@@ -205,7 +205,7 @@ Actions call [`perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) write A
 
 **Pitfall (blank lists)**: Widget-only `ra=True`, then `appendDisplayRow` (append + itc per display index). Do not wipe `_ml_rows` before populate.
 
-**Pitfall (Maya crash on popup refresh)**: Calling `ra=True` on an `iconTextScrollList` **from its own right-click menu callback** (P4 actions, popup Refresh) runs `QTreeWidget::clear` while the menu event loop is still active → intermittent `ACCESS_VIOLATION`. **Fix**: defer column reload (`_defer_ui` / `mc.evalDeferred`); in `_refresh_searchable_display`, disable `b_selCommandOn` and `deselectAll` before `ra=True` (Builder `rebuild` pattern).
+**Pitfall (Maya crash on popup refresh)**: Calling `ra=True` or `selectIndexedItem` on an `iconTextScrollList` **from its own right-click menu callback** (P4 actions, popup **Refresh**, popup **Delete**) runs list mutation while the menu event loop is still active → intermittent `ACCESS_VIOLATION` in `QItemSelectionModel`. **Fix**: defer the menu action and column reload (`_defer_ui` / `mc.evalDeferred`); centralize post-delete reload via `_defer_list_reload_after_delete(mode)`; in `_refresh_searchable_display`, disable `b_selCommandOn` and `deselectAll` before `ra=True` (Builder `rebuild` pattern).
 
 **Future**: real icons need PySide — out of scope for Mel columns.
 
@@ -347,7 +347,7 @@ Pass **`column_adj`**, **`row_spacing`**, **`margin_height`** per section rather
 
 ### Checkbox + collapsible frame + header buttons (animFilter pattern)
 
-For **batch actions on grouped rows** (animFilter actions list, cgmP4 opened changelists):
+For **batch actions on grouped rows** (animFilter actions list, cgmP4 opened + shelved changelists):
 
 ```python
 _row = mUI.MelHSingleStretchLayout(parent, bgc=header_bgc, padding=2)
@@ -368,7 +368,9 @@ _row.layout()
 | **Short button labels (`R`, `S`)** | Keeps header row narrow; use `ann=` for full tooltip |
 | **Per-row checkboxes** | Batch action applies to checked subset; all/none → whole-group API |
 
-Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) `uiBuild_ActionsColumn`; [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) `uiFunc_build_opened_changelist_section`.
+Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) `uiBuild_ActionsColumn`; [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) `uiFunc_build_opened_changelist_section`, `uiFunc_build_shelved_changelist_section`.
+
+**Section empty state (cgmP4):** Messages like `(no shelved changelists)` use a **persistent** full-width `MelHSingleStretchLayout` + centered label in the collapse-frame **inner column** (same as Status) — toggle visibility vs the dynamic content frame (`uiFrame_opened` / `uiFrame_shelved`). Do not build empty text only inside the dynamic content column (no stretch width → center align fails).
 
 **Data refresh:** Rebuild grouped UI from canonical structured data on Refresh; store parallel flat list (`_l_opened_entries`) indexed for row callbacks — do not parse frame labels back to data.
 
@@ -385,7 +387,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | Resolve to long DAG on load into `.item` | Save compacts wrong; display toggles break | Keep pattern; resolve in connection pass |
 | Select-by-matching display string | Breaks when alias changes | `getSelectedIdxs()` |
 | Light pastel / white `itc` copied to `hlc` on select | Maya inverts selection row; text washes out | Saturated `itc` + dimmed `hlc` (`itc × 0.7`); see Builder `setHLC` |
-| Rebuild scroll list (`ra=True`) inside its popup menu callback | Qt reentrancy crash in `QItemSelectionModel::clear` | `mc.evalDeferred(..., lp=True)`; disable `b_selCommandOn` + `deselectAll` before clear |
+| Rebuild scroll list (`ra=True`) or `selectIndexedItem` inside its popup menu callback | Qt reentrancy crash in `QItemSelectionModel` | `mc.evalDeferred(..., lp=True)`; defer Delete handler + `_defer_list_reload_after_delete`; disable `b_selCommandOn` + `deselectAll` before clear |
 | `column_adj=False` to reduce vertical space | Shrinks row **width**; centered labels look wrong | `adj=True` + explicit label `h`, `row_spacing=0`, `expand=False` on stretch row |
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
 
@@ -398,8 +400,8 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | [`Builder.py`](../../cgmToolsPy3/cgm/core/mrs/Builder.py) | `cgmScrollList`, `_ml_loaded` + `_l_strings` | Block browser, filter, select by meta |
 | [`mocapBakeTools.py`](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py) | `cgmListItem`, dual lists + links, CCL | Align tab; target `itemAsStr` patch; last-CCL autoload + status bar |
 | [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) | LastLoaded optionVar + pathList recent | `post_init` autoload; status row with clear/explore |
-| [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_defer_ui` for popup/column reload |
-| [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | Collapsible header frames, status buffer, changelist batch UI | Status stretch row; animFilter-style CL header (checkbox + frame + **R**/**S**); alternating file row `bgc` |
+| [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_defer_ui` for popup/column reload; `_defer_list_reload_after_delete` after file delete |
+| [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | Collapsible header frames, status buffer, changelist batch UI | Status stretch row; animFilter-style CL header (checkbox + **collapsible frame** + **R**/**S**/**Sh** or **D**/**Mv**/**Sub**); Shelved Files blue headers; section empty rows; standard Setup → Reload |
 
 ---
 
@@ -441,6 +443,8 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
+| 2026-08-17 | Scene browser popup Delete crash fix: defer Delete menu + `_defer_list_reload_after_delete`; single version delete uses `LoadVersionList` |
 | 2026-08-13 | Scene log noise: removed `HasSub` debug warnings (asset popup loop); P4 cache status at debug in perforce.py |
 | 2026-08-13 | Scene browser scroll-list popup crash fix: defer column reload from P4/Refresh menus; `_refresh_searchable_display` `b_selCommandOn` + `deselectAll` before `ra=True` |
 | 2026-08-13 | Scene browser P4 right-click menu: Checkout/Add/Revert/Sync/Submit on file popups when versionControl + connected |

@@ -28,7 +28,7 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 10. **cgm tool UI design contract**: [`Features/Feature_CgmToolUI.md`](Features/Feature_CgmToolUI.md) — parallel list data vs scroll display, selection by index, CCL/preset save rules, scroll-list pitfalls. Living doc — extend when establishing list/UI patterns in tools. See also [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) for link-list + CCL example.
 
-11. **Perforce integration design contract**: [`Features/Feature_PerforceIntegration.md`](Features/Feature_PerforceIntegration.md) — optional P4 layer (no P4 = no behavior change), `cgm.core.lib.perforce`, **`path_utils.prepare_output_for_write(mDat=)`** for project save (Slice B shipped), FBX export prepare hook next. Timeline on [`Branches/Branch_p4.md`](Branches/Branch_p4.md). Update when changing save/export P4 wiring or `perforce.py`.
+11. **Perforce integration design contract**: [`Features/Feature_PerforceIntegration.md`](Features/Feature_PerforceIntegration.md) — optional P4 layer; **`path_utils.prepare_*`** for saves (including **`prepare_meta_files_for_write`** for Scene meta sidecars); **`preflight_export_output_paths`** before FBX bake when VC=perforce. Timeline on [`Branches/Branch_p4.md`](Branches/Branch_p4.md).
 
 ## Python 2 backport (exceptional)
 

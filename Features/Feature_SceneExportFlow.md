@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: August 13, 2026 (P4 cross-ref: project save shipped; export prepare next)
+- **Last Updated**: August 18, 2026 (mayapy batch P4 context + Auto Check Out Export Files)
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
@@ -27,7 +27,7 @@
 
 ### Out of scope
 
-- P4 checkout on **FBX export** (optional, opt-in) — **not wired yet**; see [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md). Project **File → Save** P4 prepare is shipped separately (`prepare_output_for_write`).
+- P4 checkout on **FBX export** — **shipped (preflight before bake)** when project `versionControl=perforce` + path in scope + cgmP4 connected; writability preflight always for FBX modes. See [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md).
 - Artist Google Doc wording (this doc can seed that later)
 - Set Tools UI quirks, skin import clutter, missing Maya plugins (`mtoa`, `TitanDDS`, etc.)
 - Post-bake anim filters (`PostBake.py`, AnimFilter tool) except where they affect scene state before export
@@ -52,7 +52,8 @@ flowchart TD
   Mayapy --> Batch[BatchExport]
   Batch --> ExportScene
   ExportScene --> Discover[Export root discovery]
-  ExportScene --> Bake[bakeAndPrep.Bake]
+  Discover --> Preflight[export preflight]
+  Preflight --> Bake[bakeAndPrep.Bake]
   ExportScene --> Branch{Referenced?}
   Branch -->|yes| PrepRef[bakeAndPrep.Prep]
   Branch -->|no| PrepNonRef[bakeAndPrep.export_prep_non_referenced]
@@ -69,7 +70,8 @@ flowchart TD
 | [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `RunExportCommand`, `BatchExport`, `ExportScene`, export root discovery, mode flags, FBX pathing, `_export_transforms_after_mesh_strip` |
 | [`cgm/core/tools/bakeAndPrep.py`](../../cgmToolsPy3/cgm/core/tools/bakeAndPrep.py) | `Bake`, `Prep`, `export_prep_non_referenced`, tdSet helpers, unparent/constraints/select helpers |
 | [`cgm/core/mrs/lib/batch_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py) | mayapy preflight — `ensure_fbx_plugin` **before** `import Scene` |
-| [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | **`prepare_output_for_write(mDat=)`** (project save; P4 when `versionControl=perforce`); export writability, `.bak` sidecar cleanup, `ExportOutputNotWritableError`; **`prepare_export_output_for_write()` planned** for FBX |
+| [`cgm/core/mrs/lib/scene_export_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/scene_export_utils.py) | **`resolve_export_fbx_paths`** — planned FBX outputs before bake |
+| [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | **`prepare_export_output_for_write`**, **`preflight_export_output_paths`**; export writability, `.bak` sidecar cleanup, `ExportOutputNotWritableError` |
 | [`cgm/core/cgm_General.py`](../../cgmToolsPy3/cgm/core/cgm_General.py) | `ensure_fbx_plugin`, `fbx_export_preamble`, `fbx_export_selection`, export result summary |
 
 ---
@@ -100,17 +102,56 @@ High-level order inside `ExportScene`:
 2. **Export root discovery** — if `exportObjs` empty, scan `*:export_tdSet` and build context hints
 3. Camera handling — constrained cameras may become `exportCam`
 4. Mode resolution and path build (`exportAnimPath`, `exportAssetPath`, cutscene nesting)
-5. Rename scene to `*_baked.mb` (safety copy target)
-6. **`Bake(exportObjs, …)`** — unless `exportStatic`; frame range from `AnimList` shot list when present (see **Shot list and bake frame range** below)
-7. **`ensure_fbx_plugin`** — before any FBX write
-8. **Per export hint** (`for obj in exportObjs`):
+5. **`AnimList` load** + effective export name (`noShotListExportName`)
+6. **Export preflight** — `resolve_export_fbx_paths()` then `preflight_export_output_paths()` for all planned FBX paths **before bake** (writability always; P4 when VC=perforce + connected). Interactive export: P4 checkout/add **confirm** unless **Options → Auto Check Out Export Files** is on (silent `p4 edit`/`p4 add`). Mayapy batch: silent checkout when option on or `logExportSummary=False`; requires batch payload **P4 context** (see below).
+7. Rename scene to `*_baked.mb` (safety copy target)
+8. **`Bake(exportObjs, …)`** — unless `exportStatic`; frame range from `AnimList` shot list when present (see **Shot list and bake frame range** below)
+9. **`ensure_fbx_plugin`** — before any FBX write
+10. **Per export hint** (`for obj in exportObjs`):
    - Referenced → `Prep(…)`
    - Non-referenced → `export_prep_non_referenced(…)`
    - Optional **`deleteMesh`** strip on resolved export transforms (anim/cutscene only; see project option)
    - `_export_transforms_after_mesh_strip` when `deleteMesh`; direct `export_tdSet` members are never stripped
    - `mc.select(exportTransforms, hi=True)`
    - FBX export (per mode path rules)
-9. Export result summary (`log_export_results_summary`)
+11. Export result summary (`log_export_results_summary`)
+
+---
+
+### Export preflight — Auto Check Out Export Files
+
+Scene **Options → Export → Auto Check Out Export Files** (`cgmVar_sceneUI_auto_checkout_export_files`, default **off**).
+
+| Setting | Interactive export P4 behavior |
+|---------|-------------------------------|
+| **Off** (default) | Checkout/add **confirm dialog** before bake; Cancel → stage `export_preflight`, reason `Save cancelled` |
+| **On** | Silent **`p4 edit`** / **`p4 add`** on each planned FBX path |
+
+**Still fails** (no auto-fix) when: file out of date, locked/open elsewhere, not in client view, P4 disconnected + read-only, or checkout/add subprocess error.
+
+`confirm_p4` rule in `ExportScene`:
+
+```text
+confirm_p4 = logExportSummary and not autoCheckoutExportFiles
+```
+
+Interactive: option **On** → `confirm_p4=False`. Batch/mayapy sets `logExportSummary=False` → `confirm_p4=False` when auto-checkout is enabled via payload or optionVar.
+
+### Mayapy batch — P4 context payload
+
+Standalone **mayapy** has no Scene session. Queue export (**Use Maya Standalone**) embeds in each batch item (via `batch_export_context_from_ui`):
+
+| Field | Purpose |
+|-------|---------|
+| `projectConfig` | Project `.cfg` path → restores `cgmVar_projectCurrent` before export |
+| `p4User` / `p4Client` | cgmP4 connection from interactive Maya when batch file was built |
+| `autoCheckoutExportFiles` | Scene option at batch build time |
+
+`batch_utils.apply_batch_export_context` + mayapy script preamble run before `Scene.BatchExport`. **Regenerate `mrsScene_batch.py`** after syncing when P4 connection or project changes — old batch scripts lack these fields.
+
+Log markers: `batch project cfg:`, `batch P4 context:`, `export preflight P4 | confirm_p4=… autoCheckout=… project=…`.
+
+Does **not** enable P4 when project `versionControl` is not `perforce`. See [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md).
 
 ---
 
@@ -482,6 +523,7 @@ See **Export Options Data Flow** above for schema, cfg persistence, and UI wirin
 | Stage | Typical cause | Log grep |
 |-------|---------------|----------|
 | `path_resolve` | Invalid open-file tokens, missing export directory | `RunExportCommand \| Invalid open file` |
+| `export_preflight` | Read-only FBX, P4 out-of-date, checkout cancelled (option off), locked/not-in-client | `export preflight`, `Export output not writable` |
 | `bake` | Missing/empty bake set, bake exception | `Bake stage failed` |
 | `prep` | `Prep()` returned False, NS merge fail, non-ref prep exception | `Prep stage failed`, `Non-referenced prep failed` |
 | `select` | No targets after prep or mesh strip | `No export targets after`, `No export DAG to select after mesh strip` |
@@ -508,22 +550,26 @@ Run in Maya after export pipeline changes:
 3. **Cutscene two-namespace** — Crane + CrateBase, optional `deleteMesh`, per-shot files under `flow/`
 4. **Rig multi-root** — single combined FBX
 5. **Static (mode 4)** — no prep logs; FBX still writes
-6. **Batch mayapy** — one-item smoke; FBX plugin loaded before Scene import
+6. **Batch mayapy** — one-item smoke; FBX plugin loaded before Scene import; batch payload includes **`projectConfig`** + **`p4User`**/**`p4Client`** when cgmP4 connected at build time
 7. **Mode 0 bake** — bake + prep run; no FBX write
 8. **Shot list bake range** — scene with `AnimListNode` shot e.g. `[1673, 1805, 132]` → log `ExportScene >> Bake | start: 1673 | end: 1805` (not 132); multi-shot unions min start / max end
+9. **Export preflight** — locked depot FBX: error/dialog before `ExportScene >> Bake | start:` (not after prep). With **Auto Check Out Export Files** on: silent checkout when file only needs edit/add; out-of-date still fails.
+10. **Auto checkout option** — Perforce project, FBX not checked out: option **Off** → confirm dialog; **On** → no dialog, file opened for edit before bake
+11. **Mayapy batch + Auto Check Out** — connect cgmP4 in interactive Maya → queue export (regenerates batch file) → standalone checkout FBX before bake; log shows `batch P4 context` and `export preflight P4 | project=<cfg path>`
 
 ---
 
 ## Related Documentation
 
 - **[Branch_UnrealWorkflow.md](../Branches/Branch_UnrealWorkflow.md)** — timeline of export fixes and PR notes
-- **[Feature_PerforceIntegration.md](Feature_PerforceIntegration.md)** — optional P4 layer: **project save prepare shipped** (`prepare_output_for_write`); **FBX export prepare next** (`prepare_export_output_for_write`, `useP4OnExport`); see [`Branch_p4.md`](../Branches/Branch_p4.md)
+- **[Feature_PerforceIntegration.md](Feature_PerforceIntegration.md)** — optional P4 layer: **`prepare_export_output_for_write`** preflight before bake; see [`Branch_p4.md`](../Branches/Branch_p4.md)
 - **[NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature doc conventions (this file lives under `Features/` at cgmToolsDev root)
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — branch doc format
 
 ### Code references (py3)
 
 - [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) — `ExportScene`, `BatchExport`, `RunExportCommand`
+- [`cgm/core/mrs/lib/batch_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py) — mayapy batch file, **`batch_export_context_*`**
 - [`cgm/core/tools/bakeAndPrep.py`](../../cgmToolsPy3/cgm/core/tools/bakeAndPrep.py) — bake/prep implementation
 
 ---
@@ -532,7 +578,10 @@ Run in Maya after export pipeline changes:
 
 | Date | Summary |
 |------|---------|
-| 2026-08-13 | P4 cross-ref — project save uses `prepare_output_for_write`; export P4 prepare still planned |
+| 2026-08-18 | Mayapy batch P4 context — `projectConfig`, `p4User`, `p4Client`, `autoCheckoutExportFiles` in batch payload; `batch_export_context_from_ui` / bootstrap |
+| 2026-08-17 | **Auto Check Out Export Files** — Scene Options → Export; `cgmVar_sceneUI_auto_checkout_export_files`; silent P4 checkout/add on export when on |
+| 2026-08-17 | FBX export preflight — `resolve_export_fbx_paths` + `preflight_export_output_paths` before bake; failure stage `export_preflight` |
+| 2026-08-13 | P4 cross-ref — project save uses `prepare_output_for_write`; export P4 preflight shipped |
 | 2026-06-15 | Initial feature doc — modes, tdSets, prep invariants, namespace/path rules, pattern cards, troubleshooting (post delete-selection + unparent fixes) |
 | 2026-06-15 | Added Export Options Data Flow — schema, cfg, Project tab UI, RunExportCommand/batch payload wiring |
 | 2026-07-02 | Empty shot list fallback — single FBX when per-shot option on but no shots; `No FBX files written` guard |
