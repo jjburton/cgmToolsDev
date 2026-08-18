@@ -4,8 +4,8 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Active — FBX export preflight + Scene auto checkout + mayapy batch P4 context + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit shipped; **`useP4OnExport` export-only flag still TBD** |
-| **Last Updated** | August 18, 2026 (batch export P4 context + cgmP4 revert + batch script edit-only) |
+| **Status** | Active — FBX export preflight + Scene auto checkout + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit shipped; **`useP4OnExport` export-only flag still TBD** |
+| **Last Updated** | August 18, 2026 (batch auto checkout gate + all-path preflight + P4 prepare summary) |
 | **Owners** | TBD |
 | **Audience** | Dev / TA — design contract for optional P4 incorporation in cgm tools |
 | **Branch** | [`Branch_p4.md`](../Branches/Branch_p4.md) |
@@ -146,11 +146,13 @@ Low-level writers (e.g. **`save_ccl`**) may accept **`skip_prepare=True`** when 
 | `path_utils.prepare_output_for_write(mDat=)` | **Shipped (Slice B)** — project cfg save; fstat, out-of-date block, checkout/add confirm |
 | `path_utils.PathWritePrepareError` | Save prepare failure (out of date, locked, cancelled checkout) |
 | `path_utils.ExportOutputNotWritableError` | Export message suggests manual `p4 edit` |
-| `path_utils` session list | `record/get/clear_non_writable_export_paths()` for batch summary |
+| `path_utils` export prepare ledger | `record/get/clear_export_prepare_records()`, `log_export_prepare_summary()` — structured P4 outcome per path (edit/add/skipped/failed) with optional `sceneFile` |
+| `path_utils` session list (legacy) | `get_non_writable_export_paths()` derived from ledger failures |
 | `cgm_General.fbx_export_selection()` | Calls writability check before `FBXExport`; ExportScene preflight runs earlier (before bake) |
-| `Scene.BatchExport` | Clears path list at start; logs non-writable rollup at end |
+| `Scene.BatchExport` | Clears ledger at start; logs grouped P4-prepare rollup at end via `log_export_prepare_summary` |
 | `cgm.core.lib.perforce` | Connectivity + path query + write slice; session cache in **`perforce_session`** |
-| `cgm/core/tools/p4Tool.py` | **cgmP4** — window reuse, cache-first refresh, Opened + **Shelved Files** changelist sections (collapsible frame), batch R/S/**Sh** and D/**Mv**/Sub, Sync Workspace, path Checkout; Setup → Reload uses standard cgm `reload()` |
+| `cgm/core/tools/p4Tool.py` | **cgmP4** — window reuse, cache-first refresh, Opened + **Shelved Files** changelist sections, batch R/S/**Sh** and D/**Mv**/Sub, Sync Workspace, path Checkout; Setup → Reload uses standard cgm `reload()` |
+| `cgm/core/tools/p4UnknownTool.py` | **Find Unknowns** — project-scoped standalone window (Scene → Tools → Perforce); ext/search filters, batch Add with changelist picker |
 | `cgm/core/tools/lib/project_utils.py` | `versionControl` schema + `project_uses_perforce(mDat)` |
 | `cgm/core/mrs/Scene.py` + `scene_utils.py` | Scene browser file-row P4 **itc + alias suffix** when versionControl + connected (batch fstat per column load) |
 | `cgm.lib.zoo.zooPy.perforce` | Vendored zooPy; reference only |
@@ -198,7 +200,7 @@ When Project **General → versionControl = perforce** and cgmP4 / Project P4 ro
 | File | Responsibility |
 |------|----------------|
 | [`cgm/core/lib/perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) | Subprocess `p4` wrapper — **only** module that spawns `p4`; connectivity + write APIs shipped |
-| [`cgm/core/lib/perforce_session.py`](../../cgmToolsPy3/cgm/core/lib/perforce_session.py) | Session `_CACHE` — connection info + **`fstat_by_path`**; flush via `flush_status_cache()` or `cgmGEN._reloadMod(perforce_session)` |
+| [`cgm/core/lib/perforce_session.py`](../../cgmToolsPy3/cgm/core/lib/perforce_session.py) | Session `_CACHE` — connection info + **`fstat_by_path`** + **`unknown_files`**; flush via `flush_status_cache()` or `cgmGEN._reloadMod(perforce_session)` |
 | [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | **`prepare_output_for_write(mDat=)`** global save prepare; **`prepare_meta_files_for_write`**, **`prepare_export_output_for_write`**, **`preflight_export_output_paths`**; shared helpers **`get_project_mDat`**, **`path_in_p4_scope`**, … |
 | [`cgm/core/mrs/lib/scene_export_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/scene_export_utils.py) | **`resolve_export_fbx_paths`** — planned FBX outputs before bake |
 | [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | **`ExportScene`** export preflight before bake; Save Version / **meta sidecars** (Refresh Data, Update Thumb); Scene browser P4 UI |
@@ -212,8 +214,9 @@ When Project **General → versionControl = perforce** and cgmP4 / Project P4 ro
 | [`cgm/core/mrs/Builder.py`](../../cgmToolsPy3/cgm/core/mrs/Builder.py) | MRS batch script writer — **`confirm_p4=False`** |
 | [`cgm/core/cgm_General.py`](../../cgmToolsPy3/cgm/core/cgm_General.py) | `fbx_export_selection` — defense-in-depth writability at write time; preflight runs earlier in ExportScene |
 | [`cgm/core/tools/lib/project_utils.py`](../../cgmToolsPy3/cgm/core/tools/lib/project_utils.py) | `project_uses_perforce(mDat)`; `versionControl` in `d_project` schema |
-| [`cgm/core/tools/lib/tool_calls.py`](../../cgmToolsPy3/cgm/core/tools/lib/tool_calls.py) | `cgmP4Tool()` — reuses window; no reload on open |
+| [`cgm/core/tools/lib/tool_calls.py`](../../cgmToolsPy3/cgm/core/tools/lib/tool_calls.py) | `cgmP4Tool()` — reuses window; `p4FindUnknownsTool()` — Find Unknowns window |
 | [`cgm/core/tools/p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | cgmP4 UI; Setup → Reload flushes session cache |
+| [`cgm/core/tools/p4UnknownTool.py`](../../cgmToolsPy3/cgm/core/tools/p4UnknownTool.py) | Find Unknowns UI — project content only; cache-first load; Setup → Reload |
 
 ### Planned API (v1)
 
@@ -224,7 +227,7 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | Function | Responsibility |
 |----------|----------------|
 | `get_connection_prefs()` | Read `cgmVar_p4_user` / `cgmVar_p4_client` Maya optionVars |
-| `save_connection_prefs(p4_user, p4_client)` | Write optionVars; clears P4 session cache |
+| `save_connection_prefs(p4_user, p4_client)` | Write optionVars; clears P4 session cache **only when user or client changes** |
 | `resolve_connection(p4_user, p4_client)` | Args, then optionVars, then `CGM_P4USER`/`CGM_P4CLIENT`, then `P4USER`/`P4CLIENT` env |
 | `is_available(p4_user, p4_client)` | `p4 -u -c -ztag info` succeeds; session cache |
 | `connection_info(p4_user, p4_client)` | Parsed `-ztag info` — userName, clientName, clientRoot, clientStream, … |
@@ -245,6 +248,12 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `query_project_p4_status(p4_user, p4_client, force=False, …)` | Lightweight connected/label dict for Project General UI + Scene P4 column gate; **no routine logging** (cache hit/miss at `log.debug`; user reports via `query_status_report` / Print Log) |
 | `flush_status_cache()` | Clear session cache in place (`perforce_session.clear()`) — write paths, Refresh |
 | `reload_session_cache()` | Flush buffer via `cgmGEN._reloadMod(perforce_session)` and rebind — dev / manual flush |
+| `collect_unknown_files(root_path, …)` | Disk walk under root → batch fstat for paths not in `depot_paths` → filter `classify_file_status_ui == 'unknown'` → session **`unknown_files`** cache |
+| `get_cached_unknown_files(root_path, …)` | Cache hit for unknown list at root (no rescan) |
+| **Find Unknowns ext filter** | Blue-tint `MelGridLayout` (6 columns); **All/None** on control row after Query; **Search:** field + clear (Scene scroll-list pattern) on loaded rows |
+| `invalidate_unknown_paths(paths, …)` | Drop paths from unknown cache (after successful `p4 add`) |
+| `flush_unknown_cache(p4_user, p4_client)` | Clear unknown cache (all or scoped); also cleared on full fstat flush |
+| `DEFAULT_P4_CACHE_DIR_MASK` | Base dir mask for client-root scans (`meta`, `.mayaSwatches`, …) |
 
 Script Editor:
 
@@ -260,11 +269,14 @@ P4UTIL.query_status_report(
 
 **Connection model:** Server commands use explicit `p4 -u USER -c CLIENT -ztag …` (not registry/cwd discovery). Pass `p4_user` / `p4_client` args, save via **cgmP4** tool (optionVars), or set env `CGM_P4USER` / `CGM_P4CLIENT`. Both user and client are required for server queries.
 
-**cgmP4 tool:** Help menu → Other → **cgmP4**. Sections: Connection (Save / **Print Log** / Refresh / **Sync Workspace**), Status, **Opened Files** (animFilter-style changelist rows: master checkbox + **collapsible frame** + **R** / **S** / **Sh**; per-file checkbox + Revert/Submit/**Shelve**), **Shelved Files** (same changelist layout, blue-tint headers; per-file **Delete**; header **D** / **Mv** / **Sub**), Path Query (Query / **Checkout**). Repeated opens **reuse the existing window** when it is still alive (near instant). On first create, UI reads the **session cache** when warm (no p4 subprocesses). **Refresh** runs `query_connection(force=True)` and updates the cache for the UI and **Print Log**; **Print Log** calls `log_status_report()` on that buffer (no second query). **Setup → Reload** / **Reset**: `reload_dependencies()` (`perforce_session` + `perforce`) → `cgmGEN._reloadMod(p4Tool)` → `super().reload()` (`self.__class__()` window rebuild) — same pattern as dynFK / mocapBake tools; use after py edits, not Refresh alone. **R** / **S** / **Sh**: checked files only when subset selected; whole changelist when all or none checked. **Submit** shows an **interruptable Maya progress bar** (default CL multi-file subset: create CL → reopen → submit). **Shelved Files D** / row **Delete**: `p4 shelve -d -Af` (subset or whole CL). **Mv**: unshelve checked files (or all if none checked) into a user-specified target changelist (`number`, `default`, or `new`), then delete those files from the source shelf — target ends with **local opens** (red triangle), not shelved-only. **Sub**: `p4 submit -e` whole shelved changelist. Submit and Shelve prompt for description (`style='text'`) before any P4 write. Section empty messages (`(no shelved changelists)`, etc.) use a persistent full-width centered row (Status pattern) toggled vs dynamic content frame.
+**cgmP4 tool:** Help menu → Other → **cgmP4**. Sections: Connection (Save / **Print Log** / Refresh / **Sync Workspace**), Status, **Opened Files** (animFilter-style changelist rows: master checkbox + **collapsible frame** + **R** / **S** / **Sh**; per-file checkbox + Revert/Submit/**Shelve**), **Shelved Files** (same changelist layout, blue-tint headers; per-file **Delete**; header **D** / **Mv** / **Sub**), Path Query (Query / **Checkout**). Repeated opens **reuse the existing window** when it is still alive (near instant). **Refresh** runs `query_connection(force=True)` and updates the cache for the UI and **Print Log**; **Print Log** calls `log_status_report()` on that buffer (no second query). **Setup → Reload** / **Reset**: `reload_dependencies()` (`perforce_session` + `perforce`) → `cgmGEN._reloadMod(p4Tool)` → `super().reload()` (`self.__class__()` window rebuild) — same pattern as dynFK / mocapBake tools; use after py edits, not Refresh alone. **R** / **S** / **Sh**: checked files only when subset selected; whole changelist when all or none checked. **Submit** shows an **interruptable Maya progress bar** (default CL multi-file subset: create CL → reopen → submit). **Shelved Files D** / row **Delete**: `p4 shelve -d -Af` (subset or whole CL). **Mv**: unshelve checked files (or all if none checked) into a user-specified target changelist (`number`, `default`, or `new`), then delete those files from the source shelf — target ends with **local opens** (red triangle), not shelved-only. **Sub**: `p4 submit -e` whole shelved changelist. Submit and Shelve prompt for description (`style='text'`) before any P4 write. Section empty messages (`(no shelved changelists)`, etc.) use a persistent full-width centered row (Status pattern) toggled vs dynamic content frame.
+
+**Find Unknowns window:** Scene → Tools → **Perforce..** section → **Find Unknowns** (only when project **versionControl = perforce**). Project **content** path + project **dirMask** only (no client-root scope). Read-only **User** / **Client** from cgmP4 optionVars — set connection in cgmP4 first. On open: load session **`unknown_files`** cache when warm (Project **Cache** or prior Query); empty state prompts **Query** or Project Cache. **Query** runs `collect_unknown_files` (warns when fstat cache is cold). Ext filter grid, search, checked/total count, per-file and batch **Add** with changelist picker (**Default** / **Existing...** / **New...**). After Add, list updates locally; refresh cgmP4 **Opened Files** to see new opens. **Setup → Reload** on Find Unknowns reloads `p4UnknownTool` + `perforce`. Unknown cache is populated during Project **Cache** warm (after fstat store) and on Find Unknowns **Query**.
 
 ```python
 import cgm.core.tools.lib.tool_calls as TOOLCALLS
 TOOLCALLS.cgmP4Tool()
+TOOLCALLS.p4FindUnknownsTool()
 ```
 
 #### Write actions (UI test slice — shipped)
@@ -356,10 +368,10 @@ PATHUTIL.prepare_output_for_write(cfg_path, mDat=project_dat)  # Scene File → 
 | Function | Responsibility |
 |----------|----------------|
 | `scene_export_utils.resolve_export_fbx_paths()` | Planned FBX paths from mode, shot list, export roots (pre-bake) |
-| `path_utils.preflight_export_output_paths()` | Prepare each unique planned path; first failure aborts |
+| `path_utils.preflight_export_output_paths()` | Prepare each unique planned path; **all paths checked** before raise; **`ExportPreflightFailedError`** on failure list |
 | `path_utils.prepare_export_output_for_write()` | Sidecar cleanup + **`prepare_output_for_write`** (writability; P4 when VC=perforce + in-scope + connected) |
-| `path_utils.prepare_output_for_write(…, p4_add=True)` | When **`p4_add=False`**: **`p4 edit`** only — skip **`p4 add`** for not-on-depot paths (batch scratch scripts) |
-| Scene **Auto Check Out Export Files** | `cgmVar_sceneUI_auto_checkout_export_files` (default off) | Export preflight: when on, `confirm_p4=False` (silent edit/add). Mayapy batch: requires **`projectConfig`** + **`p4User`**/**`p4Client`** in batch payload |
+| `path_utils.prepare_output_for_write(…, p4_checkout=True, p4_add=True)` | **`p4_checkout=False`**: skip edit/add (batch Auto Check Out off). **`p4_add=False`**: edit-only — skip add for not-on-depot paths |
+| Scene **Auto Check Out Export Files** | `cgmVar_sceneUI_auto_checkout_export_files` (default off) | **`p4_checkout`** when on (or interactive). Batch off → writability-only. Mayapy: **`projectConfig`** + **`p4User`**/**`p4Client`** in batch payload |
 | `useP4OnExport` | Export-only opt-out/opt-in separate from `versionControl` — **TBD** |
 
 Normative sequence:
@@ -367,9 +379,11 @@ Normative sequence:
 ```
 ExportScene (after mode + AnimList, before bake)
   → scene_export_utils.resolve_export_fbx_paths()
-  → path_utils.preflight_export_output_paths(..., confirm_p4=logExportSummary and not autoCheckoutExportFiles)
-       → prepare_export_output_for_write per path
-       → prepare_output_for_write (VC=perforce + in-scope + connected → P4; else writability only)
+  → path_utils.preflight_export_output_paths(
+       p4_checkout = autoCheckoutExportFiles or logExportSummary,
+       confirm_p4 = logExportSummary and not autoCheckoutExportFiles)
+       → prepare_export_output_for_write per path (all paths; aggregate failures)
+       → prepare_output_for_write (VC=perforce + connected → P4 when p4_checkout; else writability only)
   → bake / prep / …
   → fbx_export_selection → check_export_output_writable (defense in depth)
   → FBXExport MEL
@@ -378,6 +392,30 @@ ExportScene (after mode + AnimList, before bake)
 `autoCheckoutExportFiles` from `RunExportCommand`, batch payload, or optionVar `cgmVar_sceneUI_auto_checkout_export_files` when kwarg omitted. **Mayapy:** `batch_export_context_from_ui` copies project cfg + cgmP4 user/client when the batch file is built — regenerate batch script after sync.
 
 Optional later: `create_changelist(description)`, per-path sync, revert-on-failed-export rollback, queue-time batch preflight without opening scene (incomplete for per-shot).
+
+#### Batch export P4 prepare summary (shipped)
+
+Session ledger in **`path_utils`** records one entry per export path per stage (`export_preflight`, `fbx_export`):
+
+| Outcome | Meaning |
+|---------|---------|
+| `p4_edit` / `p4_add` / `p4_already_open` | P4 checkout succeeded or file already open |
+| `writable_no_p4` | Connected P4 run; no checkout required |
+| `p4_skipped_vc_off` | Project `versionControl` not perforce |
+| `p4_skipped_offline` | P4 not connected — writability-only |
+| `p4_skipped_add_disabled` | Edit-only prepare (`p4_add=False`) |
+| `p4_skipped_auto_checkout_off` | Auto Check Out Export Files off (batch writability-only) |
+| `p4_not_in_client` / `p4_out_of_date` / `p4_locked` / `p4_checkout_failed` / `p4_user_cancel` | P4 prepare failed |
+| `not_writable` | Local writability check failed |
+
+**API:** `clear_export_prepare_records()` at batch start; `log_export_prepare_summary(_str_func)` at batch end. Optional `prepare_context={'sceneFile': ...}` on preflight attaches scene path to each ledger row. Failed batch items may include `p4Outcome` / `p4Reason` from `get_last_export_prepare_failure()`. Multi-path preflight failures: **`ExportPreflightFailedError.failures`** (list of `{path, reason, p4Outcome?, p4Reason?}`).
+
+**Example log:**
+
+```
+BatchExport | Batch P4 prepare summary | paths=8 | p4_edit=6 | p4_add=0 | p4_already_open=1 | skipped=1 | failed=0
+BatchExport |   [p4_edit] D:\p4\...\shot01_anim.fbx  |  scene=...\flow_04.mb
+```
 
 ### Reference material (read-only)
 
@@ -402,7 +440,8 @@ Implement inside **`cgm.core.lib.perforce`**, not zooPy `getDefaultWorkingDir()`
 | `CGM_EXPORT_P4` | env `1`/`true`/`yes` | unset | Override for batch farm (export slice — planned) |
 | P4 session cache | `cgm.core.lib.perforce_session` | — | Module `_CACHE` holds `is_available`, `connection_info`, and full `query_connection` report keyed by `(user, client, scene_path)`. **Not** reloaded on cgmP4 open or `perforce.py` reload — survives both. Cleared in place on P4 writes (`flush_status_cache()`). Full flush: `reload_session_cache()` or `cgmGEN._reloadMod(perforce_session)`; cgmP4 **Setup → Reload** runs `reload_dependencies()` + module reload + `super().reload()` (standard cgm tool rebuild). **Logging:** cache hit/miss in `query_connection` / `query_project_p4_status` is `log.debug` — avoid `log.info` on hot paths (Scene calls project status many times per column refresh) |
 | P4 offline / unavailable | — | skip silently | Fall back to `path_utils` writability check only |
-| `confirm_p4` on `prepare_output_for_write` | function kwarg | **`True`** | Interactive save shows checkout/add confirm; set **`False`** for batch export/farm |
+| `p4_checkout` on export preflight | function kwarg | **`True`** when interactive or Auto Check Out on | Batch with Auto Check Out **off**: **`False`** — writability only, no `p4 edit` |
+| `confirm_p4` on `prepare_output_for_write` | function kwarg | **`True`** | Interactive export with Auto Check Out off; set **`False`** for silent checkout or batch with Auto Check Out on |
 | `p4_add` on `prepare_output_for_write` | function kwarg | **`True`** | Set **`False`** for scratch batch launcher scripts — edit depot files only, never **`p4 add`** |
 
 **Resolved:** Mayapy batch P4 uses **`projectConfig`** + **`p4User`**/**`p4Client`** copied from interactive Scene when the batch file is built — not auto-enabled from `p4 info` alone.
@@ -449,7 +488,7 @@ Complete before Phase 1 export wiring:
 - [ ] Export over existing synced FBX (read-only) → prepare with confirm or `confirm_p4=False` on farm → export succeeds
 - [ ] Export new FBX under depot path → auto add → file visible in `p4 opened`
 - [ ] P4 not installed / `p4 info` fails with flag on → skip P4; fail only if still read-only
-- [ ] Batch multi-shot: each path edited; summary shows no non-writable paths
+- [ ] Batch multi-shot: each path edited; summary shows P4 edit/add counts and no failed outcomes
 - [ ] Another user's lock → fail with actionable message (not FBX I/O)
 - [ ] `.bak` sidecar present + read-only target → prepare clears/adds/edits as expected
 
@@ -504,15 +543,16 @@ Record decisions in the **Decisions log** as they are resolved.
 | 2026-08-17 | cgmP4 submit progress bar | Interruptable Maya bar via `progress_cb`; 3 steps for default CL multi-file subset |
 | 2026-08-18 | Mayapy batch P4 context | Batch payload: `projectConfig`, `p4User`, `p4Client`, `autoCheckoutExportFiles`; bootstrap in `BatchExport` / mayapy preamble |
 | 2026-08-18 | Batch scratch scripts edit-only | `p4_add=False` on `_batch_prepare_write_path` — no auto `p4 add` on `mrsScene_batch.py` |
-| 2026-08-18 | cgmP4 revert client-root paths | `resolve_client_disk_path` / `revert_opened_entry` — UNC `clientFile` from `p4 opened` → `D:\p4\...` via `p4 where` |
+| 2026-08-18 | Batch export P4 prepare summary | Structured ledger + `log_export_prepare_summary`; grouped edit/add/skipped/failed rollup at batch end |
+| 2026-08-18 | Export `p4_checkout` gate | Separate from `confirm_p4`; batch Auto Check Out off skips `p4 edit`/`p4 add` |
+| 2026-08-18 | All-path export preflight | `ExportPreflightFailedError` — check every planned FBX path before fail |
 
 ---
 
 ## Next phase (implementation order)
 
 1. **`useP4OnExport`** — optional export-only flag separate from `versionControl` (default off)
-2. **`Scene.BatchExport`** — richer P4-prepare rollup in batch summary (paths attempted vs skipped)
-3. Phase 0 audit items still open: FBX binary type, changelist policy
+2. Phase 0 audit items still open: FBX binary type, changelist policy
 
 ---
 
@@ -531,6 +571,8 @@ Record decisions in the **Decisions log** as they are resolved.
 | Date | Author | Summary |
 |------|--------|---------|
 | 2026-08-18 | Mayapy batch P4 + revert paths | Batch export context payload; `p4_add=False` for scratch batch scripts; cgmP4 `revert_opened_entry` / client-root path resolve |
+| 2026-08-18 | Batch auto checkout gate + all-path preflight | `p4_checkout`; `ExportPreflightFailedError` |
+| 2026-08-18 | Batch P4 prepare summary | Ledger + rollup |
 | 2026-08-17 | Auto Check Out Export Files | Scene option; silent export preflight when on |
 | 2026-08-17 | Default CL partial submit | Multi-file: `create_pending_change` + `reopen_paths` + `submit -c`; single: `submit -d`; pass `opened_entries` (not disk path re-resolve); never `submit -i` Change: default |
 | 2026-08-17 | cgmP4 submit progress bar | `progress_cb` on submit APIs; Maya interruptable bar; 3 steps for default CL multi-file subset |

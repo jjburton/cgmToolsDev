@@ -130,9 +130,43 @@ Use this template to start a new feature doc, then tailor sections based on the 
 
 ## Ready-Made Process
 1. **Create doc** using template above in `Features/` (cgmToolsDev root)
-2. **Link doc** in `Plan_Cursor.md` quick reference under appropriate category
+2. **Link doc** in `AGENTS.md` quick reference under appropriate category
 3. **Reference doc** in all related branch docs and PR notes
 4. **Update doc** post-merge to reflect final status and follow-up items
 
 Maintaining feature docs this way keeps the team aligned, makes onboarding easier, and ensures future work references an accurate, centralized source of truth.
+
+---
+
+## Worked Example: cgm Project Manager
+
+Use **[`Features/Feature_ProjectManager.md`](../Features/Feature_ProjectManager.md)** as a reference when documenting Maya tool features in this repo. It follows the template above but adapts sections to cgm conventions (py3 paths, optional P4, branch cross-links).
+
+### What to capture
+
+| Section | Project example |
+|---------|-----------------|
+| **Status & Overview** | Tool window name, primary py3 module path, audience (dev/TA vs artist manual) |
+| **Scope** | In: `.cfg` data, UI sections, path authority. Out: Scene browser loaders, Google Doc prose |
+| **Architecture** | Mermaid call graph; table of `Project.py` / `project_utils` / consumers |
+| **Configuration** | General fields (`versionControl`, **`dirMask`**, `nameStyle`); path merge rules |
+| **Cross-cutting rules** | Shared **`dirMask`** across scroll lists, Scene, P4 cache — document all consumers in one table |
+| **Testing** | Manual Maya checklist grouped by subsystem (core, mask, P4) |
+| **Revision history** | Date + one-line summary; point timeline detail to `Branch_p4.md` |
+
+### When to update
+
+- Schema change in **`project_utils`** (`l_projectDat`, defaults)
+- New path consumer (export, batch, Scene) reading **`userPaths_get`**
+- Mask or walk behavior change — update **every consumer row** in the feature doc
+- P4 slice wired through Project UI — link **`Feature_PerforceIntegration.md`** instead of duplicating P4 API tables
+
+### Branch vs feature split
+
+| Doc | Holds |
+|-----|--------|
+| **`Branch_p4.md`** | Dated entry: what shipped, files touched, verify status |
+| **`Feature_ProjectManager.md`** | Stable contract: mask semantics, APIs, checklists |
+
+Do not paste branch timeline prose into the feature doc beyond a short revision-history table.
 

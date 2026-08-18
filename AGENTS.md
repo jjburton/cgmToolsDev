@@ -30,6 +30,8 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 11. **Perforce integration design contract**: [`Features/Feature_PerforceIntegration.md`](Features/Feature_PerforceIntegration.md) — optional P4 layer; **`path_utils.prepare_*`** for saves (including **`prepare_meta_files_for_write`** for Scene meta sidecars); **`preflight_export_output_paths`** before FBX bake when VC=perforce. Timeline on [`Branches/Branch_p4.md`](Branches/Branch_p4.md).
 
+12. **cgm Project Manager design contract**: [`Features/Feature_ProjectManager.md`](Features/Feature_ProjectManager.md) — project `.cfg` schema, path authority, **`dirMask`** (Content/Export scroll lists, Scene, P4 cache), asset structure, Project-tool P4 row. Update when changing `Project.py`, `project_utils`, or shared mask/walk behavior.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.

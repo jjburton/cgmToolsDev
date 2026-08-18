@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: August 12, 2026  
-**Last Updated**: August 18, 2026 (batch export P4 context + cgmP4 revert path fix)  
+**Last Updated**: August 18, 2026 (Project Content/Export scroll lists + shared dirMask)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -17,11 +17,53 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - **[perforce_session.py](../../cgmToolsPy3/cgm/core/lib/perforce_session.py)** - Session `_CACHE` (survives module reload; flush via Setup → Reload)
 - **[perforce.py](../../cgmToolsPy3/cgm/core/lib/perforce.py)** - cgm P4 module (connectivity, write APIs, cache-first queries)
 - **[zooPy perforce.py](../../cgmToolsPy3/cgm/lib/zoo/zooPy/perforce.py)** - zooPy reference only (do not import from cgm core)
+- **[Feature_ProjectManager.md](../Features/Feature_ProjectManager.md)** - cgmProjectManager, project `.cfg`, paths, `dirMask`, Content/Export scroll lists
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch documentation format reference
 
 - **`.cursor/rules/perforce-checkout.mdc`** - Agent workflow when py3 files need P4 checkout before edit
 
 ## 🗓️ Timeline
+
+---
+
+### August 18, 2026 (y) - Project Content/Export scroll lists use project dirMask
+**What**: **cgmProjectManager** Content and Export directory scroll lists now filter with the same merged **`dirMask`** as Scene browser navigation and Project **P4 Cache** fstat warmup — base mask (`meta`, `.mayaSwatches`, `incrementalSave`, `cgmDat`, `mayaSwatches`) plus General **`dirMask`** comma field. Editing **`dirMask`** live-refreshes both scroll lists. **`path_utils.walk_below_dir`** mask checks are case-insensitive and prune masked dirs during `os.walk`.  
+**Files**:
+- EXTENDED: `cgm/core/tools/Project.py` — **`project_dir_mask`**, **`uiProject_build_dir_mask`**, **`uiProject_dirMask_refresh_lists`**; scroll list **`rebuild`** passes mask; **`uiProject_p4_cache_dir_mask`** uses shared helper
+- EXTENDED: `cgm/core/lib/path_utils.py` — case-insensitive **`l_mask`** + **`dirs[:]`** prune in **`walk_below_dir`**
+- NEW: `Features/Feature_ProjectManager.md` — design contract for Project tool, paths, mask consumers
+- EXTENDED: `Branches/Branch_p4.md`, `Guides/NewFeature_Guide.md`
+
+**Features**:
+- Mask parity: Project Content/Export trees, Scene **`l_dirMask`**, P4 fstat cache tree walk
+- **`dirMask`** text field change callback → rebuild Content + Export lists without Save
+- **`uiProject_fill`** builds **`self.l_dirMask`** and pushes to scroll lists before rebuild
+
+**Decisions**:
+- Single merge function **`project_dir_mask`** — avoid drift between P4 cache and UI trees
+- Lowercase normalized mask entries; walk/compare case-insensitive (matches Scene **`d.lower() in l_dirMask`**)
+
+**Status**: ✅ Code complete — verify masked folders hidden in Content/Export lists; custom **`dirMask`** token; P4 Cache skips same dirs
+
+---
+
+### August 18, 2026 (x) - Batch auto checkout gate + all-path export preflight
+**What**: Fixed batch export checking out depot FBX files when **Auto Check Out Export Files** was **off** — `confirm_p4=False` only skipped dialogs, not `p4 edit`. Export preflight now uses **`p4_checkout = autoCheckoutExportFiles or logExportSummary`** (batch + option off → writability-only; ledger **`p4_skipped_auto_checkout_off`**). **Multi-path preflight** (cutscene / per-namespace FBX): **`preflight_export_output_paths`** checks **all** planned paths before failing; raises **`ExportPreflightFailedError`** with full failure list (each path logged; user cancel on checkout dialog still aborts immediately).  
+**Files**:
+- EXTENDED: `cgm/core/lib/path_utils.py` — **`p4_checkout`** kwarg on export prepare chain; **`ExportPreflightFailedError`**; **`p4_skipped_auto_checkout_off`** ledger outcome
+- EXTENDED: `cgm/core/mrs/Scene.py` — preflight gates + multi-failure logging / `_preflight_ctx['failures']`
+- EXTENDED: `Features/Feature_SceneExportFlow.md`, `Features/Feature_PerforceIntegration.md`, `Branches/Branch_p4.md`
+
+**Status**: ✅ Maya verified — batch with Auto Check Out off fails read-only without checkout; cutscene preflight reports all locked/not-writable paths
+
+---
+
+### August 18, 2026 (w) - Batch export P4 prepare summary
+**What**: **`BatchExport`** end log now includes a structured **P4-prepare rollup** per export path — edit/add/already-open, skipped (VC off, offline, edit-only), and failed (out of date, locked, not writable) with optional **`sceneFile`** context from preflight. Session ledger in **`path_utils`**: **`record/get/clear_export_prepare_records`**, **`log_export_prepare_summary`**. Failed batch items may attach **`p4Outcome`** / **`p4Reason`**.  
+**Files**:
+- EXTENDED: `cgm/core/lib/path_utils.py` — export prepare ledger; recording in `_prepare_p4_for_write`, `prepare_output_for_write`, `check_export_output_writable`; `prepare_context` on preflight helpers
+- EXTENDED: `cgm/core/mrs/Scene.py` — `BatchExport` uses `clear_export_prepare_records` + `log_export_prepare_summary`; preflight passes `sceneFile`; batch `_resFail` P4 enrichment
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Features/Feature_SceneExportFlow.md`, `Branch_p4.md`
 
 ---
 
@@ -583,10 +625,10 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - [x] Subprocess cwd strategy (scene / project / getcwd) — implemented for queries
 - [x] Windows: hide p4 subprocess console windows (`CREATE_NO_WINDOW`)
 
-### Phase 2 — Export integration ← **preflight shipped; batch summary next**
+### Phase 2 — Export integration ← **preflight + batch summary shipped**
 - [x] Export preflight in **`ExportScene`** before bake — **`preflight_export_output_paths`** (entry (q))
-- [ ] **`Scene.BatchExport`** — richer P4-prepare rollup in batch summary (paths attempted vs skipped)
-- [ ] Structured `P4PrepareError` or extended writability error (optional)
+- [x] **`Scene.BatchExport`** — richer P4-prepare rollup in batch summary (paths attempted vs skipped) (entry (w))
+- [ ] Structured `P4PrepareError` or extended writability error (optional; deferred — ledger dicts sufficient)
 
 ### Phase 3 — Edge cases
 - [ ] New file in depot dir → `p4 add` (binary type if required)
@@ -598,7 +640,10 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - [ ] Interactive save (VC=perforce): out-of-date block, checkout confirm, cancel, already-open, locked-by-other, P4 offline — poses, animFilter, mocap, skinDat, Scene Save Version, **meta `.dat`/`.bmp`** (Slice C + entry (r) verify)
 - [ ] Non-P4 regression: no checkout dialogs; optional read-only depot hint only (Slice C verify)
 - [x] Scene browser: P4 popup Revert/Sync/Checkout/Submit + popup Refresh + popup **Delete** — no Maya crash on column reload (deferred `_defer_ui`)
-- [ ] P4-enabled export: synced read-only FBX auto-edit, new file add, batch rollup — preflight + mayapy batch checkout **Maya verified** (entries (q), (u), (v)); batch summary extensions still open
+- [x] Batch export P4 prepare summary — ledger + rollup (entry (w)); **Maya verified** (entry (w))
+- [x] Batch auto checkout gate — **`p4_checkout`** separate from **`confirm_p4`**; option off = no batch checkout (entry (x))
+- [x] Export preflight all-path check — **`ExportPreflightFailedError`** before bake (entry (x)); **Maya verified** cutscene multi-FBX
+- [ ] P4-enabled export: synced read-only FBX auto-edit when Auto Check Out **on**; new file add
 - [x] cgmP4 shelve + Shelved Files panel + Scene popup Shelve + Mv move-to-CL
 - [x] cgmP4 default changelist partial submit (subset **S**) — Maya verified (entry (s))
 - [x] Documentation updated for Slice B + Slice C global save + meta sidecars + session cache + scroll-list popup fix (Refresh/P4/Delete) + shelve/shelved panel + FBX export preflight + default CL submit + submit progress
@@ -646,15 +691,16 @@ Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_wri
 
 ##### 5. FBX export preflight (shipped)
 - `scene_export_utils.resolve_export_fbx_paths` + `path_utils.preflight_export_output_paths` before bake in ExportScene
+- **`p4_checkout`** / **`confirm_p4`** gates — batch respects Auto Check Out off (entry (x)); all paths checked before fail (entry (x))
 - Scene **Options → Auto Check Out Export Files** — silent P4 checkout/add on export when enabled (entry (u))
-- **Mayapy batch** — payload carries **`projectConfig`**, **`p4User`**, **`p4Client`**, **`autoCheckoutExportFiles`**; bootstrap before `BatchExport` (entry (v)). **Regenerate batch file** after sync when P4 context changes.
+- **Mayapy batch** — payload carries **`projectConfig`**, **`p4User`**, **`p4Client`**, **`autoCheckoutExportFiles`**; bootstrap before `BatchExport` (entry (v)). **Regenerate batch file** after sync when P4 context or auto-checkout option changes.
+- **Batch P4 prepare summary** — `log_export_prepare_summary` at batch end (entry (w))
 
 ##### 5b. Batch scratch scripts (shipped — edit-only)
 - **`batch_utils._batch_prepare_write_path`** — **`p4_add=False`**: **`p4 edit`** when on depot; skip **`p4 add`** for local-only scratch (`mrsScene_batch.py`, etc.)
 
-##### 6. Export-only P4 flag + batch summary (next)
+##### 6. Export-only P4 flag (next)
 - `cgm/core/tools/lib/project_utils.py` / Project UI — **`useP4OnExport`** (default off)
-- `cgm/core/mrs/Scene.py` — batch export P4-prepare rollup in summary
 - Optional: queue-time batch preflight without opening scene
 
 **Configuration:**
@@ -672,18 +718,19 @@ Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_wri
 7. **Mayapy batch P4**: copy interactive cgmP4 user/client + project cfg into batch payload — standalone has no Scene session (entry (v))
 8. **Batch scratch scripts**: never auto **`p4 add`** — edit-only prepare (entry (v))
 9. **cgmP4 revert paths**: use client-root disk path from **`p4 where`**, not raw UNC **`clientFile`** from **`p4 opened`** (entry (v))
+10. **Export `p4_checkout` vs `confirm_p4`**: **`confirm_p4`** controls dialogs only; **`p4_checkout`** gates **`p4 edit`/`p4 add`**. Batch with Auto Check Out off → **`p4_checkout=False`** (writability-only). Interactive always attempts checkout (`logExportSummary=True`) with or without confirm (entry (x))
+11. **Export preflight all-path**: check every planned FBX path; aggregate failures in **`ExportPreflightFailedError`** — no fail-fast on first locked/read-only path (entry (x))
 
 #### Breaking Changes
 None — P4 off by default; existing export behavior preserved.
 
 #### Next Steps
 1. **`useP4OnExport`** flag (default off) — export-only opt-in separate from `versionControl`
-2. **Batch export** — richer P4-prepare rollup in batch summary
-3. **Phase 0 audit:** Resolve open questions (FBX binary type, changelist policy, P4 error strings) before wide studio rollout
+2. **Phase 0 audit:** Resolve open questions (FBX binary type, changelist policy, P4 error strings) before wide studio rollout
 
 ---
 
-**Active** — Slice A/B/C + FBX export preflight + Scene auto checkout export + mayapy batch P4 context + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit shipped; **`useP4OnExport`** optional next.
+**Active** — Slice A/B/C + FBX export preflight + Scene auto checkout export + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit shipped; **`useP4OnExport`** optional next.
 
 ---
 
@@ -723,5 +770,5 @@ None — P4 off by default; existing export behavior preserved.
 
 ---
 
-*Last Updated: August 18, 2026 (batch export P4 context + cgmP4 revert path fix)*  
+*Last Updated: August 18, 2026 (Project Content/Export scroll lists + shared dirMask)*  
 *Branch Status: Active — useP4OnExport optional next*

@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: August 18, 2026 (mayapy batch P4 context + Auto Check Out Export Files)
+- **Last Updated**: August 18, 2026 (batch auto checkout gate + all-path preflight + P4 prepare summary)
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
@@ -103,7 +103,7 @@ High-level order inside `ExportScene`:
 3. Camera handling — constrained cameras may become `exportCam`
 4. Mode resolution and path build (`exportAnimPath`, `exportAssetPath`, cutscene nesting)
 5. **`AnimList` load** + effective export name (`noShotListExportName`)
-6. **Export preflight** — `resolve_export_fbx_paths()` then `preflight_export_output_paths()` for all planned FBX paths **before bake** (writability always; P4 when VC=perforce + connected). Interactive export: P4 checkout/add **confirm** unless **Options → Auto Check Out Export Files** is on (silent `p4 edit`/`p4 add`). Mayapy batch: silent checkout when option on or `logExportSummary=False`; requires batch payload **P4 context** (see below).
+6. **Export preflight** — `resolve_export_fbx_paths()` then `preflight_export_output_paths()` for all planned FBX paths **before bake** (writability always; P4 when VC=perforce + connected). **All paths are checked** before fail; multi-path cutscene exports log every failure (`ExportPreflightFailedError`). Interactive: checkout with confirm unless **Auto Check Out Export Files** is on. Batch/mayapy: checkout **only** when Auto Check Out is on (`p4_checkout`); requires batch payload **P4 context** (see below).
 7. Rename scene to `*_baked.mb` (safety copy target)
 8. **`Bake(exportObjs, …)`** — unless `exportStatic`; frame range from `AnimList` shot list when present (see **Shot list and bake frame range** below)
 9. **`ensure_fbx_plugin`** — before any FBX write
@@ -122,20 +122,27 @@ High-level order inside `ExportScene`:
 
 Scene **Options → Export → Auto Check Out Export Files** (`cgmVar_sceneUI_auto_checkout_export_files`, default **off**).
 
-| Setting | Interactive export P4 behavior |
-|---------|-------------------------------|
-| **Off** (default) | Checkout/add **confirm dialog** before bake; Cancel → stage `export_preflight`, reason `Save cancelled` |
-| **On** | Silent **`p4 edit`** / **`p4 add`** on each planned FBX path |
+| Setting | Interactive export P4 behavior | Batch / mayapy P4 behavior |
+|---------|-------------------------------|----------------------------|
+| **Off** (default) | Checkout/add **confirm dialog** before bake; Cancel → stage `export_preflight`, reason `Save cancelled` | **No** `p4 edit`/`p4 add` — writability check only; fails on read-only depot FBX |
+| **On** | Silent **`p4 edit`** / **`p4 add`** on each planned FBX path | Silent checkout (no dialogs) |
 
-**Still fails** (no auto-fix) when: file out of date, locked/open elsewhere, not in client view, P4 disconnected + read-only, or checkout/add subprocess error.
+**Still fails** (no auto-fix) when: file out of date, locked/open elsewhere, not in client view, P4 disconnected + read-only, or checkout/add subprocess error. Out-of-date / locked blocks apply only when checkout is attempted (interactive or Auto Check Out on).
 
-`confirm_p4` rule in `ExportScene`:
+Export preflight gates in `ExportScene`:
 
 ```text
+p4_checkout = autoCheckoutExportFiles or logExportSummary
 confirm_p4 = logExportSummary and not autoCheckoutExportFiles
 ```
 
-Interactive: option **On** → `confirm_p4=False`. Batch/mayapy sets `logExportSummary=False` → `confirm_p4=False` when auto-checkout is enabled via payload or optionVar.
+Interactive: option **On** → silent checkout. Batch with option **Off** → `p4_checkout=False` (ledger outcome `p4_skipped_auto_checkout_off`). Batch with option **On** → silent checkout. **Regenerate batch file** after changing the option so payload `autoCheckoutExportFiles` matches UI.
+
+### Export preflight — all paths before fail
+
+Cutscene and multi-FBX exports plan several output paths per scene. Preflight **does not fail fast** on the first locked or read-only path — it checks **every** unique planned path, records each outcome in the P4 prepare ledger, logs each failure, then raises **`ExportPreflightFailedError`** with a `failures` list. Checkout **Cancel** on an interactive confirm dialog still aborts immediately (`Save cancelled`).
+
+Log markers: `Export preflight failed: <path> | <reason>` (one line per path); `_preflight_ctx['failures']` on export failure summary.
 
 ### Mayapy batch — P4 context payload
 
@@ -537,7 +544,7 @@ See **Export Options Data Flow** above for schema, cfg persistence, and UI wirin
 - `delete set resolved: {Ns}:delete_tdSet`
 - `Prep\|select \| resolved N export target(s)`
 
-**Batch**: `BatchExport` collects failures with file index; check `PATHUTIL.get_non_writable_export_paths()` after batch for depot permission issues.
+**Batch**: `BatchExport` collects failures with file index (optional `p4Outcome` / `p4Reason` on preflight failure). After batch, `PATHUTIL.log_export_prepare_summary('BatchExport')` logs grouped P4-prepare outcomes; `get_non_writable_export_paths()` still returns failed paths only.
 
 ---
 
@@ -553,9 +560,12 @@ Run in Maya after export pipeline changes:
 6. **Batch mayapy** — one-item smoke; FBX plugin loaded before Scene import; batch payload includes **`projectConfig`** + **`p4User`**/**`p4Client`** when cgmP4 connected at build time
 7. **Mode 0 bake** — bake + prep run; no FBX write
 8. **Shot list bake range** — scene with `AnimListNode` shot e.g. `[1673, 1805, 132]` → log `ExportScene >> Bake | start: 1673 | end: 1805` (not 132); multi-shot unions min start / max end
-9. **Export preflight** — locked depot FBX: error/dialog before `ExportScene >> Bake | start:` (not after prep). With **Auto Check Out Export Files** on: silent checkout when file only needs edit/add; out-of-date still fails.
-10. **Auto checkout option** — Perforce project, FBX not checked out: option **Off** → confirm dialog; **On** → no dialog, file opened for edit before bake
-11. **Mayapy batch + Auto Check Out** — connect cgmP4 in interactive Maya → queue export (regenerates batch file) → standalone checkout FBX before bake; log shows `batch P4 context` and `export preflight P4 | project=<cfg path>`
+9. **Export preflight** — locked/read-only depot FBX: errors before `ExportScene >> Bake | start:` (not after prep). Multi-path cutscene: **all** failed paths logged. With **Auto Check Out Export Files** on: silent checkout when file only needs edit/add; out-of-date still fails.
+10. **Auto checkout option** — Perforce project, FBX not checked out: option **Off** → interactive confirm dialog (batch: no checkout, fail if read-only); **On** → silent checkout before bake
+11. **Mayapy batch + Auto Check Out** — connect cgmP4 in interactive Maya → queue export (regenerates batch file) → standalone checkout FBX before bake when option **on**; log shows `batch P4 context` and `export preflight P4 | p4_checkout=…`
+12. **Batch P4 prepare summary** — multi-item batch: end log shows `Batch P4 prepare summary` with per-path outcomes and `scene=` when preflight ran
+13. **Batch Auto Check Out off** — read-only depot FBX: preflight fails without `p4 edit`; ledger `[p4_skipped_auto_checkout_off]`; no silent checkout
+14. **Cutscene multi-path preflight** — three+ FBX paths locked: all paths reported in log before bake abort
 
 ---
 
@@ -578,6 +588,9 @@ Run in Maya after export pipeline changes:
 
 | Date | Summary |
 |------|---------|
+| 2026-08-18 | Batch auto checkout gate — `p4_checkout` separate from `confirm_p4`; batch + option off = no checkout |
+| 2026-08-18 | All-path export preflight — `ExportPreflightFailedError`; cutscene multi-FBX reports every failure |
+| 2026-08-18 | Batch P4 prepare summary — ledger + `log_export_prepare_summary` at batch end |
 | 2026-08-18 | Mayapy batch P4 context — `projectConfig`, `p4User`, `p4Client`, `autoCheckoutExportFiles` in batch payload; `batch_export_context_from_ui` / bootstrap |
 | 2026-08-17 | **Auto Check Out Export Files** — Scene Options → Export; `cgmVar_sceneUI_auto_checkout_export_files`; silent P4 checkout/add on export when on |
 | 2026-08-17 | FBX export preflight — `resolve_export_fbx_paths` + `preflight_export_output_paths` before bake; failure stage `export_preflight` |
