@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: August 12, 2026 (MRS batch error reporting + proxyMesh fail-fast)  
+**Last Updated**: August 12, 2026 (MRS batch error reporting + proxyMesh fail-fast)
 **PR**: Pending
 
 ## 🎯 Goals
@@ -51,15 +51,15 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[snap_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/snap_utils.py)** - `to_ground`, `ground_position_get`
 - **[snap_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/snap_calls.py)** - `get_special_pos` (`groundPos`), `snap_action` ground mode
 - **[position_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/position_utils.py)** - `scene_up_axis_get`, `ground_plane_up_index`, `position_project_to_ground_plane`, scene-up **bottom**/**top** in `get_bb_pos`
-- **[nCloth_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/nCloth_utils.py)** - nCloth preset apply (`profile_load` layered fabric/solver/wind), `query_settings` / `query_settings_selection`, scene-up nucleus gravity remap, skip list (`isDynamic`, collision attrs), `get_out_mesh_shape` / `get_out_mesh_transform` for cloth attach
+- **[nCloth_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/nCloth_utils.py)** - nCloth preset apply (`profile_load` section-isolated fabric/solver/wind), `query_settings` / `query_settings_selection`, scene-up nucleus gravity remap, skip list (`isDynamic`, collision, `localSpaceOutput`, `collide`, `ignoreSolver*`), `get_out_mesh_shape` / `get_out_mesh_transform` for cloth attach
 - **[node_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/node_utils.py)** - `create_UVPin`, `create_UVPinOnMesh`, `createRivetOnMesh` (Constraints-menu Rivet API + classic edge-loft fallback; no `mel createRivet`)
 - **[constraint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/constraint_utils.py)** — `attach_toShape(..., surfaceTrack=)` (follicle | rivet | uvPin); Rigging Utils **Attach by** surface-track items
 - **[dynamic_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/dynamic_utils.py)** — `map_cloth_surface`, `get_mapped_cloth`, `attach_to_cloth_dynFK`, `setup_sim_dynFK`, `cgmDynFK.bake_nodes`, `set_base_name`, `chainMode='clothAttach'`
-- **[dynFKTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/dynFKTool.py)** (`cgmSimChain`) - **Init Sim Setup**, Details **Cloth** `>>` + **Fabric** / **Solver** menus (explicit apply only), **Cloth track**, **Attach to Cloth**, editable **Base Name**, **Tools → Query Settings**, target bake + post-bake `targets_disconnect`, `reload_dependencies()`
+- **[dynFKTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/dynFKTool.py)** (`cgmSimChain`) - **Init Sim Setup**, Details status/`>>` rows, **Presets** menu (Cloth / Hair / Nucleus), **Cloth track**, **Attach to Cloth**, editable **Base Name**, **Tools → Query Settings**, target bake + post-bake `targets_disconnect`, `reload_dependencies()`
 - **[tool_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_calls.py)** — `mocapBakeTool()` reloads `mocap_align_utils` then `mocapBakeTools` via `cgmGEN._reloadMod` before opening UI; `fixRotationKey()` / `fixRotationAnimation()` reload `anim_utils` before running
 - **[module_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/module_utils.py)** — `mirror_get`, `siblings_get`, module parent/children wiring
 - **[animate_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/animate_utils.py)** — Animate context cache (`module_get`, `context_get`, mirror module expansion)
-- **[cgmNCloth_presets.py](../../../repos/cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** - Layered profiles: **fabric** (`silk`, `cotton`, `denim`, …), **solver** (`solver_balanced`, `solver_quality`, `solver_high`, …), **wind** (`wind_calm`, `wind_flag`); `d_profileKind` registry
+- **[cgmNCloth_presets.py](../../../repos/cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** - Cloth **fabric** vs simulation **solver** / **wind** / **utility** (`calm`); `d_profileKind` registry
 - **[transform_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/transform_utils.py)** - `ground_position_get` re-export
 - **[mayaSettings_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaSettings_utils.py)** - `sceneUp_get` / `sceneUp_set` (Maya `upAxis`); **`sceneUp_switch()`** (Y↔Z toggle + ViewCube-safe viewport home)
 - **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, golden/finger presets
@@ -216,6 +216,74 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - After up-axis change, re-apply factory `homeCommand` strings on `persp` / `top` / `front` / `side` before deferred home view
 
 **Status**: ⚠️ Code complete — Maya verify: Switch Up + native ViewCube home still behave correctly in persp after repeated toggles (user reported home-button regression during iteration; latest path targets modelPanel + homeCommand restore)
+
+---
+
+### August 8, 2026 (e) - Details << loads, Init Sim → Tools, Baking section
+**What**: Nucleus/Cloth/Hair Details rows use `<<` to map from selection (added `map_nucleus` / `map_hair_system`). **Init Sim Setup** moved to Tools menu. Details **Baking** header before start/bake controls.  
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `map_nucleus`, `map_hair_system`
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — load rows, Tools menu, Baking section
+- DOCS: `Features/Feature_SimChain.md`
+
+**Status**: ✅ Code complete
+
+---
+
+### August 8, 2026 (d) - Presets menu only (remove body preset dropdowns)
+**What**: Removed Details Fabric/Solver enums and Nucleus/Hair Load Preset dropdowns — **Presets** top menu is the sole cgm profile UI. Body rows keep status + `>>` only. Follicle Maya `nodePreset` dropdown retained (not covered by Presets).  
+**Files**:
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — cloth row slimmed; nucleus/hair `presetOptions=False`; removed fabric/solver apply helpers
+- DOCS: `Features/Feature_SimChain.md`
+
+**Status**: ✅ Code complete
+
+---
+
+### August 8, 2026 (c) - Presets hair feel vs sim + hair/cloth context
+**What**: Hair presets were a flat `hs` list (including `wind`/`base`). Mirrored cloth taxonomy: hair feel vs simulation; Nucleus loads adjust for hair vs cloth (dynFK `hs` only when hair exists).  
+**Files**:
+- EXTENDED: `cgm/core/presets/cgmDynFK_presets.py` — `d_profileKind` (`hair` / `wind` / `solver` / `base`)
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `profile_kind`, `profile_list(category=)`; wind/solver no longer dump full `base.n`
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — Presets Cloth / Hair / Nucleus; Details Hair = feel only; Nucleus context-aware ncloth vs dynfk source
+- DOCS: `Features/Feature_SimChain.md`
+
+**Decisions**:
+- **Presets → Hair** = hair feel only; **Presets → Nucleus** = shared sim (nCloth + dynFK wind/solver)
+- dynFK wind `hs` attrs apply only when setup has hair; cloth-only skips hs
+
+**Status**: ✅ Code complete — Maya verify: Hair menu has rope/ponytail not wind; Nucleus dynFK_wind on cloth-only leaves hair absent; hair+cloth applies n + hs
+
+---
+
+### August 8, 2026 (b) - nCloth cloth vs sim merge harden + Presets menu
+**What**: Fabric/solver preset apply was dumping full `base` (nucleus env + structural cloth attrs). Hardened section-isolated merge, slimmed never-preset list, clarified cloth vs simulation taxonomy, and added **Presets** top menu (Cloth / Nucleus / Hair) instead of a third Details dropdown or putting `calm`/wind under Fabric.  
+**Files**:
+- EXTENDED: `cgm/core/lib/nCloth_utils.py` — `_merge_profile_dicts` honors `clean` + section isolation; nucleus-only path for solver/wind; skip adds `collide`, `ignoreSolverGravity`, `ignoreSolverWind` (keeps `localSpaceOutput`)
+- EXTENDED: `cgm/core/presets/cgmNCloth_presets.py` — cloth vs simulation header; removed structural keys from `base.nc` / `calm.nc`
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — Fabric dropdown = fabrics only; Solver-only apply on solver menu change; **Presets** menu cascades
+- DOCS: `Features/Feature_SimChain.md` — merge table, taxonomy, Presets UI
+
+**Decisions**:
+- Fabric never seeds/applies `base.n`; solver/wind never write `nc`
+- `base.n` env remains Query diff + explicit `base` / utility reset only
+- Wind / `calm` are simulation layers — **Presets → Nucleus**, not Fabric peers
+
+**Status**: ✅ Code complete — Maya verify: cotton leaves wind/`spaceScale`; solver_high leaves fabric; Presets → Nucleus wind; Fabric menu has no `calm`
+
+---
+
+### August 8, 2026 - nCloth presets: never force `localSpaceOutput`
+**What**: Cloth fabric/solver preset apply was resetting Maya nCloth output-space setup because `localSpaceOutput: False` lived in `base` nc and was not skipped. Treated like `isDynamic` / collision — structural scene setup, not fabric feel.  
+**Files**:
+- EXTENDED: `cgm/core/presets/cgmNCloth_presets.py` — removed `localSpaceOutput` from `base` nc
+- EXTENDED: `cgm/core/lib/nCloth_utils.py` — `l_skipPresetAttrs` adds **`localSpaceOutput`** (apply + Query Settings)
+- DOCS: `Features/Feature_SimChain.md` — Never-preset table
+
+**Decisions**:
+- **`localSpaceOutput`** is Convert nCloth Output Space / outMesh hierarchy — never apply or capture in presets
+
+**Status**: ✅ Code complete — Maya verify: set local output space → apply `cotton` → attr unchanged; Query paste omits attr
 
 ---
 
@@ -1532,5 +1600,5 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 
 ---
 
-*Last Updated: August 12, 2026 (mocap align CCL save compaction for transform drivers)*  
+*Last Updated: August 12, 2026 (MRS batch error reporting + proxyMesh fail-fast)*  
 *Branch Status: Active*

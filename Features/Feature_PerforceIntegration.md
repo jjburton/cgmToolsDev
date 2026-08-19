@@ -4,8 +4,8 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Active — FBX export preflight + Scene auto checkout + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit shipped; **`useP4OnExport` export-only flag still TBD** |
-| **Last Updated** | August 18, 2026 (batch auto checkout gate + all-path preflight + P4 prepare summary) |
+| **Status** | Active — FBX export preflight + Scene auto checkout + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit + **interactive skip-add** shipped; **`useP4OnExport` export-only flag still TBD** |
+| **Last Updated** | August 19, 2026 (fstat cache client-root keys) |
 | **Owners** | TBD |
 | **Audience** | Dev / TA — design contract for optional P4 incorporation in cgm tools |
 | **Branch** | [`Branch_p4.md`](../Branches/Branch_p4.md) |
@@ -128,7 +128,7 @@ Once the output path is known, call **`prepare_paths_for_write`** / **`prepare_o
 | Step | When |
 |------|------|
 | Resolve path | File dialog, loaded-file path, or computed save target |
-| **Prepare path(s)** | **`prepare_*`** — fstat, out-of-date block, checkout/add confirm |
+| **Prepare path(s)** | **`prepare_*`** — fstat, out-of-date / locked block, checkout confirm (no Add prompt) |
 | Gather / build | Pose save, skin export, connection resolve, ConfigObj fill, … |
 | Write | `open` / `mc.file(save)` / Red9 / low-level helper |
 
@@ -143,7 +143,7 @@ Low-level writers (e.g. **`save_ccl`**) may accept **`skip_prepare=True`** when 
 | Component | Behavior |
 |-----------|----------|
 | `path_utils.check_export_output_writable()` | mkdir parent, remove editable `.bak` sidecars, `os.access(W_OK)` fail-fast |
-| `path_utils.prepare_output_for_write(mDat=)` | **Shipped (Slice B)** — project cfg save; fstat, out-of-date block, checkout/add confirm |
+| `path_utils.prepare_output_for_write(mDat=)` | **Shipped (Slice B)** — project cfg save; fstat, out-of-date block, checkout confirm; skip add on new files |
 | `path_utils.PathWritePrepareError` | Save prepare failure (out of date, locked, cancelled checkout) |
 | `path_utils.ExportOutputNotWritableError` | Export message suggests manual `p4 edit` |
 | `path_utils` export prepare ledger | `record/get/clear_export_prepare_records()`, `log_export_prepare_summary()` — structured P4 outcome per path (edit/add/skipped/failed) with optional `sceneFile` |
@@ -152,7 +152,7 @@ Low-level writers (e.g. **`save_ccl`**) may accept **`skip_prepare=True`** when 
 | `Scene.BatchExport` | Clears ledger at start; logs grouped P4-prepare rollup at end via `log_export_prepare_summary` |
 | `cgm.core.lib.perforce` | Connectivity + path query + write slice; session cache in **`perforce_session`** |
 | `cgm/core/tools/p4Tool.py` | **cgmP4** — window reuse, cache-first refresh, Opened + **Shelved Files** changelist sections, batch R/S/**Sh** and D/**Mv**/Sub, Sync Workspace, path Checkout; Setup → Reload uses standard cgm `reload()` |
-| `cgm/core/tools/p4UnknownTool.py` | **Find Unknowns** — project-scoped standalone window (Scene → Tools → Perforce); ext/search filters, batch Add with changelist picker |
+| `cgm/core/tools/p4UnknownTool.py` | **Find Unknowns** — project-scoped standalone window (Scene → Tools → Perforce); cache-first open; toolbar Cache = `warm_fstat_cache_tree`; Setup Deep Scan; ext/search filters, per-row explorer / Add / Delete, batch Add with changelist picker |
 | `cgm/core/tools/lib/project_utils.py` | `versionControl` schema + `project_uses_perforce(mDat)` |
 | `cgm/core/mrs/Scene.py` + `scene_utils.py` | Scene browser file-row P4 **itc + alias suffix** when versionControl + connected (batch fstat per column load) |
 | `cgm.lib.zoo.zooPy.perforce` | Vendored zooPy; reference only |
@@ -171,7 +171,7 @@ When Project **General → versionControl = perforce** and cgmP4 / Project P4 ro
 
 **Status keys and colors** — see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) Scene browser P4 table. **Locked** (`lockedByOther`) takes priority over checkout/sync. **Unknown** = local file not on depot (yellow, not gray). Synced at head: off-white, no suffix.
 
-**Refresh / cache** (August 2026): `query_files_status` stores results in `perforce_session._CACHE['fstat_by_path']` keyed by `(user, client, normpath)`. **Navigation** reuses cache (fast revisit). Column **Refresh** icon / popup **Refresh** calls `invalidate_fstat_directory(search_dir)` for **that column only**, then reloads. **P4 popup writes** call `invalidate_fstat_paths` on affected files; deferred reload of owning column via `_scene_p4_after_write(list_key=)`. Full `flush_status_cache()` for cgmP4 global Refresh / connection change only. External depot changes stay stale until column Refresh — no live P4 subscription in v1. Reload from popup menus is **deferred** (`Scene._defer_ui`) so `iconTextScrollList -removeAll` / selection edits do not run during `QMenu::exec` — applies to P4 actions, **Refresh**, and **Delete** (see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) popup pitfall).
+**Refresh / cache** (August 2026): `query_files_status` stores results in `perforce_session._CACHE['fstat_by_path']` keyed by `(user, client, client-root disk path)` — `p4 fstat` **`clientFile`** is mapped off UNC onto the mapped-drive path Scene uses (one prefix map, not `p4 where` per file). **Navigation** reuses cache (fast revisit). Column **Refresh** icon / popup **Refresh** calls `invalidate_fstat_directory(search_dir)` for **that column only**, then reloads. **P4 popup writes** call `invalidate_fstat_paths` on affected files; deferred reload of owning column via `_scene_p4_after_write(list_key=)`. Full `flush_status_cache()` for cgmP4 global Refresh / connection change only. External depot changes stay stale until column Refresh — no live P4 subscription in v1. Reload from popup menus is **deferred** (`Scene._defer_ui`) so `iconTextScrollList -removeAll` / selection edits do not run during `QMenu::exec` — applies to P4 actions, **Refresh**, and **Delete** (see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) popup pitfall).
 
 **Right-click menu** (SubType / Variation / Version file popups): when `versionControl=perforce`, **Perforce** section with Checkout (`edit`), Add (`add`), Revert, Sync (`sync_file`), Submit, **Shelve** (`submit_paths` / `shelve_paths` + description prompt via `cgmUI.uiPrompt_getValue`). Submit and Shelve operate on **selected file(s) only** — other opened files in the same changelist remain pending. Add/checkout run only after description confirm. Omitted when VC off; disabled when disconnected. After successful write: path-scoped fstat invalidation + deferred column reload. See [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md).
 
@@ -214,9 +214,9 @@ When Project **General → versionControl = perforce** and cgmP4 / Project P4 ro
 | [`cgm/core/mrs/Builder.py`](../../cgmToolsPy3/cgm/core/mrs/Builder.py) | MRS batch script writer — **`confirm_p4=False`** |
 | [`cgm/core/cgm_General.py`](../../cgmToolsPy3/cgm/core/cgm_General.py) | `fbx_export_selection` — defense-in-depth writability at write time; preflight runs earlier in ExportScene |
 | [`cgm/core/tools/lib/project_utils.py`](../../cgmToolsPy3/cgm/core/tools/lib/project_utils.py) | `project_uses_perforce(mDat)`; `versionControl` in `d_project` schema |
-| [`cgm/core/tools/lib/tool_calls.py`](../../cgmToolsPy3/cgm/core/tools/lib/tool_calls.py) | `cgmP4Tool()` — reuses window; `p4FindUnknownsTool()` — Find Unknowns window |
+| [`cgm/core/tools/lib/tool_calls.py`](../../cgmToolsPy3/cgm/core/tools/lib/tool_calls.py) | `cgmP4Tool()` — reuses window; `p4FindUnknownsTool()` — reload `p4UnknownTool` only (session cache kept) |
 | [`cgm/core/tools/p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | cgmP4 UI; Setup → Reload flushes session cache |
-| [`cgm/core/tools/p4UnknownTool.py`](../../cgmToolsPy3/cgm/core/tools/p4UnknownTool.py) | Find Unknowns UI — project content only; cache-first load; Setup → Reload |
+| [`cgm/core/tools/p4UnknownTool.py`](../../cgmToolsPy3/cgm/core/tools/p4UnknownTool.py) | Find Unknowns UI — cache-first load; toolbar Cache = prewarm; Setup Deep Scan; per-row explorer / Add / Delete; Setup → Reload keeps session cache |
 
 ### Planned API (v1)
 
@@ -234,7 +234,7 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `query_opened(p4_user, p4_client)` | `p4 -u -c -ztag opened` grouped by changelist |
 | `query_pending_changes(p4_user, p4_client)` | `p4 -u -c changes -s pending` |
 | `query_file_status(path, …)` / `query_path(path, …)` | `p4 fstat` — inClient, checkedOut, outOfDate, synced, lockedByOther, statusSummary |
-| `query_files_status(paths, …)` | Batch `p4 fstat` — cache-first; dict normpath → same shape as `query_file_status` (Scene browser column load) |
+| `query_files_status(paths, …)` | Batch `p4 fstat` — cache-first; dict **client-root disk** normpath → same shape as `query_file_status` (Scene browser column load); `clientFile` matched after UNC→disk map |
 | `invalidate_fstat_paths(paths, …)` | Drop cached fstat for specific paths (P4 writes) |
 | `invalidate_fstat_directory(dir_path, …)` | Drop cached fstat for all paths under a directory (Scene column Refresh) |
 | `classify_file_status_ui(file_dat)` | Map fstat dict → Scene UI key: `locked_by_other` \| `checked_out` \| `marked_for_add` \| `out_of_sync` \| `unknown` \| `None` |
@@ -248,9 +248,9 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `query_project_p4_status(p4_user, p4_client, force=False, …)` | Lightweight connected/label dict for Project General UI + Scene P4 column gate; **no routine logging** (cache hit/miss at `log.debug`; user reports via `query_status_report` / Print Log) |
 | `flush_status_cache()` | Clear session cache in place (`perforce_session.clear()`) — write paths, Refresh |
 | `reload_session_cache()` | Flush buffer via `cgmGEN._reloadMod(perforce_session)` and rebind — dev / manual flush |
-| `collect_unknown_files(root_path, …)` | Disk walk under root → batch fstat for paths not in `depot_paths` → filter `classify_file_status_ui == 'unknown'` → session **`unknown_files`** cache |
+| `collect_unknown_files(root_path, …)` | Disk walk under root → skip `depot_paths` **and** session fstat-classified paths → batch fstat remaining candidates → filter `classify_file_status_ui == 'unknown'` → session **`unknown_files`** cache |
 | `get_cached_unknown_files(root_path, …)` | Cache hit for unknown list at root (no rescan) |
-| **Find Unknowns ext filter** | Blue-tint `MelGridLayout` (6 columns); **All/None** on control row after Query; **Search:** field + clear (Scene scroll-list pattern) on loaded rows |
+| **Find Unknowns ext filter** | Blue-tint `MelGridLayout` (5 columns); cell width from longest `{ext} ({count})` label; **All/None** on control row after Cache; **Search:** field + clear (Scene scroll-list pattern) on loaded rows |
 | `invalidate_unknown_paths(paths, …)` | Drop paths from unknown cache (after successful `p4 add`) |
 | `flush_unknown_cache(p4_user, p4_client)` | Clear unknown cache (all or scoped); also cleared on full fstat flush |
 | `DEFAULT_P4_CACHE_DIR_MASK` | Base dir mask for client-root scans (`meta`, `.mayaSwatches`, …) |
@@ -271,7 +271,7 @@ P4UTIL.query_status_report(
 
 **cgmP4 tool:** Help menu → Other → **cgmP4**. Sections: Connection (Save / **Print Log** / Refresh / **Sync Workspace**), Status, **Opened Files** (animFilter-style changelist rows: master checkbox + **collapsible frame** + **R** / **S** / **Sh**; per-file checkbox + Revert/Submit/**Shelve**), **Shelved Files** (same changelist layout, blue-tint headers; per-file **Delete**; header **D** / **Mv** / **Sub**), Path Query (Query / **Checkout**). Repeated opens **reuse the existing window** when it is still alive (near instant). **Refresh** runs `query_connection(force=True)` and updates the cache for the UI and **Print Log**; **Print Log** calls `log_status_report()` on that buffer (no second query). **Setup → Reload** / **Reset**: `reload_dependencies()` (`perforce_session` + `perforce`) → `cgmGEN._reloadMod(p4Tool)` → `super().reload()` (`self.__class__()` window rebuild) — same pattern as dynFK / mocapBake tools; use after py edits, not Refresh alone. **R** / **S** / **Sh**: checked files only when subset selected; whole changelist when all or none checked. **Submit** shows an **interruptable Maya progress bar** (default CL multi-file subset: create CL → reopen → submit). **Shelved Files D** / row **Delete**: `p4 shelve -d -Af` (subset or whole CL). **Mv**: unshelve checked files (or all if none checked) into a user-specified target changelist (`number`, `default`, or `new`), then delete those files from the source shelf — target ends with **local opens** (red triangle), not shelved-only. **Sub**: `p4 submit -e` whole shelved changelist. Submit and Shelve prompt for description (`style='text'`) before any P4 write. Section empty messages (`(no shelved changelists)`, etc.) use a persistent full-width centered row (Status pattern) toggled vs dynamic content frame.
 
-**Find Unknowns window:** Scene → Tools → **Perforce..** section → **Find Unknowns** (only when project **versionControl = perforce**). Project **content** path + project **dirMask** only (no client-root scope). Read-only **User** / **Client** from cgmP4 optionVars — set connection in cgmP4 first. On open: load session **`unknown_files`** cache when warm (Project **Cache** or prior Query); empty state prompts **Query** or Project Cache. **Query** runs `collect_unknown_files` (warns when fstat cache is cold). Ext filter grid, search, checked/total count, per-file and batch **Add** with changelist picker (**Default** / **Existing...** / **New...**). After Add, list updates locally; refresh cgmP4 **Opened Files** to see new opens. **Setup → Reload** on Find Unknowns reloads `p4UnknownTool` + `perforce`. Unknown cache is populated during Project **Cache** warm (after fstat store) and on Find Unknowns **Query**.
+**Find Unknowns window:** Scene → Tools → **Perforce..** section → **Find Unknowns** (only when project **versionControl = perforce**). Project **content** path + project **dirMask** only (no client-root scope). Read-only **User** / **Client** from cgmP4 optionVars — set connection in cgmP4 first. **Open** reloads `p4UnknownTool` only (does **not** flush `perforce_session`). Warm **`unknown_files`** cache fills the list; otherwise empty — no auto-scan (`(click Cache, or Scene P4 Cache first)`). Toolbar **Cache** (`cache.png`) always **`warm_fstat_cache_tree`** (same as Scene P4 Cache). Fstat cache keys are **client-root disk paths** (UNC `clientFile` mapped); collect unions session skip so recache does not rewrite Scene tints as unknown. **Setup → Deep Scan** runs **`collect_unknown_files`** (disk walk + fstat candidates not already in the fstat cache; no recursive `p4 fstat`). Ext filter grid, search, checked/total count, per-file and batch **Add** with changelist picker (**Default** / **Existing...** / **New...**). Each filtered file row has an **explorer** icon (`explorer_25.png`) that opens that file’s parent directory (`os.startfile`). After Add, list updates locally; refresh cgmP4 **Opened Files** to see new opens. **Setup → Reload** reloads `p4UnknownTool` + `p4Tool` + `perforce.py` and **keeps** the session cache. Unknown cache is populated during Project **Cache** warm (after fstat store) and on Find Unknowns **Cache**.
 
 ```python
 import cgm.core.tools.lib.tool_calls as TOOLCALLS
@@ -322,7 +322,7 @@ When `d_project['versionControl'] == 'perforce'`, scoped writes through **`path_
 
 | Function | Responsibility |
 |----------|----------------|
-| `prepare_output_for_write(path, mDat=None, use_p4=None, confirm_p4=True, …)` | Global prepare — mkdir parent, optional P4 fstat + confirm + edit/add, writability check |
+| `prepare_output_for_write(path, mDat=None, use_p4=None, confirm_p4=True, p4_add=False, …)` | Global prepare — mkdir parent, optional P4 fstat + checkout confirm, writability check. Default skip add |
 | `get_project_mDat()` | Load project cfg from `cgmVar_projectCurrent` |
 | `path_in_p4_scope(path, mDat, extra_roots=())` | Path filter **within** P4-enabled project |
 | `prepare_paths_for_write(paths, …)` | Multi-path loop; resolves `use_p4` per path |
@@ -352,11 +352,11 @@ Open-scene guard: refresh/thumb blocked when selected version file ≠ open scen
 2. **Block** if on depot and **out of date** (`haveRev < headRev`) — dialog + `PathWritePrepareError`; artist must sync first
 3. **Block** if locked by another user or not in client view
 4. If **already checked out** by you — no dialog; proceed to write
-5. If synced read-only on depot — **`confirmDialog`**: Checkout / Cancel (default Cancel)
-6. If new file in client view — **`confirmDialog`**: Add / Cancel
-7. On confirm — `edit_or_add`; then local writability check
+5. If synced read-only on depot — **`confirmDialog`**: Checkout / Cancel (default Cancel); on confirm — `p4 edit`
+6. If new file in client view — **no dialog, no `p4 add`** (`p4_add=False` default). Local write; add later via Find Unknowns or Scene popup Add
+7. If caller passed **`p4_add=True`** (export Auto Check Out) — silent `p4 add` (never an Add confirm)
 
-**Callers:** pass `mDat=self` (project dat) so P4 opt-in resolves from project JSON. Batch/export may pass `confirm_p4=False` when wired (no dialogs on farm).
+**Callers:** pass `mDat=self` (project dat) so P4 opt-in resolves from project JSON. Batch/export may pass `confirm_p4=False` when wired (no dialogs on farm). Interactive saves never prompt to add.
 
 ```python
 import cgm.core.lib.path_utils as PATHUTIL
@@ -370,7 +370,7 @@ PATHUTIL.prepare_output_for_write(cfg_path, mDat=project_dat)  # Scene File → 
 | `scene_export_utils.resolve_export_fbx_paths()` | Planned FBX paths from mode, shot list, export roots (pre-bake) |
 | `path_utils.preflight_export_output_paths()` | Prepare each unique planned path; **all paths checked** before raise; **`ExportPreflightFailedError`** on failure list |
 | `path_utils.prepare_export_output_for_write()` | Sidecar cleanup + **`prepare_output_for_write`** (writability; P4 when VC=perforce + in-scope + connected) |
-| `path_utils.prepare_output_for_write(…, p4_checkout=True, p4_add=True)` | **`p4_checkout=False`**: skip edit/add (batch Auto Check Out off). **`p4_add=False`**: edit-only — skip add for not-on-depot paths |
+| `path_utils.prepare_output_for_write(…, p4_checkout=True, p4_add=False)` | **`p4_checkout=False`**: skip edit/add (batch Auto Check Out off). **`p4_add=True`**: silent add for not-on-depot paths (export Auto Check Out). Default **`False`**: edit-only / local write |
 | Scene **Auto Check Out Export Files** | `cgmVar_sceneUI_auto_checkout_export_files` (default off) | **`p4_checkout`** when on (or interactive). Batch off → writability-only. Mayapy: **`projectConfig`** + **`p4User`**/**`p4Client`** in batch payload |
 | `useP4OnExport` | Export-only opt-out/opt-in separate from `versionControl` — **TBD** |
 
@@ -381,7 +381,8 @@ ExportScene (after mode + AnimList, before bake)
   → scene_export_utils.resolve_export_fbx_paths()
   → path_utils.preflight_export_output_paths(
        p4_checkout = autoCheckoutExportFiles or logExportSummary,
-       confirm_p4 = logExportSummary and not autoCheckoutExportFiles)
+       confirm_p4 = logExportSummary and not autoCheckoutExportFiles,
+       p4_add = autoCheckoutExportFiles)
        → prepare_export_output_for_write per path (all paths; aggregate failures)
        → prepare_output_for_write (VC=perforce + connected → P4 when p4_checkout; else writability only)
   → bake / prep / …
@@ -442,7 +443,7 @@ Implement inside **`cgm.core.lib.perforce`**, not zooPy `getDefaultWorkingDir()`
 | P4 offline / unavailable | — | skip silently | Fall back to `path_utils` writability check only |
 | `p4_checkout` on export preflight | function kwarg | **`True`** when interactive or Auto Check Out on | Batch with Auto Check Out **off**: **`False`** — writability only, no `p4 edit` |
 | `confirm_p4` on `prepare_output_for_write` | function kwarg | **`True`** | Interactive export with Auto Check Out off; set **`False`** for silent checkout or batch with Auto Check Out on |
-| `p4_add` on `prepare_output_for_write` | function kwarg | **`True`** | Set **`False`** for scratch batch launcher scripts — edit depot files only, never **`p4 add`** |
+| `p4_add` on `prepare_output_for_write` | function kwarg | **`False`** | Interactive saves skip add (local write). **`True`** only for export Auto Check Out (silent add). Never an Add confirm dialog |
 
 **Resolved:** Mayapy batch P4 uses **`projectConfig`** + **`p4User`**/**`p4Client`** copied from interactive Scene when the batch file is built — not auto-enabled from `p4 info` alone.
 
@@ -480,13 +481,14 @@ Complete before Phase 1 export wiring:
 - [ ] Locked depot file — checkout prompt appears before heavy gather (paths-first; no multi-second delay)
 - [ ] Out-of-date depot file — block dialog, save aborted; after `p4 sync`, save succeeds
 - [ ] Already checked out by you — no confirm; save proceeds
+- [ ] New file (Save Version, first-time meta, pose) — no Add popup; local write; yellow unknown until Find Unknowns / Scene Add
 - [ ] Locked by another user — error message, no write
 - [ ] P4 offline with VC=perforce — skip P4; fail only if file still read-only locally
 
 ### P4-enabled export cases (opt-in on — planned)
 
 - [ ] Export over existing synced FBX (read-only) → prepare with confirm or `confirm_p4=False` on farm → export succeeds
-- [ ] Export new FBX under depot path → auto add → file visible in `p4 opened`
+- [ ] Export new FBX under depot path → silent add **only when Auto Check Out on**; otherwise local write (no Add popup)
 - [ ] P4 not installed / `p4 info` fails with flag on → skip P4; fail only if still read-only
 - [ ] Batch multi-shot: each path edited; summary shows P4 edit/add counts and no failed outcomes
 - [ ] Another user's lock → fail with actionable message (not FBX I/O)
@@ -512,7 +514,7 @@ Record decisions in the **Decisions log** as they are resolved.
 1. ~~**Opt-in vs default-on**~~ — **Resolved:** explicit opt-in only; never auto-enable from `p4 info` alone
 2. ~~**Red9 / zooPy runtime**~~ — **Resolved:** own `cgm.core.lib.perforce`; zooPy/Red9 reference only
 3. **`getDefaultWorkingDir`:** Does the studio use `P4CONFIG` in repo roots? Should cgm set cwd to project root (`pathProject`) before `p4` subprocesses?
-4. **New files:** Always `p4 add` on first export to a depot path, or only when parent dir is mapped?
+4. ~~**New files:**~~ — **Resolved:** interactive saves skip `p4 add` (local write; add via Find Unknowns / Scene Add). Export silent add only when **Auto Check Out Export Files** is on
 5. **FBX file type:** Does depot require `p4 add -t binary` (or `binary+F`) for `.fbx`?
 6. **Temp-then-replace:** If `p4 edit` fails (exclusive lock), export to temp and instruct manual reconcile, or hard-fail?
 7. **Changelist:** Default changelist only, or auto-create described changelist per batch run?
@@ -546,6 +548,7 @@ Record decisions in the **Decisions log** as they are resolved.
 | 2026-08-18 | Batch export P4 prepare summary | Structured ledger + `log_export_prepare_summary`; grouped edit/add/skipped/failed rollup at batch end |
 | 2026-08-18 | Export `p4_checkout` gate | Separate from `confirm_p4`; batch Auto Check Out off skips `p4 edit`/`p4 add` |
 | 2026-08-18 | All-path export preflight | `ExportPreflightFailedError` — check every planned FBX path before fail |
+| 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; no Add confirm; checkout / locked / out-of-date only. Export `p4_add=autoCheckoutExportFiles` |
 
 ---
 
@@ -570,6 +573,7 @@ Record decisions in the **Decisions log** as they are resolved.
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; never Add confirm; checkout/locked/out-of-date only; export silent add when Auto Check Out on |
 | 2026-08-18 | Mayapy batch P4 + revert paths | Batch export context payload; `p4_add=False` for scratch batch scripts; cgmP4 `revert_opened_entry` / client-root path resolve |
 | 2026-08-18 | Batch auto checkout gate + all-path preflight | `p4_checkout`; `ExportPreflightFailedError` |
 | 2026-08-18 | Batch P4 prepare summary | Ledger + rollup |

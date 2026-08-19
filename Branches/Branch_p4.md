@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: August 12, 2026  
-**Last Updated**: August 18, 2026 (Project Content/Export scroll lists + shared dirMask)  
+**Last Updated**: August 19, 2026 (fstat cache client-root keys)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -23,6 +23,67 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - **`.cursor/rules/perforce-checkout.mdc`** - Agent workflow when py3 files need P4 checkout before edit
 
 ## 🗓️ Timeline
+
+---
+
+### August 19, 2026 (ad) - Fstat cache keys = client-root disk path
+**What**: Recursive / batch `p4 fstat` `clientFile` is mapped to the **client-root disk path** before session cache store and result matching (UNC vs `D:\p4\...` no longer miss). **`collect_unknown_files`** always unions session fstat skip with `depot_paths` so Find Unknowns **Cache** recache cannot write `notOnDepot` under Scene browser keys. Prefix map from one `p4 where` — not per file.  
+**Files**:
+- EXTENDED: `cgm/core/lib/perforce.py` — `_disk_path_for_fstat_client_file`; fetch store + `_query_files_status_batch`; collect cache skip union
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Branches/Branch_p4.md`
+
+**Status**: ✅ Code complete — verify Scene tints survive Find Unknowns Cache recache
+
+---
+
+### August 19, 2026 (ac) - Find Unknowns open does not flush session cache
+**What**: Opening **Find Unknowns** reloads **`p4UnknownTool` only** (no `perforce_session` flush). Warm **`unknown_files`** cache fills the list; otherwise empty (no auto-scan). Toolbar **Cache** (`cache.png`) always **`warm_fstat_cache_tree`** (same as Scene P4 Cache). **Setup → Deep Scan** is disk-walk **`collect_unknown_files`** without recursive fstat. **Setup → Reload** reloads the tool + `perforce.py` but **keeps** the session cache.  
+**Files**:
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — `p4FindUnknownsTool()` `_reloadMod(p4UnknownTool)` only
+- EXTENDED: `cgm/core/tools/p4UnknownTool.py` — `reload_tool()` no session flush; `uiFunc_cache_unknown_files`; `uiFunc_deep_scan_unknown_files`
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Branches/Branch_p4.md`
+
+**Status**: ✅ Code complete — verify Scene Cache → open Find Unknowns fills list; cold open stays empty; toolbar Cache prewarms; Deep Scan does not recursive fstat
+
+---
+
+### August 19, 2026 (ab) - Find Unknowns ext filter cell width
+**What**: Extension-filter grid cells size from the **longest checkbox label** (`{ext} ({count})`) instead of a fixed 72px width, so long labels are not clipped by the next cell. `columnsResizable=False` so Maya does not squeeze columns; extra extensions wrap to the next row.  
+**Files**:
+- EXTENDED: `cgm/core/tools/p4UnknownTool.py` — `uiFunc_unknown_rebuild_ext_filters` cell width from max label
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Branches/Branch_p4.md`
+
+**Status**: ✅ Code complete — verify long ext labels fully visible in Maya
+
+---
+
+### August 19, 2026 (aa) - Find Unknowns per-row open folder
+**What**: Each filtered file row in **Find Unknowns** has an **explorer** icon (`explorer_25.png`) that opens that file’s parent directory in Windows Explorer (Scene `OpenDirectory` / `os.startfile`). Icon strip: explorer → Add → Delete.  
+**Files**:
+- EXTENDED: `cgm/core/tools/p4UnknownTool.py` — `uiFunc_unknown_row_open_dir`; explorer button in `uiFunc_build_unknown_file_row`
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Branches/Branch_p4.md`
+
+**Status**: ✅ Code complete — verify explorer button on a filtered row in Maya
+
+---
+
+### August 19, 2026 (z) - Interactive save skip-add (no Add popup)
+**What**: Interactive P4 prepare no longer prompts to **`p4 add`**. New Scene versions, first-time meta `.dat`/`.bmp`, poses, animFilter, mocap CCL, skinDat, and project `.cfg` write locally; artists add later via **Find Unknowns** or Scene popup **Add**. Dialogs remain for **checkout**, **locked-by-other**, and **out of date**. Export **Auto Check Out Export Files** still silently adds new FBX when that option is on (`p4_add=autoCheckoutExportFiles`).  
+**Files**:
+- EXTENDED: `cgm/core/lib/path_utils.py` — default **`p4_add=False`**; confirm only on checkout; silent add when `p4_add=True`; **`p4_add`** on export prepare/preflight
+- EXTENDED: `cgm/core/mrs/Scene.py` — export preflight **`p4_add=autoCheckoutExportFiles`**
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Features/Feature_SceneExportFlow.md`, `Branches/Branch_p4.md`
+
+**Features**:
+- Save Version / first-time meta: no Add popup; rows stay unknown/yellow until Add
+- Existing depot file not checked out: Checkout / Cancel unchanged
+- Export Auto Check Out **off**: new FBX local write (no add); existing FBX still checkout-confirm on interactive
+
+**Decisions**:
+- Interactive = edit-only; add is an explicit artist step (Find Unknowns / Scene Add) or export Auto Check Out
+- Never an Add confirm dialog — `confirm_p4` applies to checkout only
+
+**Status**: ✅ Code complete — verify Save Version + first-time meta + Auto Check Out on/off in Maya
 
 ---
 
@@ -432,7 +493,7 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 **Behavior**:
 - **Out of date** (haveRev < headRev): block save + dialog; sync first
 - **Synced read-only on depot**: confirm **Checkout** before `p4 edit` (Cancel → no write)
-- **New file in client**: confirm **Add** before `p4 add`
+- **New file in client**: no Add prompt — local write (skip-add; see entry (z))
 - **Already checked out** by you: no prompt; save proceeds
 - **Locked by other** / not in client: error, no write
 - **P4 offline**: skip P4 silently; fail only if file still read-only locally
@@ -637,16 +698,16 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 
 ### Testing
 - [ ] Regression: no p4 on PATH, flag off — identical to today
-- [ ] Interactive save (VC=perforce): out-of-date block, checkout confirm, cancel, already-open, locked-by-other, P4 offline — poses, animFilter, mocap, skinDat, Scene Save Version, **meta `.dat`/`.bmp`** (Slice C + entry (r) verify)
+- [ ] Interactive save (VC=perforce): out-of-date block, checkout confirm, cancel, already-open, locked-by-other, P4 offline, **no Add popup on new files** — poses, animFilter, mocap, skinDat, Scene Save Version, **meta `.dat`/`.bmp`** (Slice C + entry (r) + skip-add entry (z))
 - [ ] Non-P4 regression: no checkout dialogs; optional read-only depot hint only (Slice C verify)
 - [x] Scene browser: P4 popup Revert/Sync/Checkout/Submit + popup Refresh + popup **Delete** — no Maya crash on column reload (deferred `_defer_ui`)
 - [x] Batch export P4 prepare summary — ledger + rollup (entry (w)); **Maya verified** (entry (w))
 - [x] Batch auto checkout gate — **`p4_checkout`** separate from **`confirm_p4`**; option off = no batch checkout (entry (x))
 - [x] Export preflight all-path check — **`ExportPreflightFailedError`** before bake (entry (x)); **Maya verified** cutscene multi-FBX
-- [ ] P4-enabled export: synced read-only FBX auto-edit when Auto Check Out **on**; new file add
+- [ ] P4-enabled export: synced read-only FBX auto-edit when Auto Check Out **on**; new file silent add only when Auto Check Out **on**
 - [x] cgmP4 shelve + Shelved Files panel + Scene popup Shelve + Mv move-to-CL
 - [x] cgmP4 default changelist partial submit (subset **S**) — Maya verified (entry (s))
-- [x] Documentation updated for Slice B + Slice C global save + meta sidecars + session cache + scroll-list popup fix (Refresh/P4/Delete) + shelve/shelved panel + FBX export preflight + default CL submit + submit progress
+- [x] Documentation updated for Slice B + Slice C global save + meta sidecars + session cache + scroll-list popup fix (Refresh/P4/Delete) + shelve/shelved panel + FBX export preflight + default CL submit + submit progress + **interactive skip-add** (entry (z))
 
 ---
 
@@ -675,7 +736,7 @@ Connectivity, opened files by changelist, **shelved files** panel, path query, c
 - `cgm/core/mrs/Scene.py` - popup Shelve
 
 ##### 3. Project save P4 prepare (shipped — Slice B + C + meta sidecars)
-Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_write`** / pose / meta / Maya-scene helpers before writes when `versionControl=perforce`. Out-of-date block; checkout/add confirm on interactive save. **Paths-first:** prepare before heavy gather (mocap, skinDat, animFilter). Wired: project cfg, Scene Save Version / Save Maya here, **meta `.dat`/`.bmp`** (`prepare_meta_files_for_write`), poses, animFilter `.afs`, mocap CCL, skinDat, batch scripts (`confirm_p4=False`).
+Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_write`** / pose / meta / Maya-scene helpers before writes when `versionControl=perforce`. Out-of-date / locked block; checkout confirm on existing depot files; **skip add** on new files (entry (z)). **Paths-first:** prepare before heavy gather (mocap, skinDat, animFilter). Wired: project cfg, Scene Save Version / Save Maya here, **meta `.dat`/`.bmp`** (`prepare_meta_files_for_write`), poses, animFilter `.afs`, mocap CCL, skinDat, batch scripts (`confirm_p4=False`).
 
 **Files Modified:**
 - `cgm/core/lib/path_utils.py` - prepare helpers, `PathWritePrepareError`, paths-first contract
@@ -692,7 +753,7 @@ Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_wri
 ##### 5. FBX export preflight (shipped)
 - `scene_export_utils.resolve_export_fbx_paths` + `path_utils.preflight_export_output_paths` before bake in ExportScene
 - **`p4_checkout`** / **`confirm_p4`** gates — batch respects Auto Check Out off (entry (x)); all paths checked before fail (entry (x))
-- Scene **Options → Auto Check Out Export Files** — silent P4 checkout/add on export when enabled (entry (u))
+- Scene **Options → Auto Check Out Export Files** — silent P4 checkout/add on export when enabled (entry (u)); **`p4_add=autoCheckoutExportFiles`** (entry (z))
 - **Mayapy batch** — payload carries **`projectConfig`**, **`p4User`**, **`p4Client`**, **`autoCheckoutExportFiles`**; bootstrap before `BatchExport` (entry (v)). **Regenerate batch file** after sync when P4 context or auto-checkout option changes.
 - **Batch P4 prepare summary** — `log_export_prepare_summary` at batch end (entry (w))
 
@@ -720,6 +781,7 @@ Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_wri
 9. **cgmP4 revert paths**: use client-root disk path from **`p4 where`**, not raw UNC **`clientFile`** from **`p4 opened`** (entry (v))
 10. **Export `p4_checkout` vs `confirm_p4`**: **`confirm_p4`** controls dialogs only; **`p4_checkout`** gates **`p4 edit`/`p4 add`**. Batch with Auto Check Out off → **`p4_checkout=False`** (writability-only). Interactive always attempts checkout (`logExportSummary=True`) with or without confirm (entry (x))
 11. **Export preflight all-path**: check every planned FBX path; aggregate failures in **`ExportPreflightFailedError`** — no fail-fast on first locked/read-only path (entry (x))
+12. **Interactive skip-add**: default **`p4_add=False`**; never Add confirm. New files write locally; add via Find Unknowns / Scene Add. Export silent add only when Auto Check Out is on (entry (z))
 
 #### Breaking Changes
 None — P4 off by default; existing export behavior preserved.
@@ -730,7 +792,7 @@ None — P4 off by default; existing export behavior preserved.
 
 ---
 
-**Active** — Slice A/B/C + FBX export preflight + Scene auto checkout export + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit shipped; **`useP4OnExport`** optional next.
+**Active** — Slice A/B/C + FBX export preflight + Scene auto checkout export + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit + **interactive skip-add** shipped; **`useP4OnExport`** optional next.
 
 ---
 
@@ -756,6 +818,7 @@ None — P4 off by default; existing export behavior preserved.
 - **Meta sidecars = pose pattern** — `prepare_meta_files_for_write` for `meta/<version>.dat` + optional `.bmp`; thumb capture runs **after** prepare (same as PoseManager Update thumb)
 - **Default CL partial submit** — P4 rejects multi-arg `submit -d` and `submit -i` Change: default; use **`reopen`** + numbered **`submit -c`**; pass **`opened_entries`** with **`clientFile`** (UNC paths break fstat re-resolve)
 - **cgmP4 submit progress** — Maya progress bar via **`progress_cb`**; 3 steps for default CL multi-file subset; cancel between steps only (not mid-subprocess)
+- **Interactive skip-add** — Save Version / first-time meta must not prompt `p4 add`; add is Find Unknowns / Scene Add (or export Auto Check Out)
 
 ### Future Considerations
 - Scene browser list row icons — **not supported** on Maya `iconTextScrollList`; use `+ name/` alias prefix + tint (see `Feature_CgmToolUI.md`)
@@ -770,5 +833,5 @@ None — P4 off by default; existing export behavior preserved.
 
 ---
 
-*Last Updated: August 18, 2026 (Project Content/Export scroll lists + shared dirMask)*  
+*Last Updated: August 19, 2026 (fstat cache client-root keys)*  
 *Branch Status: Active — useP4OnExport optional next*

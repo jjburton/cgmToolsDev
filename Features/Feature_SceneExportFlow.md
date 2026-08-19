@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: August 18, 2026 (batch auto checkout gate + all-path preflight + P4 prepare summary)
+- **Last Updated**: August 19, 2026 (export `p4_add` tied to Auto Check Out; no Add confirm)
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
@@ -124,8 +124,8 @@ Scene **Options → Export → Auto Check Out Export Files** (`cgmVar_sceneUI_au
 
 | Setting | Interactive export P4 behavior | Batch / mayapy P4 behavior |
 |---------|-------------------------------|----------------------------|
-| **Off** (default) | Checkout/add **confirm dialog** before bake; Cancel → stage `export_preflight`, reason `Save cancelled` | **No** `p4 edit`/`p4 add` — writability check only; fails on read-only depot FBX |
-| **On** | Silent **`p4 edit`** / **`p4 add`** on each planned FBX path | Silent checkout (no dialogs) |
+| **Off** (default) | Checkout **confirm dialog** on existing depot FBX before bake; Cancel → stage `export_preflight`, reason `Save cancelled`. New FBX: local write, **no `p4 add`** | **No** `p4 edit`/`p4 add` — writability check only; fails on read-only depot FBX |
+| **On** | Silent **`p4 edit`** / **`p4 add`** on each planned FBX path | Silent checkout/add (no dialogs) |
 
 **Still fails** (no auto-fix) when: file out of date, locked/open elsewhere, not in client view, P4 disconnected + read-only, or checkout/add subprocess error. Out-of-date / locked blocks apply only when checkout is attempted (interactive or Auto Check Out on).
 
@@ -134,9 +134,10 @@ Export preflight gates in `ExportScene`:
 ```text
 p4_checkout = autoCheckoutExportFiles or logExportSummary
 confirm_p4 = logExportSummary and not autoCheckoutExportFiles
+p4_add = autoCheckoutExportFiles
 ```
 
-Interactive: option **On** → silent checkout. Batch with option **Off** → `p4_checkout=False` (ledger outcome `p4_skipped_auto_checkout_off`). Batch with option **On** → silent checkout. **Regenerate batch file** after changing the option so payload `autoCheckoutExportFiles` matches UI.
+Interactive: option **On** → silent checkout/add. Option **Off** → checkout confirm on existing FBX; new FBX not added. Batch with option **Off** → `p4_checkout=False` (ledger outcome `p4_skipped_auto_checkout_off`). Batch with option **On** → silent checkout/add. **Regenerate batch file** after changing the option so payload `autoCheckoutExportFiles` matches UI.
 
 ### Export preflight — all paths before fail
 
@@ -156,7 +157,7 @@ Standalone **mayapy** has no Scene session. Queue export (**Use Maya Standalone*
 
 `batch_utils.apply_batch_export_context` + mayapy script preamble run before `Scene.BatchExport`. **Regenerate `mrsScene_batch.py`** after syncing when P4 connection or project changes — old batch scripts lack these fields.
 
-Log markers: `batch project cfg:`, `batch P4 context:`, `export preflight P4 | confirm_p4=… autoCheckout=… project=…`.
+Log markers: `batch project cfg:`, `batch P4 context:`, `export preflight P4 | confirm_p4=… p4_add=… autoCheckout=… project=…`.
 
 Does **not** enable P4 when project `versionControl` is not `perforce`. See [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md).
 
@@ -588,6 +589,7 @@ Run in Maya after export pipeline changes:
 
 | Date | Summary |
 |------|---------|
+| 2026-08-19 | Export `p4_add=autoCheckoutExportFiles` — no Add confirm; new FBX silent add only when Auto Check Out on |
 | 2026-08-18 | Batch auto checkout gate — `p4_checkout` separate from `confirm_p4`; batch + option off = no checkout |
 | 2026-08-18 | All-path export preflight — `ExportPreflightFailedError`; cutscene multi-FBX reports every failure |
 | 2026-08-18 | Batch P4 prepare summary — ledger + `log_export_prepare_summary` at batch end |
