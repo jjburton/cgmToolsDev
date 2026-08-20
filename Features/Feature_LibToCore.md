@@ -2,8 +2,8 @@
 
 ## Status and Overview
 
-- **Status**: In progress — Wave 1 lists shim shipped; `cgm - All` Maya-verified (coreLib + cgmMeta; RigBlocks skipped). Next: remaining `cgm_Meta` lib imports, then attributes/search shims.
-- **Last Updated**: August 20, 2026 (Maya-verified tests; float/double ATTR contract)
+- **Status**: In progress — Wave 1 lists shim shipped. Wave 2 core retarget Maya-verified (`cgm.core` grep-clean of live `attributes`/`search` except examples / `cgmMeta_test`). **Do not hollow-shim `attributes.py` / `search.py` yet** — locators/distance/deformers/tools still call dozens of old names; `search.returnObjectType` is not `VALID.get_mayaType` for components.
+- **Last Updated**: August 20, 2026 (mixed-hub retarget Maya-verified; attributes/search shim gated)
 - **Owners**: Josh Burton
 - **Audience**: Dev / TA / agents — design contract for finishing the unfinished `cgm.lib` → `cgm.core` move
 - **Branch**: [`Branch_SpringCleaning.md`](../Branches/Branch_SpringCleaning.md)
@@ -130,22 +130,22 @@ Survey of `d:\repos\cgmToolsPy3`. Counts are **unique caller files outside `cgm/
 
 | Old (`cgm.lib`) | Core home | Status | Outside callers | Notes |
 |-----------------|-----------|--------|-----------------|-------|
-| `search` | `search_utils.py`, `selection_Utils.py` | Partial | 42 | `search_utils` no longer imports lib. Other core files still import `cgm.lib.search`. |
+| `search` | `search_utils.py`, `selection_Utils.py` | Partial | tools + lib internals | Core grep-clean of live `from cgm.lib import search`. **Do not alias `returnObjectType` = `get_mayaType` on the lib shim** — lib classifies components (`polyFace`, `curveCV`, `group`). Shim not done. |
 | `lists` | `list_utils.py` | **Shimmed** | — | Wave 1 done. `cgm.lib.lists` re-exports core. |
-| `attributes` | `attribute_utils.py` | Partial rewrite | 26 | `test_ATTR` Maya-verified. `attribute_utils` no longer imports lib. **Float and double are the same family** (`validate_attrTypeMatch`). Full `attributes.py` shim not done. |
+| `attributes` | `attribute_utils.py` | Partial rewrite | tools + lib internals | `test_ATTR` Maya-verified. Core grep-clean of live `from cgm.lib import attributes` except examples / `cgmMeta_test`. **Float and double are the same family.** Full shim not done. |
 | `guiFactory` | `classes/GuiFactory.py` | Mostly moved | 25 | Mostly `cgm/tools`. Lib still imported widely. |
 | `dictionary` | `shared_data.py`, `string_utils.py` | Partial | 20 | Static naming dicts in core; generic dict helpers still lib-only. |
 | `distance` | `distance_utils.py`, `math_utils.py` | Partial | 17 | Core rewrite; lib still used by geo/arrange/rayCaster. |
 | `rigging` | `rigging_utils.py`, `rig/general_utils.py` | Partial | 16 | Unused lib imports removed from `rigging_utils`. Other files still import lib `rigging`. |
-| `locators` | `locator_utils.py`, `snap_utils.py` | Partial | 15 | Old `locMeObject` still used from lib (`cgm_Meta`, marking menus). |
+| `locators` | `locator_utils.py`, `snap_utils.py` | Partial | 15 | `cgm_Meta.doLoc` uses `POS` + `spaceLocator`. Old `locMeObject` still used from lib (marking menus). |
 | `curves` | `curve_Utils.py`, `shape_utils.py` | Partial | 14 | Lib `dupeCurve` raises DeprecationWarning. |
 | `classes.OptionVarFactory` | `GuiFactory` purge helpers | Partial | 13 | Almost all `cgm/tools`. |
 | `cgmMath` | `math_utils.py` | Partial | 11 | Lib already imports core validateArgs. |
 | `modules` | MRS `module_utils` / `puppet_utils` | Evolved replacement | 10 | **Do not port** the old module-null system. Retarget leftover callers or leave on shim. |
 | `classes.ObjectFactory` | — | Lib-only | 8 | `cgm/tools`. |
-| `classes.NameFactory` | `nameTools.py` + still lib | Partial | 8 | `cgm_Meta` imports as `Old_Name`. |
+| `classes.NameFactory` | `nameTools.py` + still lib | Partial | 8 | `cgm_Meta` no longer imports `Old_Name` (was unused). Factory wave still open. |
 | `deformers` | `cgm_Deformers.py`, `geo_Utils.py` | Partial | 7 | Bulk blendShape/lattice still lib. Lib imports `geo_Utils` (cycle). |
-| `names` | `name_utils.py`, `nameTools.py` | Partial | 6 | Short/long/base in core; conf-file naming still lib/`settings`. |
+| `names` | `name_utils.py`, `nameTools.py` | Partial | 6 | `cgm_Meta` uses `NAMES.get_long` / `get_short`. Conf-file naming still lib/`settings`. |
 | `skinning` | `skin_utils.py`, `rig/skin_utils.py` | Partial | 6 | `segment_utils` still imports as `OLDSKINNING`. |
 | `joints` | `rig/joint_utils.py` | Partial | 5 | Many helpers still lib-only. |
 | `position` | `position_utils.py`, `arrange_utils.py`, `snap_utils.py` | Partial | 5 | Query vs layout split. `mocap_align_utils` still uses lib `position`. |
@@ -176,13 +176,19 @@ Clear these as later waves land. **Grep-clean for `cgm.lib.lists` in `cgm.core`*
 
 | File | Remaining first-party lib imports |
 |------|---------------------------|
-| `cgm/core/cgm_Meta.py` | `search`, `attributes`, `constraints`, `dictionary`, `rigging`, `locators`, `names`, `ml`, `classes.NameFactory` (`lists` import removed) |
+| `cgm/core/cgm_Meta.py` | none live — `SEARCH`/`ATTR`/`TRANS`/`NAMES`/`SHARED`/`POS`. Leftover: commented lib block; unused `ml_resetChannels` / `NameFactory` imports removed. |
 | `cgm/core/lib/geo_Utils.py` | `guiFactory` only (progress windows) |
-| `cgm/core/lib/rayCaster.py` | `locators`, `dictionary`, `search`, `cgmMath`, `distance`, `attributes` (`lists` removed) |
+| `cgm/core/lib/rayCaster.py` | `locators`, `dictionary`, `cgmMath`, `distance` (`search`/`attributes` retargeted to VALID/ATTR) |
+| `cgm/core/lib/curve_Utils.py` | `distance`, `curves`, `deformers`, `rigging`, `skinning`, `dictionary`, `nodes`, `joints`, `cgmMath` (`lists`/`attributes`/`search` removed) |
 | `cgm/core/lib/rigging_utils.py` | none (unused lib imports removed) |
 | `cgm/core/lib/search_utils.py` | none |
 | `cgm/core/lib/attribute_utils.py` | none |
-| `cgm/core/lib/curve_Utils.py` | `distance`, `attributes`, `curves`, `deformers`, `rigging`, `skinning`, `dictionary`, `search`, `nodes`, `joints`, `cgmMath` (`lists` removed) |
+| `cgm/core/classes/DraggerContextFactory.py` | `locators`, `geo`, `curves`, `nodes`, `rigging`, `distance`, `guiFactory` (`search`/`attributes` retargeted to ATTR) |
+| `cgm/core/lib/surface_Utils.py` | `distance`, `locators`, `curves`, `deformers`, `lists`, `rigging`, `skinning`, `dictionary`, `nodes`, `joints`, `cgmMath` (`attributes`/`search` removed) |
+| `cgm/core/lib/skinDat.py` | `names`, `cgmMath`, `rigging`, `distance`, `skinning` (`search`/`attributes` retargeted) |
+| `cgm/core/tools/Project.py` | `names`, `cgmMath`, `rigging`, `distance`, `skinning` (unused search/attributes dropped) |
+| `cgm/core/lib/shapeCaster.py` | `cgmMath`, `locators`, `modules`, `distance`, `dictionary`, `rigging`, `curves`, `lists` (unused search dropped) |
+| `cgm/core/classes/SnapFactory.py` | `distance`, `dictionary`, `locators`, `position` (`search` → VALID) |
 | `cgm/core/lib/mocap_align_utils.py` | `position` |
 
 ### Lib files that already import core (not shims)
@@ -240,6 +246,45 @@ All of the following now live on `list_utils` with old names as aliases (shim re
 | `get_keys_from_dict` | `get_keys_from_dict` | Core-only originally |
 
 Landmines **fixed**: `arrange_utils` imports `LISTS`; `ModuleShapeCaster` imports `list_utils` as `lists` and `cgm.lib.distance` (that file still uses old `distance.*` names).
+
+---
+
+## Wave 2 detail: `attributes` / `search` (core retarget, shim gated)
+
+**Core retarget Maya-verified 2026-08-20.** `attribute_utils` / `search_utils` do not import first-party lib. `cgm.core` has no live `from cgm.lib import attributes` / `search` except examples and `cgmMeta_test` (do not revive).
+
+### Why no hollow shim this wave
+
+`lists` was shimmed because every used function lived on `list_utils` with old-name aliases. `attributes.py` (~2600 lines) and `search.py` (~1400 lines) are still the implementation for **`cgm/tools`**, **`cgm/projects`**, and **other `cgm.lib` modules** (`locators`, `distance`, `deformers`, `curves`, `rigging`, `joints`, `modules`, …).
+
+A `from cgm.core.lib.search_utils import *` hollow shim would replace `search.returnObjectType` with `VALID.get_mayaType`. Lib `returnObjectType` is component-aware (`polyVertex`, `curveCV`, `polyEdge`, `polyFace`, transform-with-children → `group`). Locators and distance still branch on those strings.
+
+Naive ATTR aliases are also unsafe:
+
+| Lib | Core | Why not a raw alias |
+|-----|------|---------------------|
+| `returnDriverAttribute(plug, True)` | `get_driver(node, attr=None, getNode=False, skipConversionNodes=False)` | Positional `True` would bind to `attr`, not `skipConversionNodes` |
+| `doConnectAttr(..., transferConnection=True)` | `connect` | Core **raises** if `transferConnection` is True |
+| `doSetAttr(..., forceLock=)` | `set(..., lock=)` | Keyword name differs |
+| `returnObjectType` | `get_mayaType` | Component / group classification differs |
+
+### Core map (already used after retarget)
+
+| Lib | Core |
+|-----|------|
+| `doGetAttr` | `ATTR.get` |
+| `doSetAttr` | `ATTR.set` |
+| `doConnectAttr` | `ATTR.connect` (no transfer) |
+| `doBreakConnection` | `ATTR.break_connection` |
+| `doDeleteAttr` | `ATTR.delete` |
+| `storeInfo` | `ATTR.store_info` / `ATTR.set_message` |
+| `returnDriverObject` | `ATTR.get_driver(..., getNode=True)` |
+| `returnDriverAttribute` | `ATTR.get_driver(..., skipConversionNodes=kw)` |
+| `selectCheck` | `SEARCH.select_check` |
+| `returnSelectedAttributesFromChannelBox` | `SEARCH.get_selectedFromChannelBox(report=False)` |
+| `returnObjectType` (transforms / node types in core) | `VALID.get_mayaType` / `SEARCH.get_mayaType` |
+
+Shim of those two lib files waits until locators/distance/deformers are off old `returnObjectType` (Wave 3) **or** a hybrid shim that re-exports core **and keeps leftover bodies** (especially `returnObjectType`).
 
 ---
 
@@ -301,7 +346,7 @@ File `cgm/core/tests/test_coreLib/test_LISTS.py` → add `'LISTS'` to `_d_module
 | 0 | This inventory + branch/feature docs | Done 2026-08-20 |
 | 0b | Harden `cgmTests.py`; Maya-free `test_LISTS` | Done 2026-08-20 — `'LISTS'` in `_d_modules['coreLib']`. Tests still load via Maya package init. |
 | 1 | Finish `list_utils`, retarget core, shim `cgm.lib.lists` | Done 2026-08-20 |
-| 2 | `attributes` + `search` (incl. real `test_ATTR`); drop lib imports from those core files | Partial — `attribute_utils` and `search_utils` no longer import first-party lib. `test_ATTR` Maya-verified (float/double family). **`cgm_Meta` still imports lib `attributes` / `search` / others.** Full `attributes.py` / `search.py` shims not done. |
+| 2 | `attributes` + `search` (incl. real `test_ATTR`); drop lib imports from those core files | **Core retarget Maya-verified 2026-08-20.** Hollow shim **gated** — locators/distance/tools still need lib implementations; `returnObjectType` ≠ `get_mayaType` for components. |
 | 3 | `distance`, `locators`, `rigging`, leftover `position` / `cgmMath`; clear `rigging_utils` / `geo_Utils` dual-imports | Partial — unused lib imports removed from `rigging_utils`. `geo_Utils` retargeted to DIST/MATH/NAMES/ATTR; **still imports `cgm.lib.guiFactory`** for progress windows. `MATH.multiplyLists` and `DIST.get_bb_average` added. Locators not shimmed. |
 | 4 | Remaining used Maya utils as usage justifies | Not started (callers still use lib `distance`, `search`, `curves`, etc.) |
 | 5 | Factories / `guiFactory` retarget for `cgm/tools`; mark `specialCaseStuff` / `gigs` leave-alone | Leave-alone confirmed. Factory/`guiFactory`/`cgm/tools` retarget not done. |

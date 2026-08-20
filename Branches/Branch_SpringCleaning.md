@@ -3,7 +3,7 @@
 ## Quick Info
 **Status**: Active  
 **Created**: August 20, 2026  
-**Last Updated**: August 20, 2026 (Maya-verified cgm - All; ATTR float/double)  
+**Last Updated**: August 20, 2026 (mixed-hub retarget Maya-verified; attributes/search shim gated)  
 **PR**: Pending
 
 ## Goals
@@ -17,6 +17,73 @@ Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core
 
 ## Timeline
 
+### August 20, 2026 - mixed-hub attributes/search retarget
+**What**: After Maya-verified attributes/search slice, retargeted remaining mixed-hub live `attributes`/`search` calls onto ATTR/SEARCH/VALID and dropped unused imports. `cgm.core` is now grep-clean of live `from cgm.lib import attributes` / `search` except examples and `cgmMeta_test` (do not revive). Did **not** shim those lib modules — `cgm/tools` and other `cgm.lib` files still need the old names.
+
+**Files**:
+- EXTENDED: `DraggerContextFactory.py`, `Project.py`, `skinDat.py`, `surface_Utils.py`, `shapeCaster.py`, `SnapFactory.py`, `shader_utils.py`, `segment_utils.py`, `mm_utils.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `ATTR.get_driver(..., getNode=True)` replaces `returnDriverObject`; `skipConversionNodes=` must be keyword (not positional) on combined plugs
+- `segment_utils` live `attributes.*` calls had no live lib import (commented tuple) — retarget is a landmine fix
+- `mm_utils` channel-box path used `search.*` with no import — same landmine; now `SEARCH.get_selectedFromChannelBox(report=False)`
+- Shim waits on an old-name alias map covering `cgm/tools` + remaining `cgm.lib` internals
+
+**Status**: Complete — Maya-verified **cgm - All**
+
+---
+
+### August 20, 2026 - attributes/search shim gated
+**What**: Inventoried remaining `attributes.*` / `search.*` callers in `cgm/tools`, `cgm/projects`, and other `cgm.lib` modules. **Did not** hollow-shim `attributes.py` / `search.py`. Lib `returnObjectType` is component-aware; a `search_utils` re-export would break locators/distance. Several ATTR “equivalents” have incompatible signatures (positional `skipConversionNodes`, `transferConnection`, `forceLock`).
+
+**Files**:
+- EXTENDED: `Features/Feature_LibToCore.md` (Wave 2 detail + gate), `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- Wave 2 core retarget is done; shim is a later step (Wave 3 locators/distance first, or a hybrid leftover-body shim)
+- Do not add naive `doGetAttr = get` aliases that change call signatures
+- Examples / `cgmMeta_test` stay on lib
+
+**Status**: Complete — gate documented; next is Wave 3 transform backbone or hybrid shim if explicitly requested
+
+---
+
+### August 20, 2026 - attributes/search core retarget (no shim yet)
+**What**: After Maya-verified `cgm_Meta`, mapped remaining core `attributes`/`search` callers and retargeted the ones already covered by ATTR/SEARCH. Dropped unused lib imports. Added `SEARCH.select_check` plus old-name aliases (`selectCheck`, `returnObjectType`, `returnSelectedAttributesFromChannelBox`). Did **not** shim `cgm.lib.attributes` / `search` — mixed hubs still import them with other lib modules.
+
+**Files**:
+- EXTENDED: `search_utils.py`, `node_utils.py`, `mayaBeOdd_utils.py`, `control_utils.py`, `selection_Utils.py`, `cgm_Deformers.py`, `rayCaster.py`, `meshTools.py`, `cgmMM_tool.py`, `cgmPuppetKey.py`, `distance_utils.py`, `nameTools.py`, `curve_Utils.py`, `ControlFactory.py`, `cgm_RigMeta.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `ATTR.connect` does not support lib `transferConnection=True` (raises); `control_utils` slaves scale without transfer
+- Channel-box query uses `SEARCH.get_selectedFromChannelBox(report=False)` so marking menus do not pprint
+- Leave mixed hubs (`DraggerContextFactory`, `Project`, `skinDat`, `surface_Utils`, `shapeCaster`, `SnapFactory`, rig leftovers) until those files are retargeted as a group
+- Do not shim `attributes.py` / `search.py` until those remaining callers are gone
+
+**Status**: Complete — Maya-verified **cgm - All**
+
+---
+
+### August 20, 2026 - cgm_Meta off live first-party lib
+**What**: Retargeted remaining live `cgm_Meta` calls off `cgm.lib` (`names`, `attributes.storeInfo`, `dictionary` axis vectors, `rigging.doParentToWorld`, `locators.locMeObject`). Component `doLoc` now uses `POS.get` + `spaceLocator` (same as the transform path) so `locator_utils` / DraggerContextFactory are not imported at meta load. Dropped unused `ml_resetChannels` and `NameFactory` (`Old_Name`) imports.
+
+**Files**:
+- EXTENDED: `cgm/core/cgm_Meta.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- Axis enums use `SHARED._d_axis_string_to_vector` (tuples; Maya aimConstraint accepts them)
+- Buffer `store()` uses `ATTR.set_message(..., simple=True)` for scene objects
+- Parent-to-world uses `TRANS.parent_set(node, False)`
+- Do not import `locator_utils` from `cgm_Meta` (heavy; DraggerContextFactory)
+- Leave `cgm.lib.attributes` / `search` as full implementations until remaining core callers are mapped
+
+**Status**: Complete — Maya-verified **cgm - All** (coreLib + cgmMeta)
+
+---
+
 ### August 20, 2026 - Maya-verified suite; ATTR float/double
 **What**: Toolbox Unittesting **cgm - All** passes for coreLib + cgmMeta. RigBlocks skipped (incomplete). `test_ATTR.test_type` uses `validate_attrTypeMatch` so Maya `float` vs `double` are the same family.
 
@@ -24,7 +91,7 @@ Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core
 - EXTENDED: `cgm/core/tests/test_coreLib/test_ATTR.py`
 - EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
 
-**Status**: Complete — ready to push this slice; next wave is remaining `cgm_Meta` lib imports / attributes+search shims
+**Status**: Complete — ready to push this slice; next wave was remaining `cgm_Meta` lib imports (done this same day)
 
 ---
 
@@ -106,8 +173,10 @@ Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core
 ### Wave 2 — attributes + search
 - [x] Real `test_ATTR` (replace `pass` stubs)
 - [x] `attribute_utils` / `search_utils` do not import first-party lib
-- [ ] Retarget `cgm_Meta` remaining lib imports (`attributes`, `search`, `locators`, …)
-- [ ] Full shim of `cgm.lib.attributes` / `cgm.lib.search`
+- [x] Retarget `cgm_Meta` remaining live lib imports (`attributes`, `search`, `locators`, …)
+- [x] Retarget remaining easy core `attributes`/`search` callers (ATTR/SEARCH already existed)
+- [x] Retarget mixed-hub live `attributes`/`search` callers in `cgm.core`
+- [ ] Full shim of `cgm.lib.attributes` / `cgm.lib.search` (**gated**: locators/distance still need lib `returnObjectType`; signature mismatches)
 
 ### Wave 3 — transform backbone
 - [x] Unused lib imports removed from `rigging_utils`
@@ -123,6 +192,8 @@ Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core
 ### Testing
 - [x] Wave 0: inventory of current runner (documented in feature doc)
 - [x] Unittesting → cgm - All in Maya (coreLib + cgmMeta; RigBlocks skipped)
+- [x] `cgm_Meta` lib retarget Maya-verified
+- [x] Mixed-hub attributes/search retarget Maya-verified
 - [x] ATTR float/double treated as one family (`validate_attrTypeMatch`)
 - [x] No pytest this branch
 
@@ -137,8 +208,8 @@ Spring cleaning: migrate used first-party `cgm.lib` into `cgm.core` behind unitt
 None intended for completed waves: `import cgm.lib.X` remains valid via shims. Canonical new imports are `cgm.core.lib.*_utils`.
 
 #### Next Steps
-- Wave 2 remainder: retarget `cgm_Meta` off lib `attributes` / `search`, then shim those modules
-- Wave 3 remainder: locators / `distance.py` / `geo_Utils` guiFactory
+- Wave 3: locators / `distance.py` / `geo_Utils` guiFactory (reduces lib `search.returnObjectType` callers), **or** a hybrid leftover-body shim if requested
+- Do not hollow-shim `attributes.py` / `search.py` until that gate is lifted
 - Re-enable MRS RigBlocks tests only with per-test scene setup
 
 ---
