@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: August 17, 2026
+- **Last Updated**: August 20, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -230,6 +230,8 @@ Actions call [`perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) write A
 
 **Do not** store decorated strings in `.item` and strip them later in lib code.
 
+**Pitfall (Layout hang ~80% after Reload Core):** `BaseMelUI.__new__` names controls `MelButtonN__` via `cls.GetUniqueId()` (`_NEXT_KEY` on the class), then walks `exists=True` until the name is free. **cgm → Dev → Reload Core** reimports `baseMelUI`, which used to reset `_NEXT_KEY` to `0` while Toolbox and `RETAIN=True` / hide-on-close windows still occupied those names → Layout (`build_layoutWrapper`) rescanned from 0 for every widget. **Fix**: persist per-class counters on `sys._cgmMelWidgetNextKey` in [`typeFactories.py`](../../cgmToolsPy3/cgm/core/lib/zoo/typeFactories.py) (`persist_next_key` / `restore_next_key`); catch up `_NEXT_KEY` after the exists loop in [`baseMelUI.py`](../../cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py). Do not store the counter on the reloaded class alone.
+
 ---
 
 ## Links and indices
@@ -390,6 +392,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | Rebuild scroll list (`ra=True`) or `selectIndexedItem` inside its popup menu callback | Qt reentrancy crash in `QItemSelectionModel` | `mc.evalDeferred(..., lp=True)`; defer Delete handler + `_defer_list_reload_after_delete`; disable `b_selCommandOn` + `deselectAll` before clear |
 | `column_adj=False` to reduce vertical space | Shrinks row **width**; centered labels look wrong | `adj=True` + explicit label `h`, `row_spacing=0`, `expand=False` on stretch row |
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
+| Reset Mel `_NEXT_KEY` on Reload Core (class-only counter) | Layout hangs ~80% probing leftover `MelButton0__`..N__ from Toolbox / retained windows | Persist ids on `sys._cgmMelWidgetNextKey`; catch up after exists loop |
 
 ---
 
@@ -443,6 +446,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-08-20 | Mel widget unique-id persist across Reload Core (`sys._cgmMelWidgetNextKey`); Layout hang at 80% from `exists` walk after `_NEXT_KEY` reset |
 | 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
 | 2026-08-17 | Scene browser popup Delete crash fix: defer Delete menu + `_defer_list_reload_after_delete`; single version delete uses `LoadVersionList` |
 | 2026-08-13 | Scene log noise: removed `HasSub` debug warnings (asset popup loop); P4 cache status at debug in perforce.py |

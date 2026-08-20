@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: April 23, 2026  
-**Last Updated**: August 12, 2026 (MRS batch error reporting + proxyMesh fail-fast)
+**Last Updated**: August 20, 2026 (Snap To Curve arrange + stack slide)
 **PR**: Pending
 
 ## 🎯 Goals
@@ -36,17 +36,18 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[project_utils.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/project_utils.py)** - Lazy `get_fbx_versions()` (no import-time FBX MEL probe)
 - **[animFilterTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/animFilterTool.py)** - Anim post filters UI (`VERIFY_CLOSE` / `confirmClose`)
 - **[anim_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/anim_utils.py)** — `closest_euler_solution`, `fix_selected_rotation_key`, `fix_selected_rotation_animation` (quaternion alternate + ±360 search; frame-to-frame continuity for full rotation curves)
+- **[anim_meta.py](../../../repos/cgmToolsPy3/cgm/core/lib/meta_utils/anim_meta.py)** — `rotateOrder_change` (preserve orientation; `timeContext` `current` / `all`)
 - **[baseMelUI.py](../../../repos/cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)** - `BaseMelWindow` close hooks (`VERIFY_CLOSE`, `restoreAfterCloseCancelled`)
 - **[cgm_General.py](../../../repos/cgmToolsPy3/cgm/core/cgm_General.py)** - Shared helpers (`playback_stop`, logging); `ensure_fbx_plugin`, FBX export preamble/selection helpers; **`exception_already_logged` / `cgmException` hints + `@Timer` dedup**
 - **[PostBake.py](../../../repos/cgmToolsPy3/cgm/core/classes/PostBake.py)** - Post filters bake loop (AnimFilter dragger/spring/etc.)
 - **[locinator.py](../../../repos/cgmToolsPy3/cgm/core/tools/locinator.py)** - `bake_match` timeline bake
-- **[curve_Utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/curve_Utils.py)** - `align_eps_by_lane_projection`, `distribute`
+- **[curve_Utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/curve_Utils.py)** - `align_eps_by_lane_projection`, `distribute`; `nurbs_percent_sampler` (cached OM2 `getPointAtParam` for arrange sliders)
 - **[shape_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/shape_utils.py)** - `get_nonintermediate` (canonical live shape resolution)
-- **[toolbox.py](../../../repos/cgmToolsPy3/cgm/core/tools/toolbox.py)** - Snap **Ratio** row; Controls **tweak** row (`buildRow_tweakCurve`); **Anim** tab **Anim Utils** row — **Fix Rotation:** `[Current]` / `[Animation]`
-- **[snapTools.py](../../../repos/cgmToolsPy3/cgm/core/tools/snapTools.py)** - Snap **Ratio** row (shared with toolbox)
+- **[toolbox.py](../../../repos/cgmToolsPy3/cgm/core/tools/toolbox.py)** - Snap **To Curve** / **Ratio** / **Stack** rows; Controls **tweak** row (`buildRow_tweakCurve`); **Anim** tab **Anim Utils** — **Fix Rotation:** `[Current]` / `[Animation]`; **Rotate Order:** enum + `[Current]` / `[Animation]`
+- **[snapTools.py](../../../repos/cgmToolsPy3/cgm/core/tools/snapTools.py)** - Snap **To Curve** / **Ratio** / **Stack** rows (shared with toolbox)
 - **[joint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/joint_utils.py)** - `pruneSkeletonToJoints` (MetaHuman / facial skeleton strip to keep-list + root chain)
 - **[mayaBeOdd_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaBeOdd_utils.py)** - Maya Be Odd helpers (`cascade_mc_windows`, outliner/panel cleanup)
-- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio**; **Point Special → Ground**; Loc **Ground Pos**; `buildRows_ratio_arrange`; **Maya Be Odd → Cascade UI Windows**; cgmToolbox **Select\***; `uiSection_animUtils` — **Fix Rotation Key** / **Fix Rotation Animation** (Other → Anim + anim marking menu Utilities)
+- **[tool_chunks.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** - Snap/marking menu **Arrange → Ratio** / **To Curve**; **Point Special → Ground**; Loc **Ground Pos**; `buildRows_ratio_arrange` (Ratio + Stack sliders); `buildRow_to_curve_arrange`; **Maya Be Odd → Cascade UI Windows**; cgmToolbox **Select\***; `uiSection_animUtils` — **Fix Rotation Key** / **Fix Rotation Animation**; **Change Rotate Order** Current / Animation + **Rotate Order** radio submenu (Other → Anim + anim marking menu Utilities)
 - **[contextual_utils.py](../../../repos/cgmToolsPy3/cgm/core/tools/markingMenus/lib/contextual_utils.py)** - Context queries (`get_list`, `select`) for **Select\*** and marking menus; hierarchy-sorted via **`search_utils.sort_by_hierarchy`**
 - **[snap_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/snap_utils.py)** - `to_ground`, `ground_position_get`
 - **[snap_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/snap_calls.py)** - `get_special_pos` (`groundPos`), `snap_action` ground mode
@@ -56,13 +57,13 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[constraint_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/constraint_utils.py)** — `attach_toShape(..., surfaceTrack=)` (follicle | rivet | uvPin); Rigging Utils **Attach by** surface-track items
 - **[dynamic_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/dynamic_utils.py)** — `map_cloth_surface`, `get_mapped_cloth`, `attach_to_cloth_dynFK`, `setup_sim_dynFK`, `cgmDynFK.bake_nodes`, `set_base_name`, `chainMode='clothAttach'`
 - **[dynFKTool.py](../../../repos/cgmToolsPy3/cgm/core/tools/dynFKTool.py)** (`cgmSimChain`) - **Init Sim Setup**, Details status/`>>` rows, **Presets** menu (Cloth / Hair / Nucleus), **Cloth track**, **Attach to Cloth**, editable **Base Name**, **Tools → Query Settings**, target bake + post-bake `targets_disconnect`, `reload_dependencies()`
-- **[tool_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_calls.py)** — `mocapBakeTool()` reloads `mocap_align_utils` then `mocapBakeTools` via `cgmGEN._reloadMod` before opening UI; `fixRotationKey()` / `fixRotationAnimation()` reload `anim_utils` before running
+- **[tool_calls.py](../../../repos/cgmToolsPy3/cgm/core/tools/lib/tool_calls.py)** — `mocapBakeTool()` reloads `mocap_align_utils` then `mocapBakeTools` via `cgmGEN._reloadMod` before opening UI; `fixRotationKey()` / `fixRotationAnimation()` reload `anim_utils` before running; `rotateOrderChangeCurrent()` / `rotateOrderChangeAnimation()` reload `anim_meta` and read `cgmVar_animUtilsRotateOrder`
 - **[module_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/module_utils.py)** — `mirror_get`, `siblings_get`, module parent/children wiring
 - **[animate_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/animate_utils.py)** — Animate context cache (`module_get`, `context_get`, mirror module expansion)
 - **[cgmNCloth_presets.py](../../../repos/cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** - Cloth **fabric** vs simulation **solver** / **wind** / **utility** (`calm`); `d_profileKind` registry
 - **[transform_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/transform_utils.py)** - `ground_position_get` re-export
 - **[mayaSettings_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/mayaSettings_utils.py)** - `sceneUp_get` / `sceneUp_set` (Maya `upAxis`); **`sceneUp_switch()`** (Y↔Z toggle + ViewCube-safe viewport home)
-- **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, golden/finger presets
+- **[arrange_utils.py](../../../repos/cgmToolsPy3/cgm/core/lib/arrange_utils.py)** - `alongRatio`, `alongRatio_prompt`, `alongRatio_value`, `alongLine` `curve='target'` (To Curve even/spaced/ratio); `alongRatio_slide_bind` / `_eval` / `_release` (Ratio + Stack live sliders)
 - **[general_utils.py](../../../repos/cgmToolsPy3/cgm/core/rig/general_utils.py)** - `ratio()` shim to `alongRatio`
 - **[block_utils.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** - `prerig_handlesLayoutRatio`, `prerig_arrangeRatio_menuDict`
 - **[ml_breakdown.py](../../../repos/cgmToolsPy3/cgm/core/lib/ml_tools/ml_breakdown.py)** - Optional diagnostics touchpoint
@@ -70,6 +71,59 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** - Optional P4 checkout/add for FBX export (active — [`Branch_p4.md`](Branch_p4.md))
 
 ## 🗓️ Timeline
+
+### August 20, 2026 - To Curve arrange (even / spaced / ratio) + Ratio / Stack sliders
+**What**: Added a **To Curve** arrange path: last selected must be a nurbsCurve; remaining objects are placed on the **whole** curve (U 0→1). Even and spaced reuse existing `alongLine` `curve='target'`. Ratio target now covers the full curve (first at start, last at end) instead of keeping world endpoints and only moving middles. Wired through shared Snap/toolbox rows and Arrange menus. `| Curve` (cubic through selection, endpoints fixed) is unchanged. Snap/toolbox **Ratio slide** live-applies a geometric ratio (1 = even, φ = golden) on Linear / Curve / To Curve. A separate **Stack** slider (0 = piled at start, 0.5 = even, 1 = piled at end) uses the same path radios. Stack **To Curve** allows **one object + curve** (slider is U 0→1 along the path).
+
+**Files**:
+- EXTENDED: `cgm/core/lib/arrange_utils.py` — `alongRatio` / `alongRatio_prompt` `curve='target'` full-curve 0→1; min 2 objects + curve for geometric ratio; `alongRatio_value`; `quiet` for slider drag; `alongRatio_slide_bind` / `_eval` / `_release` (`mode='ratio'|'stack'`); `_ratio_stack_fractions`; target stack bind min **1** object + curve; `targetEven` / `targetClosest` / ratio To Curve anns
+- EXTENDED: `cgm/core/lib/curve_Utils.py` — `nurbs_percent_sampler` (cached OM2 `MFnNurbsCurve.getPointAtParam`, parametric min/max U)
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — `buildRow_to_curve_arrange`; **Golden | To Curve** / **Finger | To Curve** / **Custom | To Curve**; Arrange **To Curve** menu (Even / Spaced + ratio); snap marking menu **Closest** renamed **Spaced**; `buildRow_ratio_slider` (Ratio field + slider + φ; Stack field + slider + Even; shared Linear / Curve / To Curve radios)
+- EXTENDED: `cgm/core/tools/toolbox.py`, `cgm/core/tools/snapTools.py` — **To Curve:** Even / Spaced row via shared builder; ratio + stack sliders via `buildRows_ratio_arrange(..., ui=self)`
+
+**Features**:
+- Selection: objects… then last = curve
+- **Even**: equal splits along the whole curve (`getUSplitList` rebuild)
+- **Spaced**: closest point on the curve
+- **Ratio**: golden / finger / custom weights along the whole curve (parametric %)
+- Geometric ratio / Even / Spaced / Golden|To Curve: minimum **2 objects + curve** (one segment: first at start, last at end)
+- **Ratio slider**: drag redistributes live (geometric chain; φ = 1.618); still needs ≥2 work objects on To Curve
+- **Stack slider**: 0 = piled at start, 0.5 = even, 1 = piled at end; same Ratio path radios. Linear / Curve: first/last stay, middles move. To Curve: all work objects move
+- **Stack + one object + curve**: **Ratio path: To Curve**; slider is that object's U (0 start → 1 end)
+
+**Decisions**:
+- **To Curve** covers U 0→1 and moves first/last onto the curve; `| Curve` stays cubic-from-selection with world endpoints fixed
+- Ratio To Curve is parametric `turnOnPercentage`, matching existing cubic ratio — not arc-length
+- Slider binds an OpenMaya curve sampler on press and evaluates it each tick — no per-tick `pointOnCurveInfo` create/delete. Cubic path is frozen at press (hidden temp curve) instead of restoring/rebuilding middles
+- Stack is a separate control from geometric Ratio (0–1 pile vs φ chain). One-object To Curve is stack-only; geometric Ratio still needs segments
+- MRS prerig ratio menus unchanged (no last-selected curve in that flow)
+
+**Status**: ✅ Code complete — Maya verify: locators then curve → Even / Spaced / Golden | To Curve / Custom | To Curve; Golden / Golden | Curve regression; mesh-as-last fail-fast; Stack 0 / 0.5 / 1 on N objects; **one locator + curve → Stack U 0→1**
+
+---
+
+### August 19, 2026 - Rotate order change (`anim_meta`, toolbox Anim Utils)
+**What**: Exposed existing `anim_meta.rotateOrder_change` on cgmToolbox **Anim** tab **Anim Utils** as a second row: **Rotate Order:** enum (`xyz`…`zyx`) + `[Current]` / `[Animation]`, matching **Fix Rotation**. Selection-based; enum persisted in `cgmVar_animUtilsRotateOrder` (default `zyx`). **Current** preserves orientation at the current frame only (`timeContext='current'`); **Animation** remaps all keys (`timeContext='all'`). Wired through `tool_calls` with `_reloadMod`; same actions plus a **Rotate Order** radio submenu in `uiSection_animUtils` (Other → Anim + anim marking menu).
+
+**Files**:
+- EXTENDED: `cgm/core/lib/meta_utils/anim_meta.py` — `rotateOrder_change`: `timeContext` `current`/`now` skips key walk (xform preserve now)
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — `rotateOrderChangeCurrent()`, `rotateOrderChangeAnimation()`
+- EXTENDED: `cgm/core/tools/toolbox.py` — `buildSection_animUtils` rotate-order row + `var_animUtilsRotateOrder`
+- EXTENDED: `cgm/core/tools/lib/tool_chunks.py` — `uiSection_animUtils` menu items + radio submenu
+
+**Features**:
+- Same world orientation after changing rotate order (aim/up resample on keyed objects)
+- Shared optionVar so toolbox dropdown and marking menu stay in sync
+- Already-matching order skipped (existing log)
+
+**Decisions**:
+- `timeContext='current'` handled in `rotateOrder_change`, not `get_key_indices_from` (no current-key mode there)
+- Rotate order is a node enum: **Current** on keyed controls only preserves this frame; other keys can pop — use **Animation** for full curves
+- Thin wrappers only; no dedicated tool window
+
+**Status**: ✅ Code complete — Maya verify: unkeyed Current; keyed Animation remap; already-matching skip; reload without Maya restart
+
+---
 
 ### August 12, 2026 (c) - MRS batch error reporting (`process_blocks_rig`, `proxyMesh_verify`)
 **What**: Jonesy / Send to Build batch runs with incomplete puppet settings (`settingsControl2` missing `proxyLock` / `skeleton`) produced a Script Editor wall: same exception repeated for every finger block (~210s), triple `@Timer` / `cgmExceptCB` headers, then a misleading second failure in `puppetMesh_create` (Red9 `AttributeError: skeleton`). Tightened reporting and fail-fast behavior so one root cause prints once and batch stops at the first bad proxyMesh block.
@@ -1421,10 +1475,12 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - `get_nonintermediate` canonical in `shape_utils`; `search_utils.get_nonintermediateShape` delegates (lazy import)
 
 ### 15. Ratio arrange (`arrange_utils`, snap/toolbox, MRS prerig block menu)
-- `alongRatio` / `alongRatio_prompt`: proportional spacing, endpoints fixed, N≥3 controls
+- `alongRatio` / `alongRatio_prompt`: proportional spacing; linear/cubic endpoints fixed, N≥3; **To Curve** (`curve='target'`) covers U 0→1, min 2 objects + curve
 - Golden geometric chain; finger preset; custom prompt (φ default or comma weights)
-- Snap **Arrange → Ratio** submenu; cgmToolbox/snapTools **Ratio** button rows
-- MRS Builder block **Prerig**: **Arrange | Ratio *** menu items via `prerig_arrangeRatio_menuDict`
+- Snap **Arrange → Ratio** submenu + **To Curve**; cgmToolbox/snapTools **Ratio** / **To Curve** button rows + **Ratio slide** (geometric) + **Stack slide** (0 start / 0.5 even / 1 end; shared Linear / Curve / To Curve radios)
+- Stack To Curve: **one object + curve** is valid (slider = U 0→1); geometric Ratio still needs ≥2 work objects
+- Live sliders: `alongRatio_slide_bind` / `_eval` / `_release` + `CURVES.nurbs_percent_sampler` (no per-tick `pointOnCurveInfo`)
+- MRS Builder block **Prerig**: **Arrange | Ratio *** menu items via `prerig_arrangeRatio_menuDict` (no To Curve)
 
 ### 16. Export tdSet resolution + Prep namespace (`bakeAndPrep`)
 - `resolve_td_set_for_asset`: outer→inner namespace candidates for bake/export/delete sets
@@ -1535,7 +1591,10 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Do not add top-level `shape_utils` imports in `distance_utils`; use `SEARCH.get_nonintermediateShape` or lazy import inside functions to avoid `transform_utils` circular init.
 - Curve lane alignment: shape-level `.ep[i]` + `SHAPES.get_nonintermediate` keeps closest-point and EP edits on visible geometry, not Orig.
 - Ratio presets: equal segment weights normalize to even spacing — geometric chains need descending powers per segment, not repeated constants.
-- Shared menu builders (`buildRows_ratio_arrange`, `prerig_arrangeRatio_menuDict`) keep snap, toolbox, and MRS block menus aligned.
+- Shared menu builders (`buildRows_ratio_arrange`, `buildRow_to_curve_arrange`, `prerig_arrangeRatio_menuDict`) keep snap, toolbox, and MRS block menus aligned.
+- **`| Curve`** = cubic through the selection (world endpoints fixed); **To Curve** = last selected is the path, objects cover U 0→1.
+- Ratio slider: bind an OpenMaya percent sampler on press; each tick is `getPointAtParam` + `move`. Do not create/delete `pointOnCurveInfo` while dragging.
+- **Stack** is not geometric Ratio: 0 pile-start / 0.5 even / 1 pile-end. One object + curve on **To Curve** is stack-only (U along the path); keep geometric Ratio at N≥2.
 - Nested ref export roots need **outer** namespace on tdSets (`Blurrg:bake_tdSet` not `Blurrg:Inner:bake_tdSet`); use prefix walk, not full DAG namespace string.
 - `project_utils` must not call FBX MEL at import — lazy `get_fbx_versions()` and batch must load FBX **before** importing Scene.
 - Read-only depot FBX fails as opaque FBX I/O; pre-check + batch path list is enough until optional `p4 edit` pass.
@@ -1590,7 +1649,7 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 - Rig FBX: confirm `_rig_fbx_export_to_path` no-takes path on same builds as anim export.
 - Consider a UI hint/disable state for options not applicable to selected mode.
 - Curve tweak row: optional `rebuild` toggle for distribute; lane-align `samples` / `refine_steps` exposed in UI if artists need tuning.
-- Ratio arrange: optional `cubicRebuild` / target-curve entries on toolbox row; store last custom ratio in optionVar.
+- Ratio arrange: optional `cubicRebuild` entries; store last custom ratio in optionVar.
 - Optional skin-cluster / bind preflight before `pruneSkeletonToJoints` (or auto-detach helper) if facial strip becomes a one-click artist tool.
 - Cloth attach: optional manual UV / face placement override (closest-point is default for all three surface tracks); chain rebuild parity for `clothAttach` chains.
 - Query Settings: optional copy-to-clipboard; full-profile export toggle (not only diff from `base`).
@@ -1600,5 +1659,5 @@ Improves Scene export reliability for Unreal-oriented workflows: rig single-file
 
 ---
 
-*Last Updated: August 12, 2026 (MRS batch error reporting + proxyMesh fail-fast)*  
+*Last Updated: August 20, 2026 (To Curve arrange + stack slide)*  
 *Branch Status: Active*

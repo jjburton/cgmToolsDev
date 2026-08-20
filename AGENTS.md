@@ -32,6 +32,8 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 12. **cgm Project Manager design contract**: [`Features/Feature_ProjectManager.md`](Features/Feature_ProjectManager.md) — project `.cfg` schema, path authority, **`dirMask`** (Content/Export scroll lists, Scene, P4 cache), asset structure, Project-tool P4 row. Update when changing `Project.py`, `project_utils`, or shared mask/walk behavior.
 
+13. **cgm.lib → cgm.core migration**: [`Features/Feature_LibToCore.md`](Features/Feature_LibToCore.md) — first-party `cgm.lib` inventory, old→new map, shim rules, unittest contract. Timeline: [`Branches/Branch_SpringCleaning.md`](Branches/Branch_SpringCleaning.md). Do not migrate vendored `zoo` / `ml` / `bo` / `openSource` / Red9. Update when porting or shiming a lib module.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.

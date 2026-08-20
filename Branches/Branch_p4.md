@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: August 12, 2026  
-**Last Updated**: August 19, 2026 (fstat cache client-root keys)  
+**Last Updated**: August 19, 2026 (empty assetDat persist + Fill Default Asset Types)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -23,6 +23,23 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - **`.cursor/rules/perforce-checkout.mdc`** - Agent workflow when py3 files need P4 checkout before edit
 
 ## 🗓️ Timeline
+
+---
+
+### August 19, 2026 (ae) - Empty asset types persist; Fill Default Asset Types menu
+**What**: Project load/`fillDefaults` no longer injects `character` / `environment` / `prop` when `assetDat` is empty, so a scripts-style project stays empty after Save → Reload. Default types are opt-in: **Project Setup → Fill Default Asset Types** and **Scene File → Fill Default Asset Types** (additive; skips existing names). **Tools → Verify Asset Dirs** unchanged.  
+**Files**:
+- EXTENDED: `cgm/core/tools/lib/project_utils.py` — `l_defaultAssetTypes`
+- EXTENDED: `cgm/core/tools/Project.py` — `data.assetTypes_fillDefaults`; `uiAssetTypes_refill`; Setup menu item; removed auto-fill from `fillDefaults`
+- EXTENDED: `cgm/core/mrs/Scene.py` — File menu item + `uiAssetTypes_fillDefaults` (refill then `uiProject_refreshDisplay`)
+- EXTENDED: `Features/Feature_ProjectManager.md`, `Branches/Branch_p4.md`
+
+**Features**:
+- Empty `assetDat` is valid and persists
+- Additive fill of default types with `d_dirFramework` subtypes
+- Scene File menu mirrors Project Setup; Verify Asset Dirs still only creates folders from current types
+
+**Status**: ✅ Code complete — verify empty types survive reload; Fill restores defaults; Scene categories refresh
 
 ---
 
@@ -833,5 +850,5 @@ None — P4 off by default; existing export behavior preserved.
 
 ---
 
-*Last Updated: August 19, 2026 (fstat cache client-root keys)*  
+*Last Updated: August 19, 2026 (empty assetDat persist + Fill Default Asset Types)*  
 *Branch Status: Active — useP4OnExport optional next*

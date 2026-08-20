@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Active (ongoing P4 + path UX work on p4 branch)
-- **Last Updated**: August 18, 2026 (Content/Export scroll lists + shared `dirMask`)
+- **Last Updated**: August 19, 2026 (empty `assetDat` persists; Fill Default Asset Types is opt-in)
 - **Audience**: Dev / TA — design contract for `cgmProjectManager` (`Project.py`), project `.cfg` data, and path authority used by Scene export
 - **Purpose**: Canonical reference for how cgm **projects** are stored, edited, and resolved into content/export roots. Scene, export preflight, batch mayapy, and optional Perforce all read paths and flags from this system — not from ad-hoc Maya paths.
 
@@ -53,6 +53,22 @@ Each project is a **ConfigObj** file (JSON-like sections) managed by `Project.da
 | `d_colors`, `d_anim`, `d_world`, `d_exportOptions` | Collapsible frames | Scene/Maya alignment settings |
 
 **Path authority**: `data.userPaths_get()` merges project paths with the current user's local overrides. Scene and export code should use this helper (or optionVars pushed from Project), not raw text fields.
+
+### Asset types (`assetDat`)
+
+**Semantics**: list of category templates (name + subtype `content` rows). Scene uses these as `l_categoriesBase` and subtype columns. **Empty is valid** — a scripts/content-root project can persist with no types so Scene treats on-disk folders as categories without character/prop/environment scaffolding.
+
+**Load**: `data.fillDefaults()` fills missing schema keys only. It does **not** inject default types when `assetDat` is empty.
+
+**Opt-in fill**: additive `character` / `environment` / `prop` via `project_utils.l_defaultAssetTypes` and `assetType_add` (skips names that already exist; attaches `d_dirFramework` subtypes).
+
+| Menu | Action |
+|------|--------|
+| Project **Setup → Fill Default Asset Types** | `uiAssetTypes_refill` → save `.cfg` |
+| Scene **File → Fill Default Asset Types** | same helper, then `uiProject_refreshDisplay` |
+| Scene **Tools → Verify Asset Dirs** | unchanged — creates folders from **current** `assetDat` (`VerifyAssetDirs`) |
+
+**Reset** (`fillDefaults(True)`) still resets other schema defaults only; it does not refill asset types.
 
 ### Directory mask (`dirMask`)
 
@@ -126,6 +142,8 @@ flowchart TD
 | Symbol | Role |
 |--------|------|
 | `Project.data(filepath=)` | Load/create project; `read` / `write` / `userPaths_get` / `asset_addDir` / structure verify |
+| `data.assetTypes_fillDefaults()` | Additive default types from `l_defaultAssetTypes` |
+| `uiAssetTypes_refill(self)` | Fill defaults, rebuild Asset Types UI, save |
 | `project_dir_mask(...)` | Merged exclude list for walks and cache |
 | `uiProject_build_dir_mask(self)` | Refresh UI `l_dirMask` from mDat or live General field |
 | `uiProject_fill(self)` | Push mDat → UI fields; rebuild mask + scroll lists |
@@ -192,6 +210,10 @@ Scroll-list RMB **Get Latest Revision** on a selected subdirectory uses the same
 - [ ] New / Load / Save / Save As — `.cfg` round-trip; local path overrides persist per user
 - [ ] Lock — fields disable when `lock=True`
 - [ ] Verify Dir (content/export) — creates asset structure from `assetDat`
+- [ ] Empty asset types — Save → Load/Reload (Project and Scene) stays empty; Scene still shows extra content folders
+- [ ] **Fill Default Asset Types** (Project Setup and Scene File) — adds character / environment / prop if missing; Scene categories refresh
+- [ ] New project starts with empty asset types
+- [ ] Scene **Verify Asset Dirs** still only verifies dirs from current types (no fill)
 - [ ] Push paths — `setProject` on valid content root
 
 ### Manual checklist — dirMask + scroll lists
@@ -240,6 +262,7 @@ Scroll-list RMB **Get Latest Revision** on a selected subdirectory uses the same
 
 | Date | Summary |
 |------|---------|
+| 2026-08-19 | Empty `assetDat` persists on load; Fill Default Asset Types is opt-in (Project Setup + Scene File); Verify Asset Dirs unchanged |
 | 2026-08-18 | Initial feature doc; Content/Export scroll lists use merged `dirMask`; `project_dir_mask` API; `walk_below_dir` case-insensitive mask + prune |
 | 2026-08-13 | P4 status row, session cache-first refresh, Slice B save prepare (timeline in Branch_p4) |
 
