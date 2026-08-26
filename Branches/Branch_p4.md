@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: August 12, 2026  
-**Last Updated**: August 19, 2026 (empty assetDat persist + Fill Default Asset Types)  
+**Last Updated**: August 24, 2026 (merge notes: UnrealWorkflow + Perforce)  
 **PR**: Pending
 
 ## 🎯 Goals
@@ -730,86 +730,236 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 
 ## 🚀 PR Notes
 
-### Perforce integration (optional layer)
+```markdown
+# Merge notes: UnrealWorkflow + Perforce
 
-#### Overview
-Adds optional Perforce checkout/add before FBX export for depot users. Non-P4 users see zero behavior change.
-
-#### Major Features
-
-##### 1. `cgm.core.lib.perforce` — connectivity (shipped)
-Read-only query API: `query_status_report()`, `connection_info`, `query_opened`, `query_file_status`.
-
-**Files Modified:**
-- `cgm/core/lib/perforce.py` - NEW
-
-##### 2. cgmP4 tool (shipped — artist manual P4 UI)
-Connectivity, opened files by changelist, **shelved files** panel, path query, checkout, sync workspace, batch revert/submit/**shelve**, shelved delete/**move**/submit. **Default CL partial submit** (checkbox subset → **S**): create numbered CL + reopen + submit. **Submit progress bar** (interruptable). Does **not** change export behavior.
-
-**Files Modified:**
-- `cgm/core/tools/p4Tool.py` - NEW/EXTENDED
-- `cgm/core/tools/lib/tool_calls.py` - `cgmP4Tool()`
-- `cgm/core/tools/lib/tool_chunks.py` - Help → Other → cgmP4
-- `cgm/core/mrs/Scene.py` - popup Shelve
-
-##### 3. Project save P4 prepare (shipped — Slice B + C + meta sidecars)
-Global **`prepare_output_for_write(mDat=)`** and shared **`prepare_paths_for_write`** / pose / meta / Maya-scene helpers before writes when `versionControl=perforce`. Out-of-date / locked block; checkout confirm on existing depot files; **skip add** on new files (entry (z)). **Paths-first:** prepare before heavy gather (mocap, skinDat, animFilter). Wired: project cfg, Scene Save Version / Save Maya here, **meta `.dat`/`.bmp`** (`prepare_meta_files_for_write`), poses, animFilter `.afs`, mocap CCL, skinDat, batch scripts (`confirm_p4=False`).
-
-**Files Modified:**
-- `cgm/core/lib/path_utils.py` - prepare helpers, `PathWritePrepareError`, paths-first contract
-- `cgm/core/tools/Project.py`, `cgm/core/cgm_Dat.py` - write hooks
-- `cgm/core/mrs/Scene.py`, `PoseManager.py`, `Animate.py` - Maya/pose/meta saves
-- `cgm/core/tools/animFilterTool.py`, `mocapBakeTools.py`, `mocap_align_utils.py`, `skinDat.py`
-- `cgm/core/mrs/lib/batch_utils.py`, `Builder.py` - batch writes
-
-##### 4. Session status cache (shipped)
-**Files Modified:**
-- `cgm/core/lib/perforce_session.py` - NEW
-- `cgm/core/lib/perforce.py`, `cgm/core/tools/p4Tool.py`, `cgm/core/tools/lib/tool_calls.py`
-
-##### 5. FBX export preflight (shipped)
-- `scene_export_utils.resolve_export_fbx_paths` + `path_utils.preflight_export_output_paths` before bake in ExportScene
-- **`p4_checkout`** / **`confirm_p4`** gates — batch respects Auto Check Out off (entry (x)); all paths checked before fail (entry (x))
-- Scene **Options → Auto Check Out Export Files** — silent P4 checkout/add on export when enabled (entry (u)); **`p4_add=autoCheckoutExportFiles`** (entry (z))
-- **Mayapy batch** — payload carries **`projectConfig`**, **`p4User`**, **`p4Client`**, **`autoCheckoutExportFiles`**; bootstrap before `BatchExport` (entry (v)). **Regenerate batch file** after sync when P4 context or auto-checkout option changes.
-- **Batch P4 prepare summary** — `log_export_prepare_summary` at batch end (entry (w))
-
-##### 5b. Batch scratch scripts (shipped — edit-only)
-- **`batch_utils._batch_prepare_write_path`** — **`p4_add=False`**: **`p4 edit`** when on depot; skip **`p4 add`** for local-only scratch (`mrsScene_batch.py`, etc.)
-
-##### 6. Export-only P4 flag (next)
-- `cgm/core/tools/lib/project_utils.py` / Project UI — **`useP4OnExport`** (default off)
-- Optional: queue-time batch preflight without opening scene
-
-**Configuration:**
-- `useP4OnExport`: False (default)
-- `CGM_EXPORT_P4`: env override for farm batch
-
-#### Architecture Decisions
-
-1. **Optional layer**: Triple gate before any p4 subprocess; skip silently otherwise
-2. **No zooPy import**: Reference vendored code only; own module under cgm/core/lib/
-3. **FBX export preflight shipped**: `preflight_export_output_paths` before bake (entry (q)); defense-in-depth writability remains in `fbx_export_selection`
-4. **Paths first**: Interactive saves call **`prepare_*`** before expensive Maya work — immediate P4 UX; **`skip_prepare`** on low-level writers when UI prepared
-5. **Meta sidecars mirror poses**: **`prepare_meta_files_for_write`** — dat-only vs dat+bmp via `store_thumbnail` / `include_existing_thumbnail`
-6. **Default CL partial submit**: never **`submit -i` Change: default**; multi-file uses **`reopen`** to numbered CL (entry (s)); **`opened_entries`** not disk path re-resolve
-7. **Mayapy batch P4**: copy interactive cgmP4 user/client + project cfg into batch payload — standalone has no Scene session (entry (v))
-8. **Batch scratch scripts**: never auto **`p4 add`** — edit-only prepare (entry (v))
-9. **cgmP4 revert paths**: use client-root disk path from **`p4 where`**, not raw UNC **`clientFile`** from **`p4 opened`** (entry (v))
-10. **Export `p4_checkout` vs `confirm_p4`**: **`confirm_p4`** controls dialogs only; **`p4_checkout`** gates **`p4 edit`/`p4 add`**. Batch with Auto Check Out off → **`p4_checkout=False`** (writability-only). Interactive always attempts checkout (`logExportSummary=True`) with or without confirm (entry (x))
-11. **Export preflight all-path**: check every planned FBX path; aggregate failures in **`ExportPreflightFailedError`** — no fail-fast on first locked/read-only path (entry (x))
-12. **Interactive skip-add**: default **`p4_add=False`**; never Add confirm. New files write locally; add via Find Unknowns / Scene Add. Export silent add only when Auto Check Out is on (entry (z))
-
-#### Breaking Changes
-None — P4 off by default; existing export behavior preserved.
-
-#### Next Steps
-1. **`useP4OnExport`** flag (default off) — export-only opt-in separate from `versionControl`
-2. **Phase 0 audit:** Resolve open questions (FBX binary type, changelist policy, P4 error strings) before wide studio rollout
+Optional Perforce for depot users. Scene export hardened for Unreal. mocapBakeTools is the body-align home. cgmSimChain supports cloth attach. Non-P4 users should see no P4 behavior.
 
 ---
 
-**Active** — Slice A/B/C + FBX export preflight + Scene auto checkout export + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit + **interactive skip-add** shipped; **`useP4OnExport`** optional next.
+## Scene
+
+### Features
+
+**Export**
+- Rig mode always single-file (`{asset}_rig.fbx`); no per-shot split
+- Stage-tagged failures on `ExportScene` / `RunExportCommand` / `BatchExport`
+- Nested-ref tdSet resolution (`bake` / `export` / `delete` sets from outer namespace)
+- Writability pre-check before FBX; `.bak` sidecar cleanup; export summary (shots, frames, paths, UP axis)
+- Batch honors per-item `worldUp`; mayapy FBX plugin bootstrap
+- Project options: **Delete mesh** (anim/cutscene, default off) and **Fix rotation** (post-euler bake, default off)
+- Export queue: Ctrl/Shift multi-select + toolbar bulk enqueue (RMB still one item)
+- Sets-column **Export Here**
+- FBX **preflight before bake** (P4 checkout confirm; cancel = no bake)
+- **Auto Check Out Export Files** (default off) — silent `p4 edit`/`p4 add` when on
+- Mayapy batch carries project + P4 user/client (regenerate `mrsScene_batch.py` after sync)
+- Batch end log includes P4-prepare rollup; all planned FBX paths checked before fail
+
+**Browser**
+- Icon rows: Save Maya here / Export / Save Version; save-here stub basename
+- Mixed dir+file browse levels (dir and file buttons independently)
+- Folder vs file display (`name/`, folders-first, dir tint); readable selection highlight
+- P4 row tints + status suffix (checked out / add / out of sync / unknown / locked)
+- File popup: Checkout, Add, Revert, Sync, Submit, Shelve
+- **Utils → Switch Up** (Y↔Z scene up + ViewCube-safe home; does not write project `worldUp`)
+- Meta sidecar prepare (`.dat` / `.bmp`) on Refresh Data, Update Thumb, notes save
+- **File → Fill Default Asset Types** (mirrors Project Setup)
+- `usePluralSubDirs`: plural folders, singular filename tokens (`bob_rig_01`); mixed-folder Fix Now
+- Quieter startup logs
+
+### Bugs
+
+- Non-ref exports skipped delete sets, used the wrong bake set, or failed with `No object exists: master`
+- Multi-ref cutscene could pick another rig’s `delete_tdSet`; mesh strip left stale names in selection
+- Empty AnimList + per-shot = false batch success, no FBX
+- Shot bake treated length as a frame (`min/max` of `[start, end, length]`)
+- Version Save/Export could join `False`; metadata did not refresh from column select
+- Empty/missing `rig/` folder hid Save/Export/Save Version
+- Popup Refresh / P4 / Delete crashed Maya (Qt reentrancy — deferred list reload)
+- Batch with Auto Check Out **off** still checked out depot FBX
+- Script Editor spam from P4 cache hits and `HasSub`
+
+---
+
+## Project Manager
+
+### Features
+
+- General **versionControl** (`none` | `perforce`) + live P4 status row
+- `usePluralSubDirs` checkbox; legacy configs default missing keys on project switch
+- Content/Export scroll lists use the same **dirMask** as Scene and P4 Cache (live refresh)
+- **Setup → Fill Default Asset Types** — opt-in additive fill
+- Project `.cfg` save runs P4 prepare when VC=perforce
+
+### Bugs
+
+- Empty `assetDat` was refilled with character/environment/prop on Save → Reload
+- `fillDefaults` flooded the Script Editor at DEBUG unless `CGM_VERBOSE_FILL_DEFAULTS`
+- `usePluralSubDirs` leaked into filenames (`*_templates_01`)
+
+---
+
+## cgmP4 (new)
+
+### Features
+
+- Connection prefs (`cgmVar_p4_user` / `cgmVar_p4_client`); Help → Other → cgmP4
+- Opened Files grouped by changelist; batch Revert / Submit / Shelve
+- **Shelved Files** panel: delete, submit, move to changelist
+- Sync Workspace; Path Checkout
+- Session cache so re-open does not re-run full `p4 info`
+- Interruptable submit progress bar
+- Default changelist **partial submit** (checked subset → numbered CL + reopen + submit)
+
+### Bugs
+
+- Partial submit from default CL failed (`submit -d` / `Change: default`)
+- Revert missed UNC `clientFile` paths (now `p4 where` → client-root disk path)
+
+---
+
+## Find Unknowns
+
+### Features
+
+- Per-row Open folder
+- Ext-filter cells size to the longest `{ext} (count)` label
+- Open does not flush session cache; toolbar Cache = fstat warmup; Setup → Deep Scan = disk walk (no recursive fstat)
+
+### Bugs
+
+- Cache recache could mark Scene-browser files `notOnDepot` (UNC vs `D:\p4\...` fstat keys)
+
+---
+
+## mocapBakeTools
+
+### Features
+
+- Native local-TR capture / snap / bake (`mocap_align_utils`); dual-path legacy vector bake when offsets unset
+- Align UI: Rig NS, Skel Roots, Capture, Snap All/Sel; Tools → Mapping Report + debug locs
+- CCL uniqueness under Skel Roots (not MetaHuman-only); sources can be driver **transforms**, not joints-only
+- Target RMB reorder + `[n]` index labels; Setup → Show short names
+- Last CCL autoload, status bar, Setup → Recent
+- Save / Save As: P4 prepare before connection resolve
+
+### Bugs
+
+- Snap used a plain locator instead of `doLoc` on the target (wrong world offset with `rotateAxis`)
+- CCL save blocked ArtSpine / joint-named drivers unique under Skel Roots
+- P4 Cancel on save produced duplicate errors + traceback
+
+---
+
+## cgmSimChain
+
+### Features
+
+- Cloth attach + surface tracks (follicle / rivet / uvPin); map existing nCloth; hair chain unchanged
+- Layered nCloth presets (fabric / solver / wind); Presets menu (Cloth / Hair / Nucleus)
+- Init Sim Setup; Query Settings; editable Base Name; simulation bake of targets
+- Details `<<` loads nucleus/cloth/hair from selection
+
+### Bugs
+
+- Bake All Targets left loc→target `parentConstraint` nodes
+- Fabric/Solver menus reapplied presets on Details rebuild / attach
+- Fabric apply reset `localSpaceOutput` (output-space setup treated as fabric)
+
+---
+
+## AnimFilter / bake tools
+
+### Features
+
+- Confirm on window **X**
+- Playback stops before frame-scrub bake (AnimFilter, Locinator, mocap, bakeAndPrep)
+- `.afs` Save / Save As: P4 prepare before gather
+
+### Bugs
+
+- Bake while the timeline was playing fought `currentTime`
+
+---
+
+## cgmToolbox / Snap / Arrange
+
+### Features
+
+- **Fix Rotation** Current / Animation (Anim Utils + marking menu)
+- **Rotate Order** Current / Animation + enum
+- **To Curve** Even / Spaced / Ratio; Ratio slide + Stack slide (Linear / Curve / To Curve)
+- Ratio arrange (golden / finger / custom) on Snap, toolbox, and MRS prerig
+- Align EPs (lane) + Distribute EPs on Controls tweak row
+- Select* / marking-menu lists sorted by DAG hierarchy
+- Maya Be Odd → Cascade UI Windows
+
+### Bugs
+
+- Ground snap / `groundPos` assumed Y-up (Z-up forced `Y=0`)
+
+---
+
+## MRS Builder / Rig
+
+### Features
+
+- Send to Build / MRS Build logging + window placed on screen
+- `moduleTarget` rewire on block parent change; eyeLook resolution with clear errors
+- Exception logging: one report per failure; `proxyMesh_verify` fail-fast; structured `connectAttr` errors
+- Arnold `mtoa` loaded in batch only if the plugin is registered
+
+### Bugs
+
+- Missing prerig vis/settings messages → `False.doDuplicate()` crash on batch rig
+- `mirror_get` mixed FRNT / non-FRNT coat modules; Animate marking menu crash
+- Jonesy-class batch printed the same incomplete-settings exception once per finger
+- `is_rigged` raised when `moduleTarget` was missing
+- Batch `loadPlugin('mtoa')` failed on hosts without Arnold
+
+---
+
+## PoseManager / Animate / skinDat
+
+P4 prepare on pose save/update/rename/duplicate and before skinDat gather. Checkout dialogs appear before expensive Maya work; new files write locally (no Add popup).
+
+---
+
+## MetaHuman facial (ProjectScripts)
+
+- `transfer_rig` (SDK transfer, rest-pose invariants) and `constrain_rig` (target follow)
+- `get_driven_data`, control→bridge map, joint pairing
+- `pruneSkeletonToJoints` in cgm `joint_utils` (keep-list + parent chain)
+- `deleteUnused` does not delete unmapped ancestors of matched targets
+
+---
+
+## MRS / Fortnite skeleton (ProjectScripts)
+
+- Maps + `connect_fn_skeleton_to_mrs` in `mrs_fortnite_utils.py` (`biped.py` re-exports)
+- Point + orient constraints (MRS drives FN); remapped scale `connectAttr` (not scaleConstraint)
+- Upperarm twist driver mapping corrected
+
+---
+
+## Shared / cleanup
+
+- New `cgm.core.lib.perforce` + `perforce_session` (optional; explicit `-u/-c/-ztag`)
+- `path_utils` prepare contract: checkout existing depot files; skip add on new files; batch/farm = no dialogs
+- Interactive skip-add: Save Version / first-time meta stay unknown until Find Unknowns or Scene Add
+- Subtype invariants registry (`geo` / `audio` / `source`); `baseFemale_gameToon` block config
+- Removed unused `Scene2.py` (external importers must use `Scene`)
+
+---
+
+## Still open (do not claim)
+
+- `useP4OnExport` flag (P4 still gated by `versionControl=perforce`)
+- Full Maya + Unreal ingest pass
+- MetaHuman facial: no shelf UI; core not in cgm; full-face regression scenes
+- mocap: deprecate duplicate project-script align UI; optional `cgmDat/mocap/` preset browser
+- FN connect: full-body Maya regression; face map unused on connect
+```
 
 ---
 
@@ -850,5 +1000,5 @@ None — P4 off by default; existing export behavior preserved.
 
 ---
 
-*Last Updated: August 19, 2026 (empty assetDat persist + Fill Default Asset Types)*  
+*Last Updated: August 24, 2026 (merge notes: UnrealWorkflow + Perforce)*  
 *Branch Status: Active — useP4OnExport optional next*

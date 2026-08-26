@@ -1,5 +1,5 @@
 ---
-description: Use cgm_Meta.py for meta behavior; search the codebase before one-off helpers
+description: Use cgm_Meta.py for meta behavior; do not invent lookups that already exist
 alwaysApply: true
 ---
 
@@ -10,10 +10,16 @@ alwaysApply: true
 - In the **cgmToolsPy3** checkout, **`cgm/core/cgm_Meta.py`** is the primary place to learn how **cgmMeta / cgmObject** (and related classes) behave: properties (`p_nameShort`, `p_nameLong`, etc.), message links, `msgList_*`, `getMessageAsMeta`, `connectChildNode`, and other shared rig/meta conventions.
 - When unsure whether a capability exists on meta instances, **read or search that file and nearby callers** instead of assuming Maya-only or ad-hoc patterns.
 
+## Do not invent lookups that already exist
+
+**Before** any new `def` that uses `mc.ls`, `listConnections`, `listAttr`, `keyframe`, or name-string hacks: **Read** [`Features/Feature_CoreLibLookups.md`](../../Features/Feature_CoreLibLookups.md) and call those names.
+
+Do not add a wrapper whose only job is that query. A new lib function is allowed only after a search shows a real gap — not a type-check or log line on top of an existing call.
+
 ## Prefer the codebase over one-off code
 
-- **Before** adding new helpers (extra `mc.ls`, string hacks, duplicate logic), **search the cgmToolsPy3 tree** (and other roots in this workspace) for existing utilities, meta APIs, or the same problem already solved elsewhere.
-- Reuse or extend what is already there (e.g. use `mObj.p_nameLong` on cgm objects rather than re-deriving long paths) unless there is a clear gap and a deliberate reason to diverge.
+- **Before** adding new helpers (extra `mc.ls`, string hacks, duplicate logic), **search the cgmToolsPy3 tree** for existing utilities, meta APIs, or the same problem already solved elsewhere.
+- Reuse or extend what is already there unless there is a clear gap and a deliberate reason to diverge.
 
 ## Module placement (non-meta code)
 

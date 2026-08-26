@@ -3,11 +3,22 @@
 ## Quick Info
 **Status**: Active  
 **Created**: August 20, 2026  
-**Last Updated**: August 20, 2026 (mixed-hub retarget Maya-verified; attributes/search shim gated)  
+**Last Updated**: August 25, 2026 (Toolbox Legacy tab removed)  
 **PR**: Pending
 
 ## Goals
-Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core` without breaking Maya tools or old `import cgm.lib.X` scripts. Stand up a real unittest safety net (keep unittest + Toolbox menu; no pytest). Leave vendored trees (`zoo`, `ml`, `bo`, `openSource`, Red9) and unused show scripts alone. This branch is **not** “delete `cgm.lib`.”
+Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core` without breaking Maya tools. Stand up a real unittest safety net (keep unittest + Toolbox menu; no pytest). **Drop unused legacy artist windows** (attrTools, tdTools, locinator, setTools, namingTools, puppetBox, bufferTools, polyUniteTool) and keep `cgm.core.tools`. **Toolbox Legacy tab removed** (2026-08-25); animTools 1.0 files remain on disk until a later pass (`ImportError` after libOld if launched via `animToolsLEGACY()`). Leave vendored trees (`zoo`, `ml`, `bo`, `openSource`, Red9) and unused show scripts alone. This branch is **not** “delete `cgm.lib`.” First-party modules are parked in **`cgm/libOld`**; `cgm.lib` keeps zoo/ml and the `lists` shim.
+
+## Remaining
+
+Canonical table: [`Feature_LibToCore.md` — Remaining on this branch](../Features/Feature_LibToCore.md#remaining-on-this-branch).
+
+| Do now | Later / not this branch |
+|--------|-------------------------|
+| P4 `move` (or add+delete) so the depot matches `cgm/libOld` | Hollow-shim `attributes` / `search` back onto `cgm.lib` (`returnObjectType` landmine) |
+| Maya smoke Scene / MRS / mocap bake / Toolbox (TD / Anim / Settings) / PuppetKey / rigger MM / zoo+ml | Drop or retarget leftover `animTools.py` + locinatorLib / tdToolsLib / namingToolsLib |
+| Re-run `cgm - All` if you have not since the runner/LISTS/NODES fixes | Do not port `modules` null-system, leftover deformers bake, leftover joints, bulk skinning |
+| | Do not migrate zoo/ml/bo/openSource/Red9; do not delete the `cgm.lib` package |
 
 ## Related Documentation
 - **[Feature_LibToCore.md](../Features/Feature_LibToCore.md)** - Canonical inventory, old→new map, shim rules, test-runner contract, wave order
@@ -16,6 +27,332 @@ Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core
 - **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** - Same vendored rule: do not import zooPy perforce from core
 
 ## Timeline
+
+### August 25, 2026 - Toolbox Legacy tab removed
+**What**: Removed the Toolbox **Legacy** tab (TD / Anim / Settings remain). Did **not** delete `cgm/tools/animTools.py` or held libs. `TOOLCALLS.animToolsLEGACY` still exists for scripts; it `ImportError`s after libOld.
+
+**Files**:
+- EXTENDED: `cgm/core/tools/toolbox.py` — drop `uiTab_legacy` / `buildTab_legacy`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Reload Toolbox to verify three tabs.
+
+---
+
+### August 25, 2026 - Restore SEARCH.get_referencePrefix
+**What**: Hygiene had left the `get_referencePrefix` body as dead code after a leftover `returnSelectedAttributesFromChannelBox` wrapper (no `def`). `cgm_Meta.getReferencePrefix` → `SEARCH.get_referencePrefix` AttributeError. Restored the function; dropped the unused old-name wrapper (core callers already use `get_selectedFromChannelBox`). Did **not** alias `returnReferencePrefix` on SEARCH.
+
+**Files**:
+- EXTENDED: `search_utils.py`, `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Code + docs. Re-run `cgmMeta` / `cgm - All`.
+
+---
+
+### August 25, 2026 - Unittest reload fallout after libOld
+**What**: `importlib.reload` was keeping removed `Test*` classes (`Test_object_size_alias`) and old aliases (`returnListChunks` on `list_utils`, `returnObjectSize` on DIST). `_reload()` does not reload `cgm.lib.lists`. NODES `isConnected` failed on time-typed plugs because Maya inserts `unitConversion`; **`setup_offset_cycle_speed` was not changed.** `file -new` does not reset `currentUnit`.
+
+**Files**:
+- EXTENDED: `cgmTests.py` (drop test module from `sys.modules` then import)
+- EXTENDED: `test_LISTS.py` Test_shimNames (reload shim; disk-check old names are not assigned on `list_utils`)
+- EXTENDED: `test_NODES.py` (`isConnected(..., ignoreUnitConversion=True)` on `time1` and animCurve `input`)
+- EXTENDED: `cgm/core/__init__.py` ignore tag `cgm.libOld`
+
+**Status**: Maya-closed for the last NODES fail. Re-run full `cgm - All` if that has not happened since these runner fixes.
+
+---
+
+### August 25, 2026 - libOld probe (first-party park)
+**What**: Moved first-party `cgm/lib` modules + `classes/` + confs + `gigs/` + `specialCaseStuff` to **`cgm/libOld`**. Left `zoo` / `ml` / `bo` / `openSource`, the `lists` shim, and `cgmBaseMelUI` in `cgm.lib`. Did **not** rewire leftover tools or projects to `libOld`. Did **not** add shims that hide `ModuleNotFoundError`.
+
+**Expected breaks**: locinatorLib / tdToolsLib / namingToolsLib if imported, `cgm/projects` mk1/morpheus/lbs, user `from cgm.lib import attributes`, `animToolsLEGACY()` if called. **Expected OK**: Scene, MRS, mocap bake, Toolbox (TD / Anim / Settings), PuppetKey MM, rigger MM, zoo/ml.
+
+**Files**:
+- MOVED: first-party modules from `cgm/lib/` → `cgm/libOld/`
+- EXTENDED: `cgm/lib/__init__.py`, `cgm/libOld/__init__.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Disk move done. p4 CLI was not on PATH — depot still needs `p4 move`. Maya smoke of core tools still open. Unittest fallout (runner/LISTS/NODES) recorded in the entry above.
+
+---
+
+### August 25, 2026 - Wave 4e examples off first-party lib
+**What**: Retargeted remaining example scripts off first-party `cgm.lib`. Did **not** import `locator_utils` (it imports Dragger). Did **not** use `ATTR.set_message` for the intro-to-meta demo (that example is native Maya multi-message duplication).
+
+**Map**: `createControlCurve` → `CURVES.create_fromName`. `doLocPos` → `mc.spaceLocator(p=hit)`. `storeObjectsToMessage` → inline `addAttr` + `connectAttr(..., nextAvailable=True)`. `doGetAttr` / `doSetAttr` / `doAddAttr` → `ATTR.get` / `ATTR.set` / `ATTR.add`.
+
+**Files**:
+- EXTENDED: `cgm/core/examples/help_rayCasting.py`, `help_introToMeta.py`, `cgm/core/exampleForMark.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Code + docs done — examples are not in `cgm - All`
+
+**Next leftover hub**: leftover deformers bake / leftover joints helpers / bulk skinning / `modules` null-system (do not port). `cgm.core` grep-clean of live first-party lib except the `test_LISTS` shim check.
+
+---
+
+### August 25, 2026 - Wave 4d test leftovers off first-party lib
+**What**: Retargeted `mayaBeOdd.py` and `cgmMeta_test.py` off first-party `cgm.lib`. Did **not** add them to the unittest runner. Did **not** revive `cgmMeta_test` (Dropbox paths remain). Kept `test_LISTS` shim import of `cgm.lib.lists`.
+
+**Map**: `createCurve('sphere')` → `CURVES.create_fromName('sphere')`. `getShortName` → `NAMES.get_short`. `doGetAttr` → `ATTR.get`. `returnMessageData` → `ATTR.get_messageLong`. `doBreakConnection` → `ATTR.break_connection`. `returnWorldSpacePosition` → `POS.get`.
+
+**Files**:
+- EXTENDED: `cgm/core/tests/mayaBeOdd.py`, `cgm/core/tests/cgmMeta_test.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Code + docs done — `cgm - All` does not run these files; no extra Maya pass required for this slice
+
+**Next leftover hub**: leftover deformers bake / leftover joints helpers / bulk skinning / `modules` null-system (do not port). Examples still on lib.
+
+---
+
+### August 25, 2026 - Wave 4c nodes / unused pyui / dead joints landmine
+**What**: Retargeted live core `cgm.lib.nodes` callers onto existing `NODES.create` and a new `setup_offset_cycle_speed`. Dropped unused Scene `pyui` import. Removed unreachable `joints.orientJoint` in `segment_utils`. Did **not** hollow-shim `nodes.py` / `joints.py` / `pyui.py`. Did **not** add `createNamedNode` / `offsetCycleSpeedControlNodeSetup` wrappers on core.
+
+**Map**: `createNamedNode` → `NODES.create`. `offsetCycleSpeedControlNodeSetup` → `NODES.setup_offset_cycle_speed` (lib created an unused offset MD; core does not).
+
+**Files**:
+- EXTENDED: `node_utils.py` (`setup_offset_cycle_speed`), `NodeFactory.py`, `post_utils.py`, `Scene.py`, `segment_utils.py`
+- NEW: `test_NODES.py`; `'NODES'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Complete — **Maya-verified 2026-08-25** (`cgm - All`, including NODES)
+
+**Next leftover hub**: leftover deformers bake / leftover joints helpers / bulk skinning / `modules` null-system (do not port). Production `cgm.core` grep-clean of live first-party lib except tests/examples.
+
+---
+
+### August 25, 2026 - Wave 4b skinning query / unused lib imports / settings-color landmine
+**What**: Retargeted live core skinning-query and settings-color callers onto existing APIs. Dropped unused first-party lib imports. Fixed MCS `returnSettingsData` NameError left by the curves wave (import commented, calls still live). Did **not** hollow-shim `skinning` / `modules` / `deformers` / `joints`. Did **not** port the old module-null system. Did **not** add `querySkinCluster` / `returnSettingsData` wrappers on core.
+
+**Map**: `querySkinCluster` → `SKIN.get_cluster`. `queryInfluences` → `SKIN.get_influences_fromCluster`. MCS jointOrientation → `'zyx'`. `getSettingsColors` → SHARED `_d_side_colors_index` (**center is sub, aux** = yellowBright/peach, not center main). Eye blink `returnBlendShapeAttributes` → `mc.listAttr(..., m=True)`.
+
+**Files**:
+- EXTENDED: `skin_utils.py` (`get_cluster`), `skinDat.py`, `segment_utils.py`, `meta_Utils.py`, `shared_data.py` comment, `ModuleShapeCaster.py`, `eye.py`
+- EXTENDED: unused lib imports dropped from `curve_Utils.py`, `surface_Utils.py`, `Project.py`, `ControlFactory.py`
+- NEW: `test_SKIN.py`; `'SKIN'` in `cgmTests.py` `_d_modules['coreLib']`; `test_SHARED` side-color + `getSettingsColors`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Complete — **Maya-verified 2026-08-25** (`cgm - All`, including SKIN + SHARED color tests)
+
+**Next leftover hub**: joints / leftover deformers bake / nodes / modules null-system (do not port) / bulk skinning. `Scene.py` still on `pyui`.
+
+---
+
+### August 25, 2026 - Wave 4 curves core retarget
+**What**: Retargeted live `cgm.core` `cgm.lib.curves` callers onto existing APIs. Did **not** wrap `createControlCurve` / `parentShapeInPlace` / `setCurveColorByName` / `combineCurves`. Did **not** hollow-shim `curves.py`. Left `mayaBeOdd` and `examples/help_rayCasting.py` on lib.
+
+**Map**: `createControlCurve` → `CURVES.create_fromName` (string; not `create_controlCurve`, which returns a list and always colors). `parentShapeInPlace` → `CORERIG.shapeParent_in_place`. `combineCurves` → `SHAPES.combine` (onto first; not `combineShapes` onto last). `setCurveColorByName` → `CORERIG.override_color`. `createTextCurve` → `CURVES.create_text`.
+
+**Files**:
+- EXTENDED: `ModuleShapeCaster.py`, `ModuleControlFactory.py`, `shapeCaster.py`, `DraggerContextFactory.py`
+- EXTENDED: unused `curves` import dropped from `curve_Utils.py`, `surface_Utils.py`, `ControlFactory.py`
+- NEW: `test_CURVES.py`; `'CURVES'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Complete — **Maya-verified 2026-08-25** (`cgm - All`, including CURVES)
+
+---
+
+### August 25, 2026 - Hygiene pass (old names off core)
+**What**: Retargeted `cgm.core` callers to the modern APIs from the audit punch list, then dropped unused old-name aliases on `list_utils` / DIST / MATH / SHARED / SNAP / GuiFactory. lists old names live on the `cgm.lib.lists` shim only. Leftover `distance` / `cgmMath` / `dictionary` / `position` / `guiFactory` still hold their own names for leftover tools.
+
+**Callers**: ModuleShapeCaster, Dragger, puppetKey, meshTools, mocapBakeTools, locinator, dynParentTool, ATTR, skinDat, rayCaster, SnapFactory, geo_Utils, shapeCaster, rigging_utils, general_utils, curve_Utils.
+
+**Tests**: Dropped `assertIs` alias checks on LISTS/DIST/MATH/SHARED/GUI. Shim test still hits `cgm.lib.lists.returnListChunks`. MATH asserts `normalizeListToSum(..., 2.0)` sums to 2 (core wins vs leftover lib divide).
+
+**Status**: Code + docs done — Maya: Toolbox **Unittesting → cgm - All** still needed this pass.
+
+---
+
+### August 25, 2026 - Audit shipped waves vs newer-core-API
+**What**: Reviewed Waves 1–3h against “use the newer core call; do not keep old names on `*_utils`.” ATTR/SEARCH, names (`get_base`), and rigging (`group_me` / `copy_pivot`) already match. lists / DIST / MATH / SHARED still have old-name aliases that core callers use. SNAP `move_*_snap` stays (not `SNAP.go`). Punch list lives in Feature_LibToCore “Audit of shipped waves.”
+
+**Status**: Evaluation only — retarget/hygiene pass landed same day (see Hygiene pass entry)
+
+---
+
+### August 25, 2026 - Prefer newer core API
+**What**: Contract clarification — if core already has a better call, use it. Do not add 1:1 old-name wrappers on `*_utils` just to match leftover `cgm.lib`. Old names stay on lib until leftover tools go away or the lib file is shimmed. Exception: newer is not a drop-in when behavior changes (`SNAP.go` rotateOrder).
+
+**Follow-up**: Removed Wave 3h `groupMeObject` / `copyPivot` wrappers. Core callers use `TRANS.group_me(..., parent=False, maintainParent=False)` and `copy_pivot`. Wave 3f callers use `NAMES.get_base` (dropped `getBaseName` on NAMES).
+
+**Files**:
+- EXTENDED: `rigging_utils.py`, `name_utils.py`, `shapeCaster.py`, `DraggerContextFactory.py`, `ModuleShapeCaster.py`, `ModuleControlFactory.py`, `skinDat.py`, `nameTools.py`, `test_RIGGING.py`, `test_NAMES.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Complete — Maya smoke same as 3h plus nameTools/skinDat basename via `get_base`
+
+---
+
+### August 25, 2026 - Wave 3h rigging groupMeObject / copyPivot
+**What**: Added 1:1 `groupMeObject` / `copyPivot` on `rigging_utils`. Retargeted live core callers. Dropped unused `rigging` imports. Restored live `from cgm.lib import curves` on ModuleShapeCaster / ModuleControlFactory (earlier wave commented the import while curve calls stayed — NameError). **Superseded same day** — wrappers removed; core uses `TRANS.group_me` / `copy_pivot` (see Prefer newer core API).
+
+**Files**:
+- EXTENDED: `cgm/core/lib/rigging_utils.py` — `groupMeObject`, `copyPivot`
+- NEW: `cgm/core/tests/test_coreLib/test_RIGGING.py`; `'RIGGING'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `shapeCaster.py`, `DraggerContextFactory.py`, `ModuleShapeCaster.py`, `ModuleControlFactory.py`, `Project.py`, `skinDat.py`, `curve_Utils.py`, `surface_Utils.py`, `ControlFactory.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `TRANS.group_me` defaults and `_grp` rename are not a drop-in
+- `copy_pivot` copies rp/sp separately; lib `copyPivot` uses `xform piv`
+- Restore lib `curves` until the curves wave — do not leave those calls unbound
+
+**Status**: Complete for core groupMeObject/copyPivot retarget — Maya smoke: `cgm - All` now includes RIGGING; Dragger group mode; MRS shape caster / control factory copyTransform
+
+---
+
+### August 25, 2026 - Wave 3g gui / optionVars core retarget
+**What**: Added 1:1 `purgeCGM` / `appendOptionVarList` / `resetGuiInstanceOptionVars` / `warning` on core GuiFactory. Retargeted Toolbox Purge Option Vars and cgmPuppetKey off lib. Dropped unused `guiFactory` import from shapeCaster. ControlFactory warnings → `mc.warning`. Did **not** hollow-shim `guiFactory.py` / `optionVars.py`. Did **not** call `purgeCGM` from unittest (wipes every optionVar containing `cgm`).
+
+**Files**:
+- EXTENDED: `cgm/core/classes/GuiFactory.py` — `purgeCGM`, `appendOptionVarList`, old-name aliases
+- NEW: `cgm/core/tests/test_coreLib/test_GUI.py`; `'GUI'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `tool_chunks.py`, `cgmPuppetKey.py`, `ControlFactory.py`, `shapeCaster.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `appendOptionVarList` stays on `self.optionVars` (puppetKey); core windows use `l_optionVars`
+- `purgeCGM` matches lib substring `'cgm'` — not a prefix filter
+- Hollow shim gated on leftover animTools + held `*Lib.py`
+
+**Status**: Complete for core gui/optionVars retarget — Maya smoke: `cgm - All` now includes GUI; Toolbox Purge Option Vars still listed (do not fire during smoke unless you mean to wipe prefs); puppetKey Reset; ControlFactory aim-axis warning
+
+---
+
+### August 25, 2026 - Wave 3f names core retarget
+**What**: Added 1:1 `getBaseName` / `getShortName` / `getLongName` wrappers on `name_utils` matching lib (missing → False). Retargeted live core `names.getBaseName` callers. Dropped unused `names` import from Project. Did **not** alias `getBaseName` = `get_base`. Did **not** hollow-shim `names.py`. `mayaBeOdd` still on lib (leave).
+
+**Files**:
+- EXTENDED: `cgm/core/lib/name_utils.py` — `getBaseName` / `getShortName` / `getLongName`
+- NEW: `cgm/core/tests/test_coreLib/test_NAMES.py`; `'NAMES'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `nameTools.py`, `skinDat.py`, `Project.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `get_base` is string-split only and does not check existence — not a drop-in for lib `getBaseName`
+- Hollow shim gated on leftover tools + lib internals
+
+**Status**: Complete for core names retarget — Maya smoke: `cgm - All` now includes NAMES; skinDat / nameTools basename; Project still opens
+
+---
+
+### August 25, 2026 - Wave 3e dictionary core retarget
+**What**: Aliased used axis/color names from `cgm.lib.dictionary` onto SHARED. Retargeted `cgm.core` off live `from cgm.lib import dictionary`. Conf-file `initializeDictionary` stays on lib. Did **not** hollow-shim `dictionary.py`.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/shared_data.py` — `stringToVectorDict`, `returnStringToVectors`, `returnVectorToString`, `axisDirectionsByString`, `returnStateColor`
+- NEW: `cgm/core/tests/test_coreLib/test_SHARED.py`; `'SHARED'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `rayCaster.py`, `shapeCaster.py`, `SnapFactory.py`, `meshTools.py`, `ControlFactory.py`, `curve_Utils.py`, `surface_Utils.py`, `nameTools.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- Canonical axis vectors stay tuples on `_d_axis_string_to_vector`; old dict uses lists
+- `returnStateColor` reads `_d_gui_state_colors` — `ready` green is core `0.5` (meshTools only uses `help`)
+- Do not port `initializeDictionary` this pass
+
+**Status**: Complete for core dictionary retarget — Maya smoke: `cgm - All` now includes SHARED; meshTools help fields; rayCaster axis cast; SnapFactory mid-surface
+
+---
+
+### August 25, 2026 - Wave 3d cgmMath core retarget
+**What**: Aliased used `cgm.lib.cgmMath` names on MATH. Retargeted `cgm.core` off live `from cgm.lib import cgmMath`. Fixed `rigging_utils` landmine (`cgmMath.*` with no import). Did **not** hollow-shim `cgmMath.py`. Did **not** alias `multiplyList` = `MATH.multiply`.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/math_utils.py` — old-name aliases; `mag`
+- NEW: `cgm/core/tests/test_coreLib/test_MATH.py`; `'MATH'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `rayCaster.py`, `curve_Utils.py`, `rigging_utils.py`, `skinDat.py`, `cgm_Deformers.py`, `shapeCaster.py`, `Project.py`, `surface_Utils.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `normSumList` = `normalizeListToSum` (core wins when `normalizeTo != 1`; skinDat uses `1.0`)
+- `mag` is n-d list hypot — not `length()` (euclid)
+- `MATH.multiply` is not a product; leave `multiplyList` on lib until a correct core helper is needed
+
+**Status**: Complete for core cgmMath retarget — Maya smoke: `cgm - All` now includes MATH; skinDat normalize; rayCaster mid-cast; blendShape delta add
+
+---
+
+### August 25, 2026 - Wave 3c position snap wrappers
+**What**: Core callers of `cgm.lib.position.movePointSnap` / `moveOrientSnap` now use 1:1 wrappers on `snap_utils` (`SNAP.move_point_snap` / `move_orient_snap`). Did **not** use `SNAP.go` (rotateOrder conversion would break mocap align). Dropped unused `locators` import from `surface_Utils`. Hollow `position.py` shim not done — leftover tools still call lib. Wave 3 distance retarget Maya-verified by user this session.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/snap_utils.py` — `move_point_snap` / `move_orient_snap` / `move_parent_snap` + old-name aliases
+- EXTENDED: `cgm/core/lib/mocap_align_utils.py`, `cgm/core/classes/SnapFactory.py`, `cgm/core/lib/surface_Utils.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Features/Feature_MocapAlignSnap.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- Mocap snap/bake must keep rotate-pivot `xform` + `move rpr` — `SNAP.go` is not a drop-in
+- `moveParentSnap` aliased on SNAP for later leftover-tool retarget; locinatorLib / tdToolsLib stay on lib this pass
+
+**Status**: Complete for core position retarget — Maya smoke: mocapBakeTools snap/bake + SnapFactory wrap-to-surface
+
+---
+
+### August 25, 2026 - Wave 3 distance core retarget
+**What**: Aliased used measure/pos names on DIST. Retargeted `cgm.core` off live `from cgm.lib import distance` (except `cgmMeta_test`). Curve/surface closest-info callers now use `DIST.get_closest_point` / `get_closest_point_data` / `get_closest_point_data_from_mesh`. SnapFactory `locClosest` → DIST + spaceLocator. Rigger MM Locator → `LOC.create`. `geo_Utils` progress windows → core GuiFactory. Did **not** hollow-shim `cgm.lib.distance`. Maya not verified this session.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/distance_utils.py` — old-name aliases; `get_object_size`; `get_positions_sorted_by_distance`
+- NEW: `cgm/core/tests/test_coreLib/test_DIST.py`; `'DIST'` in `cgmTests.py` `_d_modules['coreLib']`
+- EXTENDED: `ModuleShapeCaster.py`, `rayCaster.py`, `skinDat.py`, `curve_Utils.py`, `shapeCaster.py`, `surface_Utils.py`, `DraggerContextFactory.py`, `SnapFactory.py`, `segment_utils.py`, `general_utils.py`, `arrange_utils.py`, `rigging_utils.py`, `geo_Utils.py`, `GuiFactory.py`, `cgmMMRigger.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- `returnClosestPoint` aliases **pos-list** closest (`get_closest_from_posList`), never `get_closest_point` (surface)
+- `returnWorldSpaceFromMayaSpace` = `MATH.get_space_value(..., 'apiSpace')`
+- `get_object_size` covers mesh / nurbsSurface / nurbsCurve only; component sizer stays on lib
+- Follicle attach: `get_closest_point_data_from_mesh(mesh=surface, targetObj=obj)` — do not pass positional (obj, surface)
+- Do not import `locator_utils` from Dragger (cycle: LOC imports Dragger)
+- Hollow `distance.py` / `locators.py` shims wait on leftover tools + lib internals (`returnObjectType` `'shape'`)
+
+**Status**: Complete for core distance retarget — **Maya-verified 2026-08-25**
+
+---
+
+### August 24, 2026 - Wave 5 docs catch-up
+**What**: Recorded the unused-tool cut as **done** (windows/MEL already deleted 2026-08-20). Feature contract leftover inventory is six `cgm/tools` files. Did not re-run Maya smoke this session.
+
+**Files**:
+- EXTENDED: `Features/Feature_LibToCore.md` — status, post-cut remainder, Wave 5 done, launcher/rigger-MM notes
+- EXTENDED: `Branches/Branch_SpringCleaning.md`
+
+**Decisions**:
+- animTools 1.0 stays this branch; locinatorLib / tdToolsLib / namingToolsLib / animToolsLib stay with it
+- findTextures stays (Scene)
+- Hollow attributes/search shim still gated on lib locators/distance, not on the deleted UIs
+
+**Status**: Complete — docs only
+
+---
+
+### August 20, 2026 - Legacy artist tools cut
+**What**: Removed unused `cgm/tools` windows and old marking-menu MEL. Toolbox Legacy tab is AnimTools only. Dropped unused rigger MM Surface snap rather than retargeting. `findTextures` stays — Scene still uses it.
+
+**Files**:
+- DELETED: `cgm/tools/attrTools.py`, `tdTools.py`, `locinator.py`, `setTools.py`, `namingTools.py`, `puppetBox.py`, `bufferTools.py`, `polyUniteTool.py`
+- DELETED: `cgm/tools/lib/attrToolsLib.py`, `setToolsLib.py`, `puppetBoxLib.py`, `bufferToolsLib.py`
+- DELETED: `cgm/tools/markingMenus/cgmSnap.py`, `cgmSetMenu.py`, `cgmSetKey.py`
+- DELETED: `cgm/mel/cgmSnapMM.mel`, `cgmSetToolsMM.mel`, `cgmSetKeyMM.mel`
+- KEPT: `cgm/tools/animTools.py`, `findTextures.py`, `lib/animToolsLib.py`, `lib/locinatorLib.py`, `lib/tdToolsLib.py`, `lib/namingToolsLib.py`
+- EXTENDED: `cgm/core/tools/toolbox.py` — `buildTab_legacy` AnimTools only
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — dropped `*LEGACY` except `animToolsLEGACY`; dropped `loadPuppetBox` / `loadPuppetBox2`
+- EXTENDED: `cgm/core/tools/markingMenus/cgmMMRigger.py` — Surface snap + `tdToolsLib` import gone
+- EXTENDED: `cgm/core/tools/markingMenus/cgmMM_tool.py` — unused `tdToolsLib` import gone
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Decisions**:
+- Keep animTools 1.0 until a later pass (loc/tag/snap tabs still call locinatorLib / tdToolsLib)
+- namingTools, puppetBox, bufferTools, polyUniteTool go with the unused-tool cut
+- Do not retarget `doSnapClosestPointToSurface` — drop the menu item
+- `puppetBox2` had no module; launchers removed
+- Old hotkeys on `cgmSnapMM` / `cgmSetToolsMM` / `cgmSetKeyMM` break — use core MMs (`cgmPuppetKeyMM`, snap/set tools)
+- Does not lift the `attributes.py` / `search.py` hollow-shim gate
+
+**Status**: Complete for named windows — Maya smoke still open
+
+---
 
 ### August 20, 2026 - mixed-hub attributes/search retarget
 **What**: After Maya-verified attributes/search slice, retargeted remaining mixed-hub live `attributes`/`search` calls onto ATTR/SEARCH/VALID and dropped unused imports. `cgm.core` is now grep-clean of live `from cgm.lib import attributes` / `search` except examples and `cgmMeta_test` (do not revive). Did **not** shim those lib modules — `cgm/tools` and other `cgm.lib` files still need the old names.
@@ -186,30 +523,37 @@ Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core
 
 ### Later waves
 - [x] Vendored `zoo` / `ml` / `bo` / `openSource` / Red9 / `specialCaseStuff` / `gigs` left alone
-- [ ] Remaining used Maya utils as usage justifies
-- [ ] Factory / guiFactory retarget for `cgm/tools`
+- [ ] Remaining used Maya utils as usage justifies (deformers bake / leftover joints helpers / bulk skinning; do not port `modules`)
+- [x] Drop unused legacy `cgm/tools` UIs (attr/td/locinator/setTools 1.0, namingTools, puppetBox, bufferTools, polyUniteTool, old marking menus + MEL)
+- [ ] animTools 1.0 later; `findTextures` stays (Scene); locinatorLib/tdToolsLib/namingToolsLib/animToolsLib held until then
+- [ ] Factory / guiFactory for leftover `cgm/tools` (animTools 1.0)
+- [ ] Maya smoke of Wave 5: Toolbox (TD / Anim / Settings; no Legacy tab), rigger MM (no Surface snap), Scene findTextures, core attr/locinator/setTools
 
 ### Testing
 - [x] Wave 0: inventory of current runner (documented in feature doc)
 - [x] Unittesting → cgm - All in Maya (coreLib + cgmMeta; RigBlocks skipped)
+- [x] Wave 4 / 4b / 4c Maya-verified (`cgm - All`, including CURVES / SKIN / NODES)
 - [x] `cgm_Meta` lib retarget Maya-verified
 - [x] Mixed-hub attributes/search retarget Maya-verified
 - [x] ATTR float/double treated as one family (`validate_attrTypeMatch`)
 - [x] No pytest this branch
+- [ ] Wave 5 Maya smoke (Toolbox TD/Anim/Settings, rigger MM, Scene findTextures, core attr/locinator/setTools)
 
 ---
 
 ## PR Notes
 
 ### Overview
-Spring cleaning: migrate used first-party `cgm.lib` into `cgm.core` behind unittest, with thin shims so old imports keep working. Vendored trees untouched.
+Spring cleaning: migrate used first-party `cgm.lib` into `cgm.core` behind unittest, with thin shims so old imports keep working. Drop unused legacy `cgm/tools` windows (attr/td/locinator/setTools 1.0, namingTools, puppetBox, bufferTools, polyUniteTool). **animTools 1.0 stays.** Vendored trees untouched.
 
 #### Breaking Changes
-None intended for completed waves: `import cgm.lib.X` remains valid via shims. Canonical new imports are `cgm.core.lib.*_utils`.
+None intended for completed *lib* waves except first-party names parked in `libOld` (`from cgm.lib import attributes` fails). Canonical new imports are `cgm.core.lib.*_utils`. **Artist-facing:** Toolbox tabs are TD / Anim / Settings (Legacy tab gone). Use `cgm.core.tools` for attr/locinator/setTools. tdTools has no 1:1 replacement window. Old MEL marking menus `cgmSnapMM` / `cgmSetToolsMM` / `cgmSetKeyMM` are gone — use core MMs (`cgmPuppetKeyMM`, snap/set tools).
 
 #### Next Steps
-- Wave 3: locators / `distance.py` / `geo_Utils` guiFactory (reduces lib `search.returnObjectType` callers), **or** a hybrid leftover-body shim if requested
-- Do not hollow-shim `attributes.py` / `search.py` until that gate is lifted
+- Next leftover hub: leftover deformers bake / leftover joints helpers / bulk skinning / `modules` null-system (do not port)
+- Maya smoke: Toolbox (TD / Anim / Settings), rigger MM (no Surface snap), Scene findTextures, core attr/locinator/setTools
+- Wave 3 leftover: locators / `distance.py` / `geo_Utils` guiFactory (still gates hollow `search`/`attributes` shims)
+- Cut animTools 1.0 later (then drop locinatorLib / tdToolsLib / namingToolsLib)
 - Re-enable MRS RigBlocks tests only with per-test scene setup
 
 ---
@@ -229,5 +573,5 @@ None intended for completed waves: `import cgm.lib.X` remains valid via shims. C
 
 ---
 
-*Last Updated: August 20, 2026*  
+*Last Updated: August 24, 2026*  
 *Branch Status: Active*

@@ -12,7 +12,7 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 2. **Do not** rely on opening only the py3 folder if you want bridge rules active—the rules live here, not in py3.
 
-3. **Module placement:** new general utilities → **`cgm/core/lib/`**; meta/MRS/rig logic → **`mrs/`**, **`rig/`**; do not edit **zooPy** or **Red9** without clearance — see **`.cursor/rules/cgm-module-placement.mdc`**.
+3. **Module placement:** new general utilities → **`cgm/core/lib/`**; meta/MRS/rig logic → **`mrs/`**, **`rig/`**; do not edit **zooPy** or **Red9** without clearance — see **`.cursor/rules/cgm-module-placement.mdc`**. Before adding a Maya query helper (`mc.ls` / `listConnections` / `keyframe` / name hacks), read [`Features/Feature_CoreLibLookups.md`](Features/Feature_CoreLibLookups.md).
 
 4. **User-facing Google Doc updates** (artist manual): follow [`Guides/GoogleDoc_Capture_Guide.md`](Guides/GoogleDoc_Capture_Guide.md) and the **`google-doc-capture`** skill (`.cursor/skills/google-doc-capture/`). Branch docs in `Branches/` are the dev source; the guide produces paste-ready section blocks for your Google Doc.
 
@@ -32,7 +32,9 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 12. **cgm Project Manager design contract**: [`Features/Feature_ProjectManager.md`](Features/Feature_ProjectManager.md) — project `.cfg` schema, path authority, **`dirMask`** (Content/Export scroll lists, Scene, P4 cache), asset structure, Project-tool P4 row. Update when changing `Project.py`, `project_utils`, or shared mask/walk behavior.
 
-13. **cgm.lib → cgm.core migration**: [`Features/Feature_LibToCore.md`](Features/Feature_LibToCore.md) — first-party `cgm.lib` inventory, old→new map, shim rules, unittest contract. Timeline: [`Branches/Branch_SpringCleaning.md`](Branches/Branch_SpringCleaning.md). Do not migrate vendored `zoo` / `ml` / `bo` / `openSource` / Red9. Update when porting or shiming a lib module.
+13. **cgm.lib → cgm.core migration**: [`Features/Feature_LibToCore.md`](Features/Feature_LibToCore.md) — first-party inventory, old→new map, shim rules, unittest contract, **remaining-work table**. Timeline: [`Branches/Branch_SpringCleaning.md`](Branches/Branch_SpringCleaning.md). First-party modules are parked in **`cgm/libOld`** (probe); `cgm.lib` keeps zoo/ml/bo/openSource and the `lists` shim. This branch also **drops legacy `cgm/tools` UIs** (attrTools 1.0, tdTools, locinator 1.0, setTools 1.0, namingTools, puppetBox, bufferTools, polyUniteTool) in favor of `cgm.core.tools`. **Toolbox Legacy tab is gone**; animTools 1.0 files remain until a later pass. Do not migrate vendored `zoo` / `ml` / `bo` / `openSource` / Red9. Update when porting, shiming, or cutting a legacy tool.
+
+14. **AnimData design contract**: [`Features/Feature_AnimData.md`](Features/Feature_AnimData.md) — `cgmAnimClip` nested clip/object/channel/curve/key schema; JSON Dat + Phase 0 Dat UI; Phase 1 curve IO; Phase 2a range capture (`ATTR.get_keyed` / `ATTR.get_driver` + `snapshot` / `slice_keys`). Relative time, boundary samples, apply, matching stay later. Timeline: [`Branches/Branch_AnimData.md`](Branches/Branch_AnimData.md). Update when changing clip schema, curve IO, capture, apply modes, matching, or the Dat UI.
 
 ## Python 2 backport (exceptional)
 

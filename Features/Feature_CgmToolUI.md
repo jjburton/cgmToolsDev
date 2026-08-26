@@ -420,6 +420,8 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 | **Status row** | Truncated path label + clear (drops autoload only) + open-folder |
 | **Persist on save and load** | Keep optionVar accurate after both operations |
 
+**CGMDAT.ui**: File **Save** / **Save As** / **Load** all call `uiFunc_dat_path_commit` — `_loadedFile`, `LastLoaded`, `pathList` Recent, file bar. **Save** is disabled when there is no path. Cancelled write does not change the bar. Status **X** clears `_loadedFile`, `LastLoaded`, and `uiDat.str_filepath` (clip/session dat wipe is per-tool).
+
 **mocapBakeTools (Aug 2026)**: `mocap_last_ccl`, `mocapBakeTool_CCLRecent`, status bar above source/target lists, **Setup → Recent**.
 
 **Clear semantics**: status-bar Clear wipes last-path optionVar and label — it does **not** clear in-session list data unless the tool explicitly adds that behavior.
@@ -446,6 +448,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-08-26 | CGMDAT.ui Save disabled with no path; X clears dat filepath; Save/Save As commit LastLoaded + Recent |
 | 2026-08-20 | Mel widget unique-id persist across Reload Core (`sys._cgmMelWidgetNextKey`); Layout hang at 80% from `exists` walk after `_NEXT_KEY` reset |
 | 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
 | 2026-08-17 | Scene browser popup Delete crash fix: defer Delete menu + `_defer_list_reload_after_delete`; single version delete uses `LoadVersionList` |

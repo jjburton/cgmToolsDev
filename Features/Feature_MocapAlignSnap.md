@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Implemented and Maya-verified (August 2026) — dual-path: local-TR when captured; legacy vector bake when not
-- **Last Updated**: August 12, 2026
+- **Last Updated**: August 25, 2026 (snap via SNAP wrappers; same rotate-pivot contract)
 - **Audience**: Dev / TA — design contract for integrating skeleton→control align/snap/bake into **`mocapBakeTools`**
 - **Purpose**: Replace the legacy world-vector offset bake path with the validated **parented local-TR locator** workflow (capture once, snap per frame, key controls), while preserving the existing **CCL preset format** and link-list UI artists already use. Unifies single-frame preview snap and timeline bake in one shipped cgm tool. **When `localTranslate` / `localRotate` are not set, Manual Set / Set On Bake / vector bake behave exactly as before.**
 
@@ -119,8 +119,8 @@ Inherited from [`Feature_Metahuman.md`](Feature_Metahuman.md) — **do not diver
 | Parent | To **source** joint; preserve world transform |
 | Storage | `localTranslate`, `localRotate` on locator under joint |
 | Snap / bake rebuild | **Same as capture** — `doLoc()` on target again, parent to source, apply saved local TR. **Do not** use plain `spaceLocator` (wrong `rotateOrder` / `rotateAxis` → world offset) |
-| Snap position | `cgm.lib.position.movePointSnap` (rotate pivot) |
-| Snap rotation | `cgm.lib.position.moveOrientSnap` |
+| Snap position | `SNAP.move_point_snap` (rotate pivot). Alias: `movePointSnap`. **Not** `SNAP.go`. |
+| Snap rotation | `SNAP.move_orient_snap`. Alias: `moveOrientSnap`. **Not** `SNAP.go` (go converts rotateOrder). |
 | Meta wrap | `cgmObject(longName)` only — not `validateObjArg(setClass=True)` on anim controls |
 
 ### CCL schema (extended, backward compatible)
@@ -269,7 +269,7 @@ Character presets (e.g. per-project `.ccl` under `cgmDat/mocap/`) ship short nam
 
 **Exit criteria:** Lib imports from Maya; one body pair passes capture/snap.
 
-**Status: done (July 2026)** — orchestration over `doLoc` / `movePointSnap` / `moveOrientSnap`.
+**Status: done (July 2026)** — orchestration over `doLoc` / `SNAP.move_point_snap` / `SNAP.move_orient_snap` (Wave 3c retarget 2026-08-25).
 
 ### Phase 2 — mocapBakeTools capture + snap (no bake change yet)
 
