@@ -14,6 +14,7 @@
 - [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) — CCL + link-list UI; canonical example of `cgmListItem` + alias refresh
 - [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — MRS Builder block lists (`cgmScrollList`, `BlockScrollList`)
 - [`Feature_AnimData.md`](Feature_AnimData.md) — cgmAnimClip / mrsAnimClip Dat UI; pinned-chrome hook
+- [`Feature_LibToCore.md`](Feature_LibToCore.md) — `test_UISMOKE` open/close shipped cgm windows (Maya GUI; not behavior)
 - Module placement — `.cursor/rules/cgm-module-placement.mdc` (UI in `tools/`, shared chunks in `tools/lib/`)
 
 ---

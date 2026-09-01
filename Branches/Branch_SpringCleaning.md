@@ -1,35 +1,81 @@
 # Branch: jburton/SpringCleaning
 
 ## Quick Info
-**Status**: Complete  
+**Status**: Active (Phase 2)  
 **Created**: August 20, 2026  
-**Last Updated**: September 1, 2026 (branch closed)  
+**Last Updated**: September 1, 2026 (Phase 2 reopened)  
 **PR**: Pending
 
 ## Goals
-Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core` without breaking Maya tools. Stand up a real unittest safety net (keep unittest + Toolbox menu; no pytest). **Drop unused legacy artist windows** (attrTools, tdTools, locinator, setTools, namingTools, puppetBox, bufferTools, polyUniteTool, leftover animTools 1.0) and keep `cgm.core.tools`. **Toolbox Legacy tab removed** (2026-08-25); leftover animTools 1.0 + `animToolsLib` deleted 2026-09-01; `findTextures` moved to `cgm/core/lib/texture_utils.py`. Leave vendored trees (`zoo`, `ml`, `bo`, `openSource`, Red9) and unused show scripts alone. This branch is **not** “delete `cgm.lib`.” First-party modules are parked in **`cgm/libOld`**; `cgm.lib` keeps zoo/ml/bo/openSource. The `lists` shim was dropped 2026-09-01.
+Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core` without breaking Maya tools. Stand up a real unittest safety net (keep unittest + Toolbox menu; no pytest). **Drop unused legacy artist windows** (attrTools, tdTools, locinator, setTools, namingTools, puppetBox, bufferTools, polyUniteTool, leftover animTools 1.0) and keep `cgm.core.tools`. **Toolbox Legacy tab removed** (2026-08-25); leftover animTools 1.0 + `animToolsLib` deleted 2026-09-01; `findTextures` moved to `cgm/core/lib/texture_utils.py`. First-party modules are parked in **`cgm/libOld`**; `cgm.lib` keeps zoo/ml/bo/openSource. The `lists` shim was dropped 2026-09-01.
+
+**Phase 2** (reopened 2026-09-01): zoo is **unmaintained** — own used slices (UI already in `cgm/core/lib/zoo`; skin transfer in `SKIN.transfer_fromTo`). **Red9 stays** (still maintained). Add Maya contract tests for SEARCH / SNAP / ATTR driver / TEXTURE. Do not rewrite `baseMelUI`. Do not replace MetaClass.
 
 ## Remaining
 
-**None.** Closed 2026-09-01. Canonical outcomes: [`Feature_LibToCore.md` — Closed on this branch](../Features/Feature_LibToCore.md#closed-on-this-branch-2026-09-01).
+Canonical map: [`Feature_LibToCore.md` — Phase 2](../Features/Feature_LibToCore.md#phase-2--leftover-zoo--maya-contract-tests-reopened-2026-09-01).
 
-Out of scope (not leftover): hollow-shim `attributes` / `search`; port `modules` / leftover deformers bake / leftover joints / bulk skinning; migrate zoo/ml/bo/openSource/Red9; delete the `cgm.lib` package; retarget `cgm/projects`. **libOld is already on git.**
+| Item | Status |
+|------|--------|
+| Wave 6 contract tests | **Maya-verified 2026-09-01** |
+| Wave 7 zoo used-slices | **Maya-verified 2026-09-01** |
+| Wave 8 drop remaining zoo menu launchers | Code in. Maya-smoke cgm menu Anim / Hotkeys — no zoo items. |
+| Wave 9 UI open/close smoke (`UISMOKE`) | **Code in.** Maya-verify `cgm - All` (includes UISMOKE). |
+| Replace Red9 | **Won’t do** |
+
+Out of scope (not leftover): hollow-shim `attributes` / `search`; port `modules` / leftover deformers bake / leftover joints / bulk skinning; full zoo/ml/bo/openSource migrate; delete the `cgm.lib` package; retarget `cgm/projects`; rewrite `baseMelUI`. **libOld is already on git.**
 
 ## Related Documentation
 - **[Feature_LibToCore.md](../Features/Feature_LibToCore.md)** - Canonical inventory, old→new map, shim rules, test-runner contract, wave order
+- **[Feature_CoreLibLookups.md](../Features/Feature_CoreLibLookups.md)** - `SKIN.transfer_fromTo` / SEARCH / SNAP names
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch documentation format
 - **[cgm-module-placement.mdc](../.cursor/rules/cgm-module-placement.mdc)** - Where new helpers go (`core/lib`, not zoo/Red9)
 - **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** - Same vendored rule: do not import zooPy perforce from core
 
 ## Timeline
 
-### September 1, 2026 - Branch closed
-**What**: Called Spring Cleaning complete. No remaining production work. Maya smoke of core tools closed. Hollow shims / `libOld` ports / `cgm/projects` stay out of scope. Docs only — no py3 code this pass.
+### September 1, 2026 - Phase 2 Wave 9 UI smoke
+**What**: Waves 6–7 called Maya-verified. `test_UISMOKE` opens/closes shipped cgm windows (`WINDOW_NAME` exists, then `deleteUI`). Covers Toolbox, TD/anim tools, MRS Builder + block editor/create/picker, Scene, Project, Dat/BlockConfig/ShapeDat, animFilter, mocap, P4, Update, Shots. Skip Red9 / ngSkin / ml / marking menus / non-window actions. Park `cgmVar_loadCount` off thanks intervals. Clear Builder/Scene singleton caches after each. Does **not** assert tool behavior.
+
+**Files**:
+- NEW: `cgm/core/tests/test_coreLib/test_UISMOKE.py`
+- EXTENDED: `cgmTests.py` (`UISMOKE` in `coreLib`)
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Code + docs. Next: Toolbox **Unittesting → cgm - All** (now includes UISMOKE).
+
+---
+
+### September 1, 2026 - Phase 2 Wave 8 zoo menu launchers
+**What**: Dropped leftover zoo **artist launchers** from cgm menus. Did **not** delete `cgm/lib/zoo`. Did **not** rewrite `baseMelUI`. Existing hotkeys that source zoo MEL still work if that tree is on the path. Removed dead `tool_calls` `loadZooToolbox` / `loadSkinPropagation` / `loadXferAnim`. `uiSection_layout` (Shots / HUD only) gone; `cgmToolbox.uiBuild_cgmMenu` no longer calls it. Hotkeys: dropped zoo.Tangent Works installer; left cgmMarkingMenu + Reset ALL.
+
+**Files**:
+- EXTENDED: `tool_chunks.py`, `tool_calls.py`, `cgmToolbox.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Code + docs. Maya-smoke cgm menu Anim (Red9 / ml remain; no zoo.XferAnim / Keymaster) and Hotkeys (no Tangent Works).
+
+---
+
+### September 1, 2026 - Phase 2 Wave 6/7 code
+**What**: Reopened for leftover **unmaintained zoo** used-slices + Maya contract tests. **Red9 stays.** Owned `skinWeights.transferSkinning` as `SKIN._transfer_skinning` / `transfer_fromTo`. `baseMelUI` treeView MEL callback imports `cgm.core.lib.zoo`. `toolbox.py` ArcTracer / CopyAnim / Hold → `cgm.core.lib.ml_tools`. `tool_chunks` zoo.XferAnim → `TOOLCALLS.loadXferAnim` (import was commented — NameError). Tests: SEARCH time/parents, SNAP move snaps keep rotateOrder, ATTR `get_driver(..., skipConversionNodes=True)`, TEXTURE `remap_missing` with explicit roots, SKIN transfer. Did **not** rewrite `baseMelUI`. Did **not** cut zoo Toolbox / Keymaster / Shots / HUD / refPropagation launchers.
+
+**Files**:
+- EXTENDED: `skin_utils.py`, `cgm/core/lib/zoo/baseMelUI.py`, `toolbox.py`, `tool_chunks.py`, `cgmTests.py`, `test_ATTR.py`, `test_SKIN.py`
+- NEW: `test_SEARCH.py`, `test_SNAP.py`, `test_TEXTURE.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Feature_CoreLibLookups.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Next: Toolbox **Unittesting → cgm - All**; smoke Copy skin weights.
+
+---
+
+### September 1, 2026 - Waves 0–5 closed (superseded same day by Phase 2)
+**What**: Called first-party Spring Cleaning complete. Hollow shims / `libOld` ports / `cgm/projects` stay out of scope. Docs only — no py3 code this pass. Reopened later the same day for Phase 2.
 
 **Files**:
 - EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
 
-**Status**: Complete.
+**Status**: Complete for Waves 0–5.
 
 ---
 
@@ -607,6 +653,17 @@ Out of scope (not leftover): hollow-shim `attributes` / `search`; port `modules`
 - [x] `findTextures` → `TEXTURE.remap_missing` 2026-09-01; `cgm/tools` empty
 - [x] Maya smoke of core tools — **closed 2026-09-01**
 
+### Phase 2 — leftover zoo + contract tests
+- [x] Own `SKIN.transfer_fromTo` (no zoo `skinWeights` import)
+- [x] `baseMelUI` MEL callback → `cgm.core.lib.zoo`
+- [x] `toolbox.py` ml buttons → `cgm.core.lib.ml_tools`
+- [x] XferAnim menu → `TOOLCALLS.loadXferAnim` (landmine; **removed Wave 8**)
+- [x] Contract tests SEARCH / SNAP / ATTR driver / TEXTURE / SKIN transfer in `_d_modules` — **Maya-verified 2026-09-01**
+- [x] Wave 8 zoo menu launchers dropped (tree kept)
+- [x] Wave 9 `UISMOKE` allowlist open/close
+- [ ] Maya-verify `cgm - All` including UISMOKE
+- [x] Red9 stays (won’t replace MetaClass)
+
 ### Testing
 - [x] Wave 0: inventory of current runner (documented in feature doc)
 - [x] Unittesting → cgm - All in Maya (coreLib + cgmMeta; RigBlocks skipped)
@@ -622,13 +679,13 @@ Out of scope (not leftover): hollow-shim `attributes` / `search`; port `modules`
 ## PR Notes
 
 ### Overview
-Spring cleaning **complete**: used first-party `cgm.lib` is in `cgm.core`; leftover first-party modules parked in `cgm/libOld`. Production `cgm.core` is grep-clean of live first-party `cgm.lib`. Legacy `cgm/tools` 1.0 windows deleted (including animTools). `findTextures` is `TEXTURE.remap_missing`. Vendored trees stay in `cgm.lib` (zooSetkey South is a one-line `ml_tools` hook). Hollow `attributes`/`search` shims were not restored.
+Spring cleaning Waves 0–5 **complete**; **Phase 2 open**. Used first-party `cgm.lib` is in `cgm.core`; leftover first-party modules parked in `cgm/libOld`. Production `cgm.core` is grep-clean of live first-party `cgm.lib`. Legacy `cgm/tools` 1.0 windows deleted. `findTextures` is `TEXTURE.remap_missing`. **Red9 stays** (maintained). Zoo used-slices owned (`SKIN.transfer_fromTo`, core `baseMelUI`). Hollow `attributes`/`search` shims were not restored.
 
 #### Breaking Changes
 First-party names parked in `libOld` (`from cgm.lib import attributes` / `lists` fails). Canonical new imports are `cgm.core.lib.*_utils`. **Artist-facing:** Toolbox tabs are TD / Anim / Settings (Legacy tab gone). Use `cgm.core.tools` for attr/locinator/setTools. tdTools has no 1:1 replacement window. Old MEL marking menus `cgmSnapMM` / `cgmSetToolsMM` / `cgmSetKeyMM` are gone — use core MMs (`cgmPuppetKeyMM`, snap/set tools). `cgm/projects` and old user scripts that import first-party `cgm.lib` `ImportError`.
 
 #### Next Steps
-None for this branch. Optional later (not leftover): revive hollow shims for user scripts, retarget `cgm/projects`, delete `libOld`, re-enable MRS RigBlocks tests with per-test scene setup.
+Maya-verify Toolbox **Unittesting → cgm - All** (now includes UISMOKE). Optional later: revive hollow shims, retarget `cgm/projects`, delete `libOld`, re-enable MRS RigBlocks tests.
 
 ---
 
@@ -648,4 +705,4 @@ None for this branch. Optional later (not leftover): revive hollow shims for use
 ---
 
 *Last Updated: September 1, 2026*  
-*Branch Status: Complete*
+*Branch Status: Active (Phase 2)*

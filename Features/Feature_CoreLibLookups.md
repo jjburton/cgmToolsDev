@@ -6,7 +6,7 @@ Agent / dev index — **not** a product feature. Need → existing `cgm.core.lib
 
 Old `cgm.lib` → `cgm.core` names live in [`Feature_LibToCore.md`](Feature_LibToCore.md). P4 write policy: [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md).
 
-**Aliases** (match nearby callers): `ATTR` `attribute_utils`, `NAMES` `name_utils`, `SEARCH` `search_utils`, `TRANS` `transform_utils`, `POS` `position_utils`, `CONSTRAINT` / `CONSTRAINTS` `constraint_utils`, `PATHUTIL` `path_utils`, `TEXTURE` `texture_utils`.
+**Aliases** (match nearby callers): `ATTR` `attribute_utils`, `NAMES` `name_utils`, `SEARCH` `search_utils`, `TRANS` `transform_utils`, `POS` `position_utils`, `SNAP` `snap_utils`, `SKIN` `skin_utils`, `CONSTRAINT` / `CONSTRAINTS` `constraint_utils`, `PATHUTIL` `path_utils`, `TEXTURE` `texture_utils`.
 
 Do **not** wrap these with names like `curve_from_plug` or `_candidate_attrs`.
 
@@ -60,6 +60,7 @@ Do **not** wrap these with names like `curve_from_plug` or `_candidate_attrs`.
 | World / local position | `POS.get` / `POS.get_local` |
 | Rotate / orient | `TRANS.rotate_get` / `orient_get` |
 | Rotate order | `TRANS.rotateOrder_get` |
+| World RP snap without rotateOrder convert | `SNAP.move_point_snap` / `move_orient_snap` — **not** `SNAP.go` |
 
 ### Constraints
 
@@ -68,6 +69,13 @@ Do **not** wrap these with names like `curve_from_plug` or `_candidate_attrs`.
 | Constraints on a node | `CONSTRAINT.get_constraintsTo` |
 | Constraints from a node | `CONSTRAINT.get_constraintsFrom` |
 | Constraint targets | `CONSTRAINT.get_targets` |
+
+### Skin
+
+| Need | Use |
+|------|-----|
+| First skinCluster on a mesh | `SKIN.get_cluster` |
+| Copy closest-point weights source → target(s) | `SKIN.transfer_fromTo` — owns old zoo `transferSkinning`; do not import `cgm.lib.zoo.zooPyMaya.skinWeights` |
 
 ### Paths / P4 writes
 
