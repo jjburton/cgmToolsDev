@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, July 2026)
-- **Last Updated**: July 14, 2026
+- **Last Updated**: August 8, 2026 (Presets menu only — no body preset dropdowns)
 - **Audience**: Dev / TA — design contract for dynamic follow chains (hair + cloth attach), presets, connect/bake behavior
 - **Purpose**: Canonical reference for what **cgmSimChain** (`dynFKTool` / `cgmDynFK`) does, how hair vs cloth attach chains differ, and what scene/setup invariants must hold. Use when debugging regressions, reviewing PRs, or adding nCloth / dynFK presets.
 
@@ -59,7 +59,7 @@ flowchart TD
   MCD --> HairChain[chain_create_hair chainMode=hair]
 
   Branch -->|Cloth| Init[Init Sim Setup nucleus only]
-  Init --> Map[Details Cloth >> map_cloth_surface]
+  Init --> Map[Details Cloth load map_cloth_surface]
   Map --> Preset[NCLOTH.profile_load fabric+solver]
   Preset --> Attach[Attach to Cloth attach_to_cloth_dynFK]
   Attach --> ClothChain[chainMode=clothAttach]
@@ -155,11 +155,11 @@ Hair and cloth chains may coexist on one setup (shared nucleus).
 ### B. Cloth attach chain (apparel / follow simmed cloth)
 
 1. Artist creates nCloth in scene (outside tool)
-2. **Init Sim Setup** — `cgmDynFK` + nucleus + `time1.outTime → nucleus.currentTime` (no hair chain)
-3. Select nCloth → Details **Cloth `>>`** → `map_cloth_surface()`:
+2. **Tools → Init Sim Setup** — `cgmDynFK` + nucleus + `time1.outTime → nucleus.currentTime` (no hair chain)
+3. Select nCloth → Details **Cloth `<<`** → `map_cloth_surface()`:
    - Links `mCloth` transform
    - If setup nucleus exists: rewires nCloth sim to that nucleus + time wire
-4. Details **Fabric** + **Solver** menus → `NCLOTH.profile_load(fabric, solver=, applyNucleus=True)`
+4. **Presets → Cloth** / **Presets → Nucleus** → fabric + solver layers
 5. Create panel: pick **Cloth track** → add joints → **Attach to Cloth**
 6. Play sim / tune presets
 7. **Connect Targets** → **Bake All Targets** over playback range
@@ -170,34 +170,51 @@ Hair and cloth chains may coexist on one setup (shared nucleus).
 
 ## nCloth Preset Contract
 
-### Layered profiles (`cgmNCloth_presets.py`)
+### Cloth vs simulation taxonomy
 
-Profiles are **not** monolithic cloth+solver blobs. Kinds (`d_profileKind`):
+Profiles are **not** monolithic cloth+solver blobs. Groups (`d_profileKind`):
 
-| Kind | Section | Examples | UI |
-|------|---------|----------|-----|
-| `fabric` | `nc` only | `cotton`, `denim`, `silk`, `stable`, … | Details **Fabric** menu |
-| `solver` | `n` only | `solver_balanced`, `solver_quality`, `solver_high`, … | Details **Solver** menu |
-| `wind` | `n` only | `wind_calm`, `wind_flag` | Script / layered API |
-| `utility` | `nc` + `n` | `calm` | Script |
+| Group | Kind | Section | Examples | UI |
+|-------|------|---------|----------|-----|
+| Cloth | `fabric` | `nc` only | `cotton`, `denim`, `silk`, `stable`, … | **Presets → Cloth** |
+| Simulation | `solver` | `n` only | `solver_balanced`, `solver_quality`, `solver_high`, … | **Presets → Nucleus** |
+| Simulation | `wind` | `n` only | `wind_calm`, `wind_flag` | **Presets → Nucleus** |
+| Simulation | `utility` | `nc` + `n` | `calm` | **Presets → Nucleus** |
+| Reset | `base` | `nc` + `n` | `base` | Explicit `profile_load('base')` |
 
-Apply API:
+`wind` / `calm` are simulation layers, not cloth materials — cloth feel is **Presets → Cloth** only.
+
+### Apply / merge contract
 
 ```python
 import cgm.core.lib.nCloth_utils as NCLOTH
-NCLOTH.profile_load('cotton', solver='solver_high', applyNucleus=True)
+NCLOTH.profile_load('cotton')                          # nc only
+NCLOTH.profile_load('cotton', solver='solver_high')    # nc + solver n
+NCLOTH.profile_load('solver_high')                     # n only (nucleus ok without cloth)
+NCLOTH.profile_load('wind_flag')                       # n only
+NCLOTH.profile_load('calm')                            # utility: both (needs nCloth)
+NCLOTH.profile_load('base')                            # full reset both sections
 ```
 
-- Merges onto **`base`** first when `clean=True`
-- **`gravityDirection`** remapped at apply from `scene_up_axis_get()` (Y-up / Z-up)
-- **`spaceScale`** default `0.01` (cm scenes) in `base`
+| Call | `nc` written | `n` written |
+|------|--------------|-------------|
+| fabric | `base.nc` (if `clean`) + fabric | none |
+| fabric + solver | `base.nc` + fabric | solver only |
+| solver / wind | none | layer only (never full `base.n`) |
+| utility | `base.nc` (if `clean`) + utility.nc | `base.n` (if `clean`) + utility.n |
+| `base` | full `base.nc` | full `base.n` (gravity remapped) |
 
+- **`clean=False`**: no base seed; apply named layer keys only
+- **`base.n` env** (gravity, `spaceScale`, wind, plane, …): Query Settings diff catalog + explicit `base` / utility reset — **not** applied on fabric or solver menu paths
+- **`gravityDirection`** remapped at apply from `scene_up_axis_get()` when `n` is written
 ### Never preset (skip at apply + query)
 
 | Attr / class | Reason |
 |--------------|--------|
 | `isDynamic` | Runtime sim on/off — workflow switch, not fabric feel |
 | `selfCollide`, `collisionFlag`, `selfCollisionFlag`, `thickness`, `selfCollideWidthScale` | Scene-specific collision setup |
+| `localSpaceOutput` | Output-space / transform hierarchy (Convert nCloth Output Space) — not fabric feel |
+| `collide`, `ignoreSolverGravity`, `ignoreSolverWind` | Structural / solver-link switches — not fabric feel |
 
 ### Query Settings (`Tools → Query Settings`)
 
@@ -207,12 +224,23 @@ NCLOTH.profile_load('cotton', solver='solver_high', applyNucleus=True)
 
 ---
 
-## dynFK Presets (nucleus + hair)
+## dynFK Presets (hair feel + simulation)
 
-- Module: `cgmDynFK_presets.py` — sections `n` (nucleus), `hs` (hairSystem)
-- Apply via Details nucleus / hair preset menus on setup (`dynamic_utils.profile_load`)
-- Nucleus gravity remapped through `NCLOTH._remap_nucleus_scene_axes` at apply
-- **Do not** merge `cgmNCloth_presets` into `cgmDynFK_presets` (`nc` vs `hs` are separate concerns)
+Module: `cgmDynFK_presets.py` — sections `n` (nucleus), `hs` (hairSystem). Same **feel vs simulation** split as nCloth:
+
+| Group | Kind | Section | Examples | UI |
+|-------|------|---------|----------|-----|
+| Hair feel | `hair` | `hs` only | `rope`, `ponytail`, `tentacle`, … | **Presets → Hair** |
+| Simulation | `wind` | `n` (+ optional `hs` wind attrs) | `wind` | **Presets → Nucleus** (`dynFK_wind`) |
+| Simulation | `solver` | `n` (+ light `hs`) | `default` | **Presets → Nucleus** (`dynFK_default`) |
+| Reset | `base` | `n` + `hs` | `base` | Explicit `RIGDYN.profile_load(nucleus, 'base')` |
+
+Apply rules (`dynamic_utils.profile_load`):
+
+- **Hair feel** on hairSystem: seeds `base.hs` when `clean`, writes `hs` only — never nucleus / cloth
+- **Wind / solver** on nucleus: layer keys only (no full `base.n` dump) unless kind is `base`
+- **Presets → Nucleus** + dynFK wind/solver: always apply `n` to setup nucleus; apply `hs` **only if hair exists** (cloth-only setups skip hs)
+- **Do not** merge `cgmNCloth_presets` into `cgmDynFK_presets` (`nc` vs `hs` are separate concerns); shared nucleus sim from nCloth solvers/wind stays in **Presets → Nucleus** (ncloth source)
 
 ---
 
@@ -220,16 +248,19 @@ NCLOTH.profile_load('cotton', solver='solver_high', applyNucleus=True)
 
 | Area | Control | Backend |
 |------|---------|---------|
-| Header | **Init Sim Setup** | `setup_sim_dynFK` / `cgmDynFK.setup_sim` |
-| Header | `<<` load selected | `cgmDynFK(selection)` |
+| Header | `<<` load selected setup | `cgmDynFK(selection)` |
 | Details | **Base Name** (text field) | `set_base_name` |
-| Details | Nucleus / Hair preset menus | `profile_load` (dynFK) |
-| Details | **Cloth** row: status, **`>>`**, Fabric + Solver menus | `map_cloth_surface`, `NCLOTH.profile_load` |
+| Details | Nucleus / Cloth / Hair rows | Status + `<<` map from selection (`map_nucleus` / `map_cloth_surface` / `map_hair_system`) |
+| Details | **Baking** section | Start time, bake range, Connect/Bake buttons |
 | Details | Bake range, Connect/Bake buttons | `targets_connect`, `bake_nodes` |
 | Create | **Make Dynamic Chain** | `chain_create` → hair |
 | Create | **Cloth track** + **Attach to Cloth** | `attach_to_cloth_dynFK` |
 | Setup menu | **Reload** | `reload_dependencies()` + UI reload |
+| **Presets** menu | **Cloth** / **Hair** / **Nucleus** | fabric → cloth only; hair feel → hair only; Nucleus = nCloth sim + dynFK wind/solver (context-aware) |
+| Tools menu | **Init Sim Setup** | `setup_sim_dynFK` / `cgmDynFK.setup_sim` |
 | Tools menu | **Query Settings** | `query_settings_selection` |
+
+**Presets menu** (sole UI for cgm profiles): Cloth = fabrics; Hair = hair feel only; Nucleus = nCloth solvers/wind/`calm` then dynFK wind/solver. Details body has no Fabric/Solver/Load Preset enums — status + `>>` only. Loading adjusts for hair vs cloth (dynFK `hs` skipped when no hair).
 
 **Reload contract**: After editing `dynamic_utils`, `constraint_utils`, `node_utils`, or preset modules during dev → **Setup → Reload** or relaunch from toolbox (reloads via `cgmGEN._reloadMod`).
 
@@ -271,15 +302,15 @@ Tuned attrs matching **`cotton`** fabric layer (stretch 50, bend 0.4, friction 0
 
 | Anti-pattern | Symptom | Fix / contract |
 |--------------|---------|----------------|
-| Attach without **Init Sim** / map | Attach button disabled or map error | Init Sim Setup → Cloth `>>` before Attach |
+| Attach without **Init Sim** / map | Attach button disabled or map error | Tools → Init Sim Setup → Cloth `<<` before Attach |
 | Attach to **input** mesh | Locators slide wrong / no sim motion | Always `get_out_mesh_shape` (sim **output**) |
 | `mCloth` linked to **shape** | `get_mapped_cloth` fails readback | Link nCloth **transform** only |
 | Bake with snap/key loop | Keys exist but constraints still drive | Use `bake_nodes`; `targets_disconnect` runs after bake for baked targets |
 | `isDynamic` in preset | Applying preset toggles sim unexpectedly | Keep in `l_skipPresetAttrs`; artist toggles sim in AE |
 | Preset overwrites collision | Self-collide / thickness wrong after preset | Collision attrs in skip list by design |
+| Fabric apply resets nucleus env | Wind / `spaceScale` / gravity wiped by cotton | Section-isolated merge; fabric never seeds `base.n` |
 | Hardcoded Y-down gravity | Wrong gravity in Z-up scenes | `_remap_nucleus_scene_axes` at apply |
 | `mel createRivet` for rivet track | MEL error / no rivet | `createRivetOnMesh` internal API + fallback |
-| Preset menus rebuild on attach | Cloth attrs reset to cotton/balanced | Fabric/Solver menus default to placeholders; presets apply **only** on explicit menu change |
 | `mc.ls(..., longPath=True)` | `Invalid flag 'longPath'` | Use `long=True` |
 
 ---
@@ -312,7 +343,7 @@ Run in Maya after cgmSimChain changes:
 
 1. **Init Sim only** — nucleus exists, timeline drives `currentTime`, no hair system
 2. **Map cloth** — `mCloth` set; nCloth rewired to setup nucleus; Z-up gravity sane after preset
-3. **Fabric + solver** — `cotton` + `solver_high` applies nc + n without touching collision / `isDynamic`
+3. **Fabric + solver** — **Presets → Cloth** `cotton` then **Presets → Nucleus** `solver_high`; no collision / `isDynamic` / unrelated nucleus env; body UI has no preset dropdowns
 4. **Attach follicle / rivet / uvPin** — locs follow outMesh; three modes on test mesh
 5. **Connect Targets** — parentConstraint loc→joint; `cgmMatchTarget` → loc
 6. **Bake All Targets** — keys on joints; constraints removed after bake
@@ -342,4 +373,5 @@ Run in Maya after cgmSimChain changes:
 
 | Date | Summary |
 |------|---------|
+| 2026-08-08 | Cloth vs sim taxonomy; hair feel vs sim split (`d_profileKind`); section-isolated merge; **Presets** Cloth/Hair/Nucleus context-aware loads; never-preset structural attrs |
 | 2026-07-14 | Initial feature doc — hair vs clothAttach, map/init sim, layered nCloth presets, connect/bake contract, surface tracks, Query Settings, skip attrs, verification checklist |

@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: August 20, 2026
+- **Last Updated**: August 31, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -13,6 +13,7 @@
 
 - [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) — CCL + link-list UI; canonical example of `cgmListItem` + alias refresh
 - [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — MRS Builder block lists (`cgmScrollList`, `BlockScrollList`)
+- [`Feature_AnimData.md`](Feature_AnimData.md) — cgmAnimClip / mrsAnimClip Dat UI; pinned-chrome hook
 - Module placement — `.cursor/rules/cgm-module-placement.mdc` (UI in `tools/`, shared chunks in `tools/lib/`)
 
 ---
@@ -280,6 +281,24 @@ Common pattern:
 | Reload | `tool_calls.<toolName>()` reloads libs then module; **Setup → Reload** in window calls same path |
 | Direct `MODULE.ui()` | Shelf/toolbox buttons that bypass `tool_calls` skip reload — prefer `tool_calls` for dev iteration |
 | Shared UI chunks | `cgm/core/tools/lib/` when multiple tools reuse the same list or section |
+| Pinned chrome | `uiBuild_pinned_chrome(form)` under the Dat file bar, above the scroll — see below |
+
+---
+
+## Pinned chrome above scroll
+
+When a Dat/form window has **always-visible controls** (MRS context picker, filter row) that must not scroll away with CLIP CONTENTS:
+
+| Piece | Pattern |
+|-------|---------|
+| **Hook** | `uiBuild_pinned_chrome(form)` returns `None` (no extra chrome) or a widget parented to the form |
+| **Form attach** | File bar top; pinned under the file bar (`ac` top → file bar); scroll top → pinned; footer bottom |
+| **Subclass** | Override the hook — do **not** copy `build_layoutWrapper` |
+| **Runtime vs file** | Pinned chrome is session pooling (optionVars). Do not write those nodes into the Dat JSON |
+
+**cgmAnimClip** returns `None`. **mrsAnimClip** returns PoseManager `uiColumn_context` (control / part / puppet / scene / list + core / children / siblings / mirror). Capture range stays AnimClip Start/End — do not pin Animate’s time row.
+
+Reference: [`animClip_dat.py`](../../cgmToolsPy3/cgm/core/lib/animClip_dat.py) `build_layoutWrapper`; [`mrsAnimClip.py`](../../cgmToolsPy3/cgm/core/mrs/mrsAnimClip.py); [`PoseManager.py`](../../cgmToolsPy3/cgm/core/mrs/PoseManager.py). Domain contract: [`Feature_AnimData.md`](Feature_AnimData.md).
 
 ---
 
@@ -376,6 +395,12 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 
 **Data refresh:** Rebuild grouped UI from canonical structured data on Refresh; store parallel flat list (`_l_opened_entries`) indexed for row callbacks — do not parse frame labels back to data.
 
+**Even/odd row gray:** For stacked collapsible rows (animFilter actions, cgmAnimClip CLIP CONTENTS), stripe with `MATH.is_even(i)` and two gray `bgc` values so adjacent frames separate. Parent the list column with **`useTemplate='cgmUIHeaderTemplate'`** and **`adj=True`** so `MelFrameLayout` labels inherit white text and children fill the width. Do **not** parent those frames under `cgmUISubTemplate` or put `ut='cgmUISubTemplate'` on inner rows — that template is light and forces black text onto the dark stripe.
+
+Use the AnimFilter nest (`MelHSingleStretchLayout(bgc=_header)` → `MelColumnLayout(bgc=_header)` → `MelFrameLayout(bgc=_header)` → inner column) **only when the header row has extra widgets** (checkbox, Run, x). A frame with no side controls should parent **directly** to the header-template column — a stretch-row wrap with `padding` shrinks nested frames. AnimFilter tints `_header` / `_bgc` from the action type. A gray-only list nested under a `guiHeaderColor` section (CLIP CONTENTS) uses even `guiButtonColor` / odd `guiBackgroundColor` so object bars stay lighter than the section header. After Check Mapping, unmatched object frames prefix `[x]` on the label (`[x] src  →  --`); that prefix is display-only — do not parse it back to data.
+
+Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) `uiBuild_ActionsColumn`; [`animClip_dat.py`](../../cgmToolsPy3/cgm/core/lib/animClip_dat.py) `uiUpdate_clip`.
+
 ---
 
 ## Anti-patterns (avoid)
@@ -393,6 +418,8 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | `column_adj=False` to reduce vertical space | Shrinks row **width**; centered labels look wrong | `adj=True` + explicit label `h`, `row_spacing=0`, `expand=False` on stretch row |
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
 | Reset Mel `_NEXT_KEY` on Reload Core (class-only counter) | Layout hangs ~80% probing leftover `MelButton0__`..N__ from Toolbox / retained windows | Persist ids on `sys._cgmMelWidgetNextKey`; catch up after exists loop |
+| `MelOptionMenu.clear()` then `append` (especially on an empty menu) | `itemListShort` + `deleteUI` can empty or kill the control; new items never show | Replace via `optionMenu -q -itemListLong` + `deleteUI` + `menuItem(parent=)` (cgmAnimClip Layer menu) |
+| Store command items (`New`) in the optionVar | Next open lands on a prompt, not a real target | Run the command, then persist the created/selected value (cgmAnimClip Layer) |
 
 ---
 
@@ -405,6 +432,8 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) | LastLoaded optionVar + pathList recent | `post_init` autoload; status row with clear/explore |
 | [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_defer_ui` for popup/column reload; `_defer_list_reload_after_delete` after file delete |
 | [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | Collapsible header frames, status buffer, changelist batch UI | Status stretch row; animFilter-style CL header (checkbox + **collapsible frame** + **R**/**S**/**Sh** or **D**/**Mv**/**Sub**); Shelved Files blue headers; section empty rows; standard Setup → Reload |
+| [`animClip_dat.py`](../../cgmToolsPy3/cgm/core/lib/animClip_dat.py) | Dat file bar + optional pinned chrome + scroll | `uiBuild_pinned_chrome`; CLIP CONTENTS zebra |
+| [`mrsAnimClip.py`](../../cgmToolsPy3/cgm/core/mrs/mrsAnimClip.py) | Subclass pins PoseManager context | Override hook only; inherit Capture/Clip/Apply |
 
 ---
 
@@ -448,6 +477,11 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
+| 2026-08-31 | cgmAnimClip Layer optionMenu: rebuild with `itemListLong`, not `MelOptionMenu.clear` |
+| 2026-08-31 | cgmAnimClip Layer: `New` is a command item — do not store it in the optionVar |
+| 2026-08-28 | CLIP CONTENTS: full-width object frames (`adj=True`, no stretch-row wrap); zebra `guiButtonColor` / `guiBackgroundColor` under `guiHeaderColor` section |
+| 2026-08-28 | Even/odd collapsible-row gray (`MATH.is_even` + `bgc`); animFilter + cgmAnimClip CLIP CONTENTS |
 | 2026-08-26 | CGMDAT.ui Save disabled with no path; X clears dat filepath; Save/Save As commit LastLoaded + Recent |
 | 2026-08-20 | Mel widget unique-id persist across Reload Core (`sys._cgmMelWidgetNextKey`); Layout hang at 80% from `exists` walk after `_NEXT_KEY` reset |
 | 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
