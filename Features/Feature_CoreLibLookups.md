@@ -6,7 +6,7 @@ Agent / dev index — **not** a product feature. Need → existing `cgm.core.lib
 
 Old `cgm.lib` → `cgm.core` names live in [`Feature_LibToCore.md`](Feature_LibToCore.md). P4 write policy: [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md).
 
-**Aliases** (match nearby callers): `ATTR` `attribute_utils`, `NAMES` `name_utils`, `SEARCH` `search_utils`, `TRANS` `transform_utils`, `POS` `position_utils`, `CONSTRAINT` / `CONSTRAINTS` `constraint_utils`, `PATHUTIL` `path_utils`.
+**Aliases** (match nearby callers): `ATTR` `attribute_utils`, `NAMES` `name_utils`, `SEARCH` `search_utils`, `TRANS` `transform_utils`, `POS` `position_utils`, `CONSTRAINT` / `CONSTRAINTS` `constraint_utils`, `PATHUTIL` `path_utils`, `TEXTURE` `texture_utils`.
 
 Do **not** wrap these with names like `curve_from_plug` or `_candidate_attrs`.
 
@@ -76,6 +76,8 @@ Do **not** wrap these with names like `curve_from_plug` or `_candidate_attrs`.
 | Prepare a path for write | `PATHUTIL.prepare_path_for_write` |
 | Scene meta sidecars | `PATHUTIL.prepare_meta_files_for_write` |
 | FBX / export preflight | `PATHUTIL.preflight_export_output_paths` |
+| Remap missing `file` texture paths onto project content/export | `TEXTURE.remap_missing` |
+| Copy off-project textures next to the scene | `TEXTURE.localize` |
 
 ### Clip curves
 

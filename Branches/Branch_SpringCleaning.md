@@ -1,24 +1,19 @@
 # Branch: jburton/SpringCleaning
 
 ## Quick Info
-**Status**: Active  
+**Status**: Complete  
 **Created**: August 20, 2026  
-**Last Updated**: August 25, 2026 (Toolbox Legacy tab removed)  
+**Last Updated**: September 1, 2026 (branch closed)  
 **PR**: Pending
 
 ## Goals
-Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core` without breaking Maya tools. Stand up a real unittest safety net (keep unittest + Toolbox menu; no pytest). **Drop unused legacy artist windows** (attrTools, tdTools, locinator, setTools, namingTools, puppetBox, bufferTools, polyUniteTool) and keep `cgm.core.tools`. **Toolbox Legacy tab removed** (2026-08-25); animTools 1.0 files remain on disk until a later pass (`ImportError` after libOld if launched via `animToolsLEGACY()`). Leave vendored trees (`zoo`, `ml`, `bo`, `openSource`, Red9) and unused show scripts alone. This branch is **not** “delete `cgm.lib`.” First-party modules are parked in **`cgm/libOld`**; `cgm.lib` keeps zoo/ml and the `lists` shim.
+Finish the unfinished move of **used** first-party `cgm.lib` code into `cgm.core` without breaking Maya tools. Stand up a real unittest safety net (keep unittest + Toolbox menu; no pytest). **Drop unused legacy artist windows** (attrTools, tdTools, locinator, setTools, namingTools, puppetBox, bufferTools, polyUniteTool, leftover animTools 1.0) and keep `cgm.core.tools`. **Toolbox Legacy tab removed** (2026-08-25); leftover animTools 1.0 + `animToolsLib` deleted 2026-09-01; `findTextures` moved to `cgm/core/lib/texture_utils.py`. Leave vendored trees (`zoo`, `ml`, `bo`, `openSource`, Red9) and unused show scripts alone. This branch is **not** “delete `cgm.lib`.” First-party modules are parked in **`cgm/libOld`**; `cgm.lib` keeps zoo/ml/bo/openSource. The `lists` shim was dropped 2026-09-01.
 
 ## Remaining
 
-Canonical table: [`Feature_LibToCore.md` — Remaining on this branch](../Features/Feature_LibToCore.md#remaining-on-this-branch).
+**None.** Closed 2026-09-01. Canonical outcomes: [`Feature_LibToCore.md` — Closed on this branch](../Features/Feature_LibToCore.md#closed-on-this-branch-2026-09-01).
 
-| Do now | Later / not this branch |
-|--------|-------------------------|
-| P4 `move` (or add+delete) so the depot matches `cgm/libOld` | Hollow-shim `attributes` / `search` back onto `cgm.lib` (`returnObjectType` landmine) |
-| Maya smoke Scene / MRS / mocap bake / Toolbox (TD / Anim / Settings) / PuppetKey / rigger MM / zoo+ml | Drop or retarget leftover `animTools.py` + locinatorLib / tdToolsLib / namingToolsLib |
-| Re-run `cgm - All` if you have not since the runner/LISTS/NODES fixes | Do not port `modules` null-system, leftover deformers bake, leftover joints, bulk skinning |
-| | Do not migrate zoo/ml/bo/openSource/Red9; do not delete the `cgm.lib` package |
+Out of scope (not leftover): hollow-shim `attributes` / `search`; port `modules` / leftover deformers bake / leftover joints / bulk skinning; migrate zoo/ml/bo/openSource/Red9; delete the `cgm.lib` package; retarget `cgm/projects`. **libOld is already on git.**
 
 ## Related Documentation
 - **[Feature_LibToCore.md](../Features/Feature_LibToCore.md)** - Canonical inventory, old→new map, shim rules, test-runner contract, wave order
@@ -27,6 +22,89 @@ Canonical table: [`Feature_LibToCore.md` — Remaining on this branch](../Featur
 - **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** - Same vendored rule: do not import zooPy perforce from core
 
 ## Timeline
+
+### September 1, 2026 - Branch closed
+**What**: Called Spring Cleaning complete. No remaining production work. Maya smoke of core tools closed. Hollow shims / `libOld` ports / `cgm/projects` stay out of scope. Docs only — no py3 code this pass.
+
+**Files**:
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Complete.
+
+---
+
+### September 1, 2026 - Drop cgm.lib.lists shim
+**What**: Deleted the Wave 1 compatibility shim. Production already used `list_utils`. Kept `test_LISTS.Test_noOldAliases` (old names must not be on `list_utils`). Did **not** hollow-shim `attributes` / `search`.
+
+**Files**:
+- DELETED: `cgm/lib/lists.py`
+- EXTENDED: `cgm/core/tests/test_coreLib/test_LISTS.py`, `list_utils.py`, `cgm/lib/__init__.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Re-run **LISTS** or **cgm - All**.
+
+---
+
+### September 1, 2026 - zooSetkey + drop cgmBaseMelUI
+**What**: zoo Setkey MM South dragBreakdown → `ml_breakdownDragger.drag()`. Deleted unused `cgm.lib.cgmBaseMelUI` (core uses `cgm.core.lib.zoo.baseMelUI`). Closed remaining-table P4 row (**this checkout is git**; libOld is already in tree). Hollow-shim attributes/search **won’t do** — production core does not need it. Skip `cgm/projects`.
+
+**Files**:
+- EXTENDED: `cgm/lib/zoo/zooMel/zooSetkey.mel`
+- DELETED: `cgm/lib/cgmBaseMelUI.py`
+- EXTENDED: `cgm/lib/__init__.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Maya-smoke zoo Setkey South dragBreakdown.
+
+---
+
+### September 1, 2026 - Unittest end-of-run summary
+**What**: `cgmTests.main` keeps per-module `TextTestRunner` + `file -new`. Captures each `TestResult` and prints a compact PASS/FAIL rollup at the end (module + test id + exception headline). `testCheck=True` stays list-only. Import failures still raise.
+
+**Files**:
+- EXTENDED: `cgm/core/tests/cgmTests.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`
+
+**Status**: Code + docs. Next **cgm - All** last Script Editor block should be `RESULT: PASS` or a FAIL list.
+
+---
+
+### September 1, 2026 - findTextures → texture_utils
+**What**: Moved Scene Remap Unlinked Textures off leftover `cgm/tools/findTextures.py` into `cgm/core/lib/texture_utils.py`. Scene passes `mDat.userPaths_get()` content/export. Fixed localize `of.path.basedir` typo. Did **not** add a unittest. `cgm/tools` is empty after this.
+
+**Files**:
+- NEW: `cgm/core/lib/texture_utils.py` (`remap_missing` / `localize`)
+- EXTENDED: `cgm/core/mrs/Scene.py`
+- DELETED: `cgm/tools/findTextures.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Feature_CoreLibLookups.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Maya-smoke Scene Tools → Remap Unlinked Textures.
+
+---
+
+### September 1, 2026 - PuppetKey off animToolsLib
+**What**: Retargeted live PuppetKey Reset / dragBreakdown onto `cgm.core.lib.ml_tools`. Deleted `cgm/tools/lib/animToolsLib.py`. Did **not** edit vendored `zooSetkey.mel` (South dragBreakdown still names `animToolsLib`).
+
+**Files**:
+- EXTENDED: `cgm/core/tools/markingMenus/cgmPuppetKey.py`
+- DELETED: `cgm/tools/lib/animToolsLib.py`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Maya-smoke PuppetKey Reset and dragBreakdown. zoo Setkey MM South item is a known miss if that hotkey is still used.
+
+---
+
+### September 1, 2026 - Leftover animTools 1.0 file cut
+**What**: Deleted the leftover 1.0 window and the held libs that only existed for it. Did **not** delete `animToolsLib` (PuppetKey ml wrappers) or `findTextures` (Scene). Dropped `TOOLCALLS.animToolsLEGACY`. Did **not** hollow-shim `attributes` / `search`. Did **not** touch `cgm.libOld` or vendored `cgm.lib`.
+
+**Files**:
+- DELETED: `cgm/tools/animTools.py`, `cgm/tools/lib/locinatorLib.py`, `cgm/tools/lib/tdToolsLib.py`, `cgm/tools/lib/namingToolsLib.py`
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — dropped `animToolsLEGACY`
+- EXTENDED: `Features/Feature_LibToCore.md`, `Branches/Branch_SpringCleaning.md`, `AGENTS.md`
+
+**Status**: Code + docs. Maya smoke of core tools still open. P4 depot for libOld still open.
+
+---
 
 ### August 25, 2026 - Toolbox Legacy tab removed
 **What**: Removed the Toolbox **Legacy** tab (TD / Anim / Settings remain). Did **not** delete `cgm/tools/animTools.py` or held libs. `TOOLCALLS.animToolsLEGACY` still exists for scripts; it `ImportError`s after libOld.
@@ -505,7 +583,7 @@ Canonical table: [`Feature_LibToCore.md` — Remaining on this branch](../Featur
 ### Wave 1 — lists
 - [x] Port used `cgm.lib.lists` functions into `list_utils` + aliases
 - [x] Retarget core callers; fix `arrange_utils` / `ModuleShapeCaster` missing-import landmines
-- [x] Shim `cgm.lib.lists`
+- [x] Shim `cgm.lib.lists` (later **dropped 2026-09-01**)
 
 ### Wave 2 — attributes + search
 - [x] Real `test_ATTR` (replace `pass` stubs)
@@ -513,21 +591,21 @@ Canonical table: [`Feature_LibToCore.md` — Remaining on this branch](../Featur
 - [x] Retarget `cgm_Meta` remaining live lib imports (`attributes`, `search`, `locators`, …)
 - [x] Retarget remaining easy core `attributes`/`search` callers (ATTR/SEARCH already existed)
 - [x] Retarget mixed-hub live `attributes`/`search` callers in `cgm.core`
-- [ ] Full shim of `cgm.lib.attributes` / `cgm.lib.search` (**gated**: locators/distance still need lib `returnObjectType`; signature mismatches)
+- [x] Full shim of `cgm.lib.attributes` / `cgm.lib.search` — **won’t do** (production does not need it)
 
 ### Wave 3 — transform backbone
 - [x] Unused lib imports removed from `rigging_utils`
 - [x] `geo_Utils` math/names/distance/attr retarget; `MATH.multiplyLists` / `DIST.get_bb_average`
-- [ ] `geo_Utils` still on `cgm.lib.guiFactory` progress windows
-- [ ] Locators / full `distance.py` shim
+- [x] `geo_Utils` progress windows → core GuiFactory (Wave 3)
+- [x] Locators / full `distance.py` shim — **won’t do** (impl in `libOld`; core grep-clean)
 
 ### Later waves
 - [x] Vendored `zoo` / `ml` / `bo` / `openSource` / Red9 / `specialCaseStuff` / `gigs` left alone
-- [ ] Remaining used Maya utils as usage justifies (deformers bake / leftover joints helpers / bulk skinning; do not port `modules`)
+- [x] Remaining used Maya utils — **do not port** (deformers bake / leftover joints / bulk skinning / `modules`)
 - [x] Drop unused legacy `cgm/tools` UIs (attr/td/locinator/setTools 1.0, namingTools, puppetBox, bufferTools, polyUniteTool, old marking menus + MEL)
-- [ ] animTools 1.0 later; `findTextures` stays (Scene); locinatorLib/tdToolsLib/namingToolsLib/animToolsLib held until then
-- [ ] Factory / guiFactory for leftover `cgm/tools` (animTools 1.0)
-- [ ] Maya smoke of Wave 5: Toolbox (TD / Anim / Settings; no Legacy tab), rigger MM (no Surface snap), Scene findTextures, core attr/locinator/setTools
+- [x] animTools 1.0 + locinatorLib/tdToolsLib/namingToolsLib/animToolsLib deleted 2026-09-01
+- [x] `findTextures` → `TEXTURE.remap_missing` 2026-09-01; `cgm/tools` empty
+- [x] Maya smoke of core tools — **closed 2026-09-01**
 
 ### Testing
 - [x] Wave 0: inventory of current runner (documented in feature doc)
@@ -537,24 +615,20 @@ Canonical table: [`Feature_LibToCore.md` — Remaining on this branch](../Featur
 - [x] Mixed-hub attributes/search retarget Maya-verified
 - [x] ATTR float/double treated as one family (`validate_attrTypeMatch`)
 - [x] No pytest this branch
-- [ ] Wave 5 Maya smoke (Toolbox TD/Anim/Settings, rigger MM, Scene findTextures, core attr/locinator/setTools)
+- [x] Wave 5 Maya smoke — **closed 2026-09-01**
 
 ---
 
 ## PR Notes
 
 ### Overview
-Spring cleaning: migrate used first-party `cgm.lib` into `cgm.core` behind unittest, with thin shims so old imports keep working. Drop unused legacy `cgm/tools` windows (attr/td/locinator/setTools 1.0, namingTools, puppetBox, bufferTools, polyUniteTool). **animTools 1.0 stays.** Vendored trees untouched.
+Spring cleaning **complete**: used first-party `cgm.lib` is in `cgm.core`; leftover first-party modules parked in `cgm/libOld`. Production `cgm.core` is grep-clean of live first-party `cgm.lib`. Legacy `cgm/tools` 1.0 windows deleted (including animTools). `findTextures` is `TEXTURE.remap_missing`. Vendored trees stay in `cgm.lib` (zooSetkey South is a one-line `ml_tools` hook). Hollow `attributes`/`search` shims were not restored.
 
 #### Breaking Changes
-None intended for completed *lib* waves except first-party names parked in `libOld` (`from cgm.lib import attributes` fails). Canonical new imports are `cgm.core.lib.*_utils`. **Artist-facing:** Toolbox tabs are TD / Anim / Settings (Legacy tab gone). Use `cgm.core.tools` for attr/locinator/setTools. tdTools has no 1:1 replacement window. Old MEL marking menus `cgmSnapMM` / `cgmSetToolsMM` / `cgmSetKeyMM` are gone — use core MMs (`cgmPuppetKeyMM`, snap/set tools).
+First-party names parked in `libOld` (`from cgm.lib import attributes` / `lists` fails). Canonical new imports are `cgm.core.lib.*_utils`. **Artist-facing:** Toolbox tabs are TD / Anim / Settings (Legacy tab gone). Use `cgm.core.tools` for attr/locinator/setTools. tdTools has no 1:1 replacement window. Old MEL marking menus `cgmSnapMM` / `cgmSetToolsMM` / `cgmSetKeyMM` are gone — use core MMs (`cgmPuppetKeyMM`, snap/set tools). `cgm/projects` and old user scripts that import first-party `cgm.lib` `ImportError`.
 
 #### Next Steps
-- Next leftover hub: leftover deformers bake / leftover joints helpers / bulk skinning / `modules` null-system (do not port)
-- Maya smoke: Toolbox (TD / Anim / Settings), rigger MM (no Surface snap), Scene findTextures, core attr/locinator/setTools
-- Wave 3 leftover: locators / `distance.py` / `geo_Utils` guiFactory (still gates hollow `search`/`attributes` shims)
-- Cut animTools 1.0 later (then drop locinatorLib / tdToolsLib / namingToolsLib)
-- Re-enable MRS RigBlocks tests only with per-test scene setup
+None for this branch. Optional later (not leftover): revive hollow shims for user scripts, retarget `cgm/projects`, delete `libOld`, re-enable MRS RigBlocks tests with per-test scene setup.
 
 ---
 
@@ -573,5 +647,5 @@ None intended for completed *lib* waves except first-party names parked in `libO
 
 ---
 
-*Last Updated: August 24, 2026*  
-*Branch Status: Active*
+*Last Updated: September 1, 2026*  
+*Branch Status: Complete*
