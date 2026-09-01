@@ -2,15 +2,15 @@
 
 ## Status and Overview
 
-- **Status**: **Active — Phase 2** (2026-09-01). Waves 0–5 shipped (first-party `cgm.lib` → core). Phase 2: Maya contract tests + leftover **unmaintained zoo** used-slices. **Red9 stays** (still maintained).
-- **Last Updated**: September 1, 2026 (Phase 2 reopened)
+- **Status**: **Complete — Phase 2** (2026-09-01). Waves 0–9 shipped. First-party `cgm.lib` → core; leftover zoo used-slices owned; Maya contract tests + `UISMOKE`; cgm menus do not launch leftover zoo UIs. **Red9 stays** (still maintained).
+- **Last Updated**: September 1, 2026 (Phase 2 closed)
 - **Owners**: Josh Burton
 - **Audience**: Dev / TA / agents — living map of the `cgm.lib` → `cgm.core` move and leftover vendored peel
 - **Branch**: [`Branch_SpringCleaning.md`](../Branches/Branch_SpringCleaning.md)
 
 **Purpose**: First-party Maya helpers started in `cgm.lib` (pre-MRS). They were rewritten into `cgm.core.lib.*_utils` and related homes. **Production `cgm.core` is grep-clean** of live first-party `cgm.lib`. First-party implementations are parked in **`cgm/libOld`**. This doc is the living map: what maps where, what stays vendored, shim rules (historical), and how tests gated each wave. Do not revive hollow shims or port `libOld` unless explicitly asked.
 
-**Phase 2** (this reopen): own the zoo calls we actually use (UI already in `cgm/core/lib/zoo`; skin transfer in `SKIN.transfer_fromTo`). Leave Red9. Add characterizing tests for Maya-fragile APIs (SEARCH / SNAP / ATTR driver / TEXTURE). Do not rewrite `baseMelUI`. Do not replace `r9Meta.MetaClass`.
+**Phase 2** (closed 2026-09-01): owned the zoo calls we actually use (UI already in `cgm/core/lib/zoo`; skin transfer in `SKIN.transfer_fromTo`). Left Red9. Characterizing tests for Maya-fragile APIs (SEARCH / SNAP / ATTR driver / TEXTURE) plus `UISMOKE`. Did not rewrite `baseMelUI`. Did not replace `r9Meta.MetaClass`.
 
 **Maintenance rule**: Living map — update if a leftover `libOld` module is later shimmed, deleted, or a core caller regresses onto `cgm.lib`. Do not treat inventory “Partial / Shim not done” rows as open work. Timeline lives in the branch doc.
 
@@ -101,7 +101,7 @@ If a function has **zero callers outside parked lib**, leave it in **`libOld`** 
 
 ### Closed on this branch — Waves 0–5 (2026-09-01)
 
-First-party migration is done. Phase 2 (zoo leftover + contract tests) is **open** — see **Phase 2** below. Optional still not this branch: revive hollow shims for user scripts, retarget `cgm/projects`, or delete `libOld`.
+First-party migration is done. Phase 2 (zoo leftover + contract tests + `UISMOKE`) is **closed 2026-09-01** — see **Phase 2** below. Optional still not this branch: revive hollow shims for user scripts, retarget `cgm/projects`, or delete `libOld`.
 
 | Item | Status | Notes |
 |------|--------|-------|
@@ -118,20 +118,21 @@ First-party migration is done. Phase 2 (zoo leftover + contract tests) is **open
 | `cgm.lib.lists` shim | **Dropped 2026-09-01** | Production uses `list_utils`. `test_LISTS.Test_noOldAliases` disk-checks old names are not on core. |
 | Delete `cgm.lib` package / migrate zoo/ml/bo/openSource/Red9 | **Out of scope** (refined Phase 2) | Package stays. **Red9 stays** (maintained). Zoo **used slices** are Phase 2, not a full migrate. **libOld is already on git** — no P4 `move`. |
 
-### Phase 2 — leftover zoo + Maya contract tests (reopened 2026-09-01)
+### Phase 2 — leftover zoo + Maya contract tests (closed 2026-09-01)
 
 Zoo is **unmaintained**. Red9 is **maintained** — leave it. UI already lives in `cgm/core/lib/zoo`. The live production zoo *call* was skin transfer.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `SKIN.transfer_fromTo` owns closest-point copy | **Code 2026-09-01** | Was `skinWeights.transferSkinning`. Uses `SKIN.get_cluster` + `mc.copySkinWeights`. Maya-verify: Toolbox Copy skin weights. |
-| `baseMelUI` MEL press callback | **Code 2026-09-01** | Imports `cgm.core.lib.zoo.baseMelUI`, not `cgm.lib.zoo.zooPyMaya`. Do not rewrite the UI layer. |
-| `toolbox.py` ml dual-stack | **Code 2026-09-01** | ArcTracer / CopyAnim / Hold → `cgm.core.lib.ml_tools` (same as PuppetKey). |
+| `SKIN.transfer_fromTo` owns closest-point copy | **Maya-verified 2026-09-01** | Was `skinWeights.transferSkinning`. Uses `SKIN.get_cluster` + `mc.copySkinWeights`. |
+| `baseMelUI` MEL press callback | **Maya-verified 2026-09-01** | Imports `cgm.core.lib.zoo.baseMelUI`, not `cgm.lib.zoo.zooPyMaya`. Do not rewrite the UI layer. |
+| `toolbox.py` ml dual-stack | **Maya-verified 2026-09-01** | ArcTracer / CopyAnim / Hold → `cgm.core.lib.ml_tools` (same as PuppetKey). |
 | zoo XferAnim menu landmine | **Superseded Wave 8** | Was `TOOLCALLS.loadXferAnim`. Menu item removed. |
 | SEARCH / SNAP / ATTR driver / TEXTURE / SKIN transfer tests | **Maya-verified 2026-09-01** | In `_d_modules['coreLib']`. Red9 canaries already in `test_base.Test_r9Issues`. |
-| UI open/close (`UISMOKE`) | **Code 2026-09-01** | Shipped cgm windows from `tool_calls` (Builder, Scene, Project, Dat/config, animFilter, P4, …). Skip Red9 / ngSkin / ml / marking menus / actions. Needs Maya GUI. **Maya-verify `cgm - All` open.** |
-| Zoo Toolbox / Keymaster / Shots / HUD / Tangent Works / refPropagation | **Dropped Wave 8** | Off cgm menu / `tool_calls`. Tree stays in `cgm/lib/zoo`. |
+| UI open/close (`UISMOKE`) | **Maya-verified 2026-09-01** | Shipped cgm windows from `tool_calls`. Skip Red9 / ngSkin / ml / marking menus / actions. Needs Maya GUI. `Close(skipVerify=True)` for `VERIFY_CLOSE`. Idle flush after open/close. Deferred rebuilds no-op if the widget is gone. |
+| Zoo Toolbox / Keymaster / Shots / HUD / Tangent Works / refPropagation | **Maya-verified Wave 8** | Off cgm menu / `tool_calls`. Tree stays in `cgm/lib/zoo`. CGM menu rebuilds each open (`postMenuCommandOnce=False`); Reload Core calls `uiMainMenu_rebuild`. |
 | Replace Red9 MetaClass | **Won’t do** | Still maintained. Spine of cgmNode / MRS / Pose. |
+| Update Tool GitHub / py3 branches | **Code 2026-09-01** | Empty `get_dat` does not crash the window. Py3 Maya only lists `cgmToolsPy3` (`main` / `diffusionTools`); refuses py2 branch names. |
 
 ### Prefer the newer core API
 
@@ -756,8 +757,8 @@ File `cgm/core/tests/test_coreLib/test_LISTS.py` → add `'LISTS'` to `_d_module
 | 5 | Drop named legacy `cgm/tools` UIs; leftover animTools 1.0 + findTextures; `guiFactory` for remaining | **Done 2026-08-20** (docs catch-up 2026-08-24). **Legacy Toolbox tab removed 2026-08-25.** **Leftover animTools 1.0 + `animToolsLib` deleted 2026-09-01.** **`findTextures` → `TEXTURE.remap_missing` 2026-09-01.** |
 | 6 | Maya contract tests: SEARCH, SNAP `move_*_snap`, ATTR `get_driver` skipConversion, TEXTURE remap, SKIN transfer | **Maya-verified 2026-09-01.** |
 | 7 | Own zoo used-slices: skin transfer, `baseMelUI` MEL callback, `toolbox.py` → `ml_tools`; XferAnim launcher landmine | **Maya-verified 2026-09-01.** |
-| 8 | Drop remaining zoo menu launchers | **Code 2026-09-01.** Off cgm menu: XferAnim, Keymaster, Shots, HUDCtrl, Tangent Works. Dropped `tool_calls` `loadZooToolbox` / `loadSkinPropagation` / `loadXferAnim`. Did **not** delete `cgm/lib/zoo`. |
-| 9 | UI open/close smoke (`test_UISMOKE`) | **Code 2026-09-01.** Shipped cgm windows (tool_calls + Toolbox). Skip Red9 / ngSkin / ml / marking menus / actions. Skip batch Maya. |
+| 8 | Drop remaining zoo menu launchers | **Maya-verified 2026-09-01.** Off cgm menu: XferAnim, Keymaster, Shots, HUDCtrl, Tangent Works. Dropped `tool_calls` `loadZooToolbox` / `loadSkinPropagation` / `loadXferAnim`. Did **not** delete `cgm/lib/zoo`. Menu rebuilds each open (`postMenuCommandOnce=False`); Reload Core rebuilds CGM menu. |
+| 9 | UI open/close smoke (`test_UISMOKE`) | **Maya-verified 2026-09-01.** Shipped cgm windows (tool_calls + Toolbox). Skip Red9 / ngSkin / ml / marking menus / actions. Skip batch Maya. `Close(skipVerify=True)` + idle flush. |
 
 After each wave: Unittesting → **cgm - All**, plus a smoke of a tool that imported that module (locinator / Scene / mocapBakeTools as relevant).
 
@@ -780,10 +781,10 @@ Waves 0–5 met 2026-09-01:
 - This doc has a living old → new table and shim rules.
 - Production `cgm.core` no longer imports first-party `cgm.lib` (grep-clean).
 - Unittest runner has real tests for each completed module (not `pass`).
-- Vendored trees untouched except the one-line zooSetkey South hook (Phase 2 later owns used zoo slices).
+- Vendored trees untouched except the one-line zooSetkey South hook (Phase 2 owned used zoo slices).
 - Hollow shims / `libOld` ports / `cgm/projects` are out of scope, not leftover.
 
-Phase 2 (open):
+Phase 2 (**complete** 2026-09-01):
 
 - Core does not import `cgm.lib.zoo.zooPyMaya.skinWeights` or `cgm.lib.ml` from production callers.
 - `SKIN.transfer_fromTo` is native `get_cluster` + `copySkinWeights`.
@@ -835,4 +836,4 @@ Phase 2 (open):
 | 2026-09-01 | **Waves 0–5 closed.** Maya smoke called complete. |
 | 2026-09-01 | **Phase 2 reopened.** Zoo leftover peel + Maya contract tests. Red9 stays (maintained). `SKIN.transfer_fromTo` owns `transferSkinning`; `baseMelUI` MEL → core zoo; `toolbox.py` → `ml_tools`; tests SEARCH/SNAP/ATTR-driver/TEXTURE/SKIN transfer. |
 | 2026-09-01 | **Wave 8.** Dropped zoo menu launchers from cgm menus / `tool_calls`. Vendored `cgm/lib/zoo` kept. |
-| 2026-09-01 | Waves 6–7 **Maya-verified**. Wave 9: `test_UISMOKE` shipped-window open/close. |
+| 2026-09-01 | **Phase 2 closed.** Waves 6–9 Maya-verified. UISMOKE follow-ons: Update Tool empty fetch + py3 branches only; deferred UI no-op; `Close(skipVerify=True)`. CGM menu rebuilds each open; Reload Core rebuilds the menu. |

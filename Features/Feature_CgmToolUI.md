@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: August 31, 2026
+- **Last Updated**: September 1, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -14,7 +14,7 @@
 - [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) — CCL + link-list UI; canonical example of `cgmListItem` + alias refresh
 - [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — MRS Builder block lists (`cgmScrollList`, `BlockScrollList`)
 - [`Feature_AnimData.md`](Feature_AnimData.md) — cgmAnimClip / mrsAnimClip Dat UI; pinned-chrome hook
-- [`Feature_LibToCore.md`](Feature_LibToCore.md) — `test_UISMOKE` open/close shipped cgm windows (Maya GUI; not behavior)
+- [`Feature_LibToCore.md`](Feature_LibToCore.md) — `test_UISMOKE` open/close shipped cgm windows (Maya GUI; not behavior). `Close(skipVerify=True)` for `VERIFY_CLOSE`.
 - Module placement — `.cursor/rules/cgm-module-placement.mdc` (UI in `tools/`, shared chunks in `tools/lib/`)
 
 ---
@@ -282,7 +282,8 @@ Common pattern:
 | Reload | `tool_calls.<toolName>()` reloads libs then module; **Setup → Reload** in window calls same path |
 | Direct `MODULE.ui()` | Shelf/toolbox buttons that bypass `tool_calls` skip reload — prefer `tool_calls` for dev iteration |
 | Shared UI chunks | `cgm/core/tools/lib/` when multiple tools reuse the same list or section |
-| Pinned chrome | `uiBuild_pinned_chrome(form)` under the Dat file bar, above the scroll — see below |
+| `VERIFY_CLOSE` | Optional confirm before hide. **X / Close()** still prompts. Callers that must not prompt (UISMOKE, recreate) use **`Close(skipVerify=True)`**. `deleteUI` fires Maya `closeCommand` (`Close`) — disarm it or skipVerify first. Anim Filter is the reference. |
+| CGM top menu | `uiBuild_cgmMenu` rebuilds on each open (`postMenuCommandOnce=False`). Reload Core calls `cgmToolbox.uiMainMenu_rebuild`. Do not assume a session-start menu is current after a code drop. |
 
 ---
 

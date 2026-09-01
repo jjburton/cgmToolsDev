@@ -75,7 +75,7 @@ Do **not** wrap these with names like `curve_from_plug` or `_candidate_attrs`.
 | Need | Use |
 |------|-----|
 | First skinCluster on a mesh | `SKIN.get_cluster` |
-| Copy closest-point weights source → target(s) | `SKIN.transfer_fromTo` — owns old zoo `transferSkinning`; do not import `cgm.lib.zoo.zooPyMaya.skinWeights` |
+| Copy closest-point weights source → target(s) | `SKIN.transfer_fromTo` — owns old zoo `transferSkinning`; do not import `cgm.lib.zoo.zooPyMaya.skinWeights` (Phase 2, Maya-verified) |
 
 ### Paths / P4 writes
 
