@@ -1,0 +1,53 @@
+---
+description: Draft — m/ml/md meta naming; hierarchy via meta APIs; str at mc edge only; not always on
+alwaysApply: false
+---
+
+# cgm meta naming and hierarchy (draft)
+
+**Status**: Rule file only — **`alwaysApply: false`**. Enable or merge into always-on rules when the team is ready.
+
+## Naming: know meta vs string at a glance
+
+cgm / Red9 **instantiated** scene handles in code use an **`m` prefix** on the variable name. **Lists of meta** use **`ml_`**. **Dicts keyed by stable ids with meta values** use **`md_`**.
+
+| Pattern | Meaning | Examples |
+|---------|---------|----------|
+| **`m*`** | One **`cgmMeta`** / Red9 **`MetaClass`** instance (node still in scene) | `mTarget`, `mFollicle`, `mGrp`, `mDynFK`, `mInCrv` |
+| **`ml_*`** | **`list`** (or tuple used as ordered chain) of meta instances | `ml_sim`, `ml_targets`, `ml_baseTargets`, `ml_driven`, `ml_chains` |
+| **`md_*`** | **`dict`** whose values are meta (keys: index, name token, msg label, etc.) | `md_chains`, `md_byBaseName` — not generic config **`dict`**s |
+| **No `m` / `ml_` / `md_` prefix** | Usually **not** runtime meta — UI label, plain config, path from disk, or **`str`** for **`mc.*`** at the boundary | `name`, `_follDriver`, `chainMode`, optionVar strings, preset attr **`dict`** from JSON |
+
+Do **not** name a meta instance `target` or `follicle` and a string `mTarget` — the prefix marks **instantiated** meta, not Maya DAG strings.
+
+Saved data (dat JSON, optionVars, msg serialization at write time) stays **strings**; convert with **`cgmMeta.asMeta`** / **`validateObjArg`** at load and store on **`self`** as **`m*`** / **`ml_*`** / **`md_*`** as appropriate.
+
+## Hierarchy and queries: meta owns rig logic; `str` only at `mc`
+
+In **`tools/`**, **`rig/`**, **`mrs/`**, and their **`lib/`** call chains for scene work: **meta owns hierarchy and parenting**. Do not maintain a **parallel** DAG walk (**`mc.listRelatives`**, **`mc.parent`**, path parsing) for the same parent/child intent when **`m*`** / **`ml_*`** already model it.
+
+| Intent | Prefer | Avoid in rig/tool logic when meta exists |
+|--------|--------|----------------------------------------|
+| Parent child under parent | **`mChild.p_parent = mParent`** | **`mc.parent(...)`** mid-pipeline |
+| Read parent | **`mObj.getParent(asMeta=True)`** or **`asMeta=False`** when the next step is **`mc.*`** only | **`listRelatives`** as a second way to “discover” parent while also holding **`mParent`** meta |
+| Read children | **`getChildren(asMeta=True)`**, **`getAllChildren`**, **`msgList_get`**, **`getMessageAsMeta`** | Re-walking the DAG when meta already exposes the list |
+| Ordered joint chain | Ordered **`ml_*`** + **`p_parent`** / shared helpers | Bare **`list` of path strings** through create/skin/connect |
+
+**`mc.listRelatives` / `mc.parent` are still fine** when:
+
+- You are in **`lib/`** (or **`shared_data` + lookup helpers) implementing a **documented** Maya query per **`Feature_CoreLibLookups.md`**, and callers consume **`m*`** / **`ml_*`** after that boundary; or
+- You are **immediately** at the **`mc.*`** edge: resolve **`str`** once (**`getParent(asMeta=False)`**, **`.mNode`**) and pass it to the command — not as an alternate hierarchy system alongside meta.
+
+Many **`cgmMeta`** query methods take **`asMeta`** (default varies by method):
+
+- **`asMeta=True`** → meta instance(s) for the next rig step.
+- **`asMeta=False`** → DAG **`str`** when the **next** step is **`mc.*`** or MEL only.
+
+**Iron rule at the boundary**: meta in the middle; **`str`** only at **`mc.*`** / MEL — **`.mNode`**, **`p_nameLong`**, or **`getParent(asMeta=False)`**. Never pass **`m*`** into **`mc.*`**.
+
+## Related (always-on today)
+
+- **`cgm-runtime-meta-not-strings`** — runtime pipelines carry meta, not bare DAG strings
+- **`maya-cmds-strings-only`** — **`mc.*`** arguments must be **`str`**
+- **`cgm-meta-and-existing-patterns`** — [`Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md) + **`cgm_Meta.py`**
+- **`Features/Feature_CoreLibLookups.md`** — do not reinvent **`mc.ls`** / connection queries; meta wrappers first

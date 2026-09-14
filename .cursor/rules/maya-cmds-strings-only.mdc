@@ -1,0 +1,49 @@
+---
+description: maya.cmds accepts DAG name strings only — never meta, never ambiguous coercions
+alwaysApply: true
+---
+
+# maya.cmds: strings only
+
+## Iron rule
+
+Every argument to **`mc.*`** (and MEL invoked for scene nodes) that names a DAG node, shape, component, or plug must be a **`str`**: full path or unique short name Maya accepts.
+
+**Never** pass a **`cgmMeta`** / Red9 **`MetaClass`** instance into **`mc.*`**.
+
+**Need a DAG name for `mc.*` only?** Use **`asMeta=False`** on hierarchy helpers (default on many meta APIs): e.g. **`mTarget.getParent(asMeta=False)`** returns a **string** (or **`False`**) — pass that straight to **`mc.*`**. No extra **`.mNode`** step.
+
+**Need meta for the next rig step?** Use **`asMeta=True`**, work in meta, then **`.mNode`** (or **`p_nameLong`**) at the **`mc.*` call**.
+
+Do not assume **`VALID.mNodeString(arg)`** always returned a **`str`** — verify **`isinstance(..., str)`** before **`mc.*`** (on failure it can return the original object).
+
+```python
+# GOOD — string path when mc is next
+_driver = mTarget.getParent(asMeta=False)
+mc.parentConstraint(_driver, mFollicle.mNode, mo=True)
+
+# GOOD — meta for logic, .mNode for mc
+mParent = mTarget.getParent(asMeta=True)
+mParent.p_parent = mGrp
+mc.parentConstraint(mParent.mNode, mFollicle.mNode, mo=True)
+
+# BAD — meta instance passed to mc (TypeError: Object (node: '…' | mClass: …) is invalid)
+mc.parentConstraint(mTarget.getParent(asMeta=True), mFollicle.mNode, mo=True)
+mc.nodePreset(list=mFollicle)
+```
+
+Prefer **`.mNode`** on meta you already hold. **`mc.listRelatives(mObj.mNode, …)`** is equivalent to **`getParent(asMeta=False)`** when you only need the parent name.
+
+
+For rig code that touches many **`mc.*`** calls, a local **`_dag_str(mObj)`** (str or **`.mNode`**, raise if not str) at the top of **`dynamic_utils`** / similar modules is acceptable — still convert at the call site, do not pass meta through.
+
+## Lists and kwargs
+
+- **`mc.ls`**, **`skinCluster`**, **`parentConstraint`**, **`connectAttr`**, **`listConnections`**, **`nodePreset`**, etc.: every node entry in a list or tuple must be **`str`**.
+- Plug strings: **`'{0}.{1}'.format(node.mNode, attr)`** — **`node`** part is **`str`**, not meta.
+
+## Related
+
+- Import alias: **`maya-cmds-import`**
+- Meta vs strings in pipelines: **`cgm-runtime-meta-not-strings`** (meta internally; **`str` at `mc.*`**)
+- Coercion: **`validateArgs.mNodeString`** — use only to produce a **`str`**, then pass that variable to **`mc.*`**

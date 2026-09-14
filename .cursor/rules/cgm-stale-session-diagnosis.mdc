@@ -1,0 +1,32 @@
+---
+description: Diagnose stale Maya modules / cached meta before patching tool logic
+alwaysApply: true
+---
+
+# Stale session diagnosis (Maya dev)
+
+When behavior does not match **on-disk py3** code, assume **session reload** first — not broken UI wiring.
+
+## Symptom: UI logs new code, backend does not
+
+If Script Editor shows new **`log.info`** (or UI-only strings) from the **tool module** but **never** the matching lines from the **backend module** (e.g. `dynFKTool` create log yes, `dynamic_utils.chain_create_hair` entry log no):
+
+1. Treat as **stale imported backend** and/or **cached meta instance** (`self._mDynFK` still bound to pre-reload `cgmDynFK` class).
+2. **Do not** add reload/rebind inside Create Chain, bake, export, or other one-shot callbacks — see **`cgm-reload-mod`**.
+3. Fix path for the artist: **Setup → Reload Dependencies**, shelf relaunch (`tool_calls.cgmSimChain()`), or restart Maya.
+
+## Before another “feature fix” pass
+
+1. Ask (or infer from logs): did **Reload Dependencies** run and print **per-module** reload lines (see **`cgm-reload-mod`**)?
+2. If reload lines are missing, the session may still be on old **tool** code — relaunch once from toolbox.
+3. If reload lines appear but backend entry logs still missing on the **loaded setup**, verify **meta rebind on reload path** (`dynFKTool._dynfk_rebind_loaded_mDynFK`) — not mid-call.
+
+## Stop condition
+
+After **one** code change that does not change Maya output, if backend entry logs are still absent → **stop patching build logic**; document session/reload steps only.
+
+## Related
+
+- **`cgm-reload-mod`** — `_reloadMod`, no mid-call reload, rebind + logging on reload path
+- **`cgm-debug-order`** — log at boundaries first
+- **`Feature_SimChain.md`** — hair counts, addEndJoint, debug log contract

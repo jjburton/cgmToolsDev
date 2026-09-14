@@ -5,7 +5,7 @@ Procedural notes for py3/py2 maintenance, documentation, and tooling.
 | Guide | Use when |
 |-------|----------|
 | [`NewBranch_Guide.md`](./NewBranch_Guide.md) | Tracking branch work, timelines, PR notes (developers) |
-| [`NewFeature_Guide.md`](./NewFeature_Guide.md) | Long-lived feature architecture docs — see worked example [`Feature_ProjectManager.md`](../Features/Feature_ProjectManager.md) |
+| [`NewFeature_Guide.md`](./NewFeature_Guide.md) | Long-lived feature architecture docs — worked examples: [`Feature_ProjectManager.md`](../Features/Feature_ProjectManager.md), [`Feature_MRSMeshCreation.md`](../Features/Feature_MRSMeshCreation.md) |
 | [`NewTesting_Guide.md`](./NewTesting_Guide.md) | QA / validation checklists |
 | [`GoogleDoc_Capture_Guide.md`](./GoogleDoc_Capture_Guide.md) | Turning tool changes into **paste-ready Google Doc** section updates (artists) |
 

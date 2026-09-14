@@ -1,0 +1,50 @@
+---
+description: Tool runtime uses cgmMeta handles; strings only for UI labels and persisted data
+alwaysApply: true
+---
+
+# Runtime meta, not strings (cgm tools)
+
+## Iron rule
+
+In **`cgm/core/tools/`**, **`cgm/core/rig/`**, **`cgm/core/mrs/`**, and **`lib/`** helpers they call for Maya scene work:
+
+| Phase | Use |
+|--------|-----|
+| **UI labels**, scroll rows, status text | Strings (display only) |
+| **Saved data** — optionVars, `.cgm*Dat`, CCL, presets, JSON sidecars | Strings (paths, names, enums) |
+| **Runtime** — handlers, build/create, lists in memory, message graphs, multi-step pipelines | **`cgmMeta` instances** (or typed meta subclasses: `cgmObject`, `cgmDynFK`, …) |
+
+**Do not** carry DAG identity as bare node strings (`mNode`, long paths, `mc.ls` results) through tool or rig logic when the object still exists in the scene. Meta resolves **`p_nameLong` / `mNode` at call time** and survives re-parent and namespace changes while the node exists.
+
+## Boundaries (where strings are allowed)
+
+1. **Read disk / optionVar** → immediately **`cgmMeta.asMeta(...)`** or **`validateArgs.validateObjArg`** → store on `self` or parallel lists as meta (e.g. `self._mDynFK`, `_ml_loaded[i]`).
+2. **Write disk / optionVar** → serialize from meta **once** (`.mNode`, long path, or stable `p_nameBase` per schema) at save time only.
+3. **`mc.*` / MEL** — keep **meta** for rig logic (`p_parent`, **`getParent(asMeta=True)`**, `doDuplicate`, message lists). For **`mc.*` only**, prefer **`getParent(asMeta=False)`** (string). If you already have meta, use **`.mNode`** at the call. See **`maya-cmds-strings-only`**.
+4. **Logging** → strings in log messages are fine; log **`mObj.p_nameShort`** or **`repr` of meta**, not stale copies of paths held from earlier in the function.
+
+## Do not
+
+- Build or pass **`list` of node strings** through create/rebuild/skin/connect pipelines when a **`list` of meta** (or ordered chain from **`_hair_normalize_sim_chain`**) can hold the same objects.
+- Name nodes with ad-hoc **`'%s_%s' % (a, b)`** when meta already provides **`p_nameBase`**, **`cgmName`**, or indexed naming on a **`name`** token — match nearby rig/tool naming.
+- **`mc.parent(string, string)`** across steps when **`mChild.p_parent = mParent`** (meta) is available.
+- Resolve selection or scroll rows by **parsing display strings** — use **index → parallel meta list** (see **`Feature_CgmToolUI.md`**).
+- Store the only reference to a setup as a **string on `self`** for the session (`self._setupNode = '|foo|bar'`) when **`self._mSetup = cgmMeta.asMeta(...)`** is the pattern.
+
+## Tool UI wiring
+
+- **Load / Create / Bake / Connect** handlers: resolve inputs to meta **at the top of the handler** (or on load into `self._m*`).
+- **Reload Dependencies**: rebind **`self._m*`** from existing nodes after backend reload (see **`cgm-reload-mod`**, e.g. **`dynFKTool._dynfk_rebind_loaded_mDynFK`**).
+- **Parallel lists**: canonical row = meta or wrapper with **`.item` meta**; scroll shows **`.alias` string** only.
+
+## Lib helpers
+
+- Functions in **`lib/`** and **`rig/`** that operate on scene objects should take **`mObj` / meta list** kwargs or args, not “maybe string maybe meta” unless documented as a **single boundary** function that normalizes once with **`cgmMeta.asMeta`** and then uses meta only internally.
+
+## Related
+
+- Meta API reference: **`cgm-meta-and-existing-patterns`**, **`cgm/core/cgm_Meta.py`**
+- UI data vs display: **`Features/Feature_CgmToolUI.md`**
+- Lookups: **`Features/Feature_CoreLibLookups.md`** — do not duplicate **`mc.ls`** string hacks
+- **`mc.*` node/plug arguments:** **`maya-cmds-strings-only`**

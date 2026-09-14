@@ -1,5 +1,5 @@
 ---
-description: Module reload — use cgmGEN._reloadMod only (py2/py3)
+description: Module reload — cgmGEN._reloadMod only; explicit imports; no importlib/sys.modules/__import__ hacks
 alwaysApply: true
 ---
 
@@ -7,17 +7,14 @@ alwaysApply: true
 
 In **cgmToolsPy3**, **ProjectScripts**, **cgmToolsDev** docs, and other in-house Maya Python:
 
-- Reload modules with **`cgmGEN._reloadMod(module)`** after importing **`cgm.core.cgm_General as cgmGEN`** (match the file’s existing import style).
-- **`cgmGEN._reloadMod`** is the project wrapper around reload (`importlib.reload` on py3, `reload()` on py2) — use it so code stays dual-version safe.
+- Reload with **`cgmGEN._reloadMod(module)`** only, after **`import cgm.core.cgm_General as cgmGEN`** (match the file’s existing import style).
+- **`cgmGEN._reloadMod`** is the project wrapper (`importlib.reload` on py3, `reload()` on py2). **Agents must not call lower-level reload APIs directly** — not even “just this once” in a tool fix.
 
-## Do not use
+## Required pattern
 
-- `importlib.reload(...)`
-- bare **`reload(...)`** (py2 built-in)
-- `imp.reload(...)`
-- telling the user to reload via **`importlib.reload`** in docs, comments, or Script Editor snippets
-
-## Do use
+1. **`import` the target module** (full dotted path, normal alias — e.g. `import cgm.core.tools.dynFKTool as DYNFKTOOL`).
+2. Pass **that module object** to **`cgmGEN._reloadMod(...)`**.
+3. Rebind callers if needed (e.g. `global RIGDYN = RIGDYNMOD`, tool `self.__class__ = DYNFKTOOL.ui` after reloading the tool module).
 
 ```python
 import cgm.core.cgm_General as cgmGEN
@@ -26,13 +23,72 @@ import cgm.core.lib.perforce as P4UTIL
 cgmGEN._reloadMod(P4UTIL)
 ```
 
-For session cache modules (e.g. **`cgm.core.lib.perforce_session`**), flush the same way:
+Multi-module tools (e.g. cgmSimChain): reload **dependencies first**, **consumer last** (e.g. lib → `ik_utils` → **`dynamic_utils` last**), then reload the **tool module** so its imports see fresh libs.
 
 ```python
-import cgm.core.lib.perforce_session as P4SESSION
-cgmGEN._reloadMod(P4SESSION)
+import cgm.core.cgm_General as cgmGEN
+import cgm.core.rig.dynamic_utils as RIGDYN
+import cgm.core.tools.dynFKTool as DYNFKTOOL
+
+cgmGEN._reloadMod(RIGDYN)      # after its lib deps were reloaded
+cgmGEN._reloadMod(DYNFKTOOL)   # tool module last
 ```
 
-Or call project helpers that already wrap this (e.g. **`P4UTIL.reload_session_cache()`**).
+Match shelf / menu entry points: **`cgm/core/tools/lib/tool_calls.py`** (e.g. `cgmSimChain`: `reload_dependencies()` → `cgmGEN._reloadMod(dynFKTool)` → `dynFKTool.ui()`).
 
-Match nearby callers (`tool_calls.py`, tool **`Setup → Reload`**, `reloadSceneStuff()`, `cgm.core._reload()`).
+## Reloading the tool module from inside that tool
+
+Use the **same explicit import + `_reloadMod`** as `tool_calls` — not introspection shortcuts.
+
+```python
+import cgm.core.cgm_General as cgmGEN
+import cgm.core.tools.dynFKTool as DYNFKTOOL
+
+def _reload_dynfk_ui(self):
+    reload_dependencies()
+    cgmGEN._reloadMod(DYNFKTOOL)
+    self.__class__ = DYNFKTOOL.ui
+    _dynfk_rebind_loaded_mDynFK(self, rigdyn_module=DYNFKTOOL.RIGDYN)
+    super(DYNFKTOOL.ui, self).reload()
+```
+
+RETAIN windows: clear stale Mel widget attrs on `self` before `super(...).reload()` if layout rebuild can touch deleted controls (see `dynFKTool._dynfk_clear_stale_layout_widget_refs`).
+
+## Rebind loaded meta after backend reload
+
+`importlib.reload` updates module-level functions and **new** instances. **Existing** `cgmMeta` / **`cgmDynFK`** on the tool (`self._mDynFK`) stay on the **old Python class** (Red9 node cache) until re-wrapped.
+
+On the **Reload Dependencies** path only (not Create Chain / bake):
+
+- After `reload_dependencies()`, rebind the loaded setup — e.g. **`dynFKTool._dynfk_rebind_loaded_mDynFK`** (`cgmMeta.reinitializeMetaClass` + fresh `RIGDYN.cgmDynFK(node)`).
+- Same idea applies to any RETAIN tool that keeps a meta handle to code in a reloaded backend module.
+
+## Multi-module `reload_dependencies()` logging
+
+When a tool reloads many modules (cgmSimChain, Scene reload stacks, MRS helpers), **log each module** before `cgmGEN._reloadMod` — start line, one line per `module.__name__`, done line + `cgmGEN._str_subLine`. Match **`cgm.core._reload`**, **`Scene.reloadSceneStuff`**, and **`dynFKTool.reload_dependencies`**.
+
+Without per-module lines, artists and agents cannot tell whether Reload Dependencies ran or which file revision Maya loaded.
+
+## Do not reload inside tool action callbacks
+
+**Never** call `reload_dependencies()`, `cgmGEN._reloadMod(...)`, or rebind loaded meta instances (e.g. re-wrap `self._mDynFK` from a fresh module) from **Create Chain**, bake, export, or other one-shot UI button handlers.
+
+If Maya is still running old `dynamic_utils` (new `log.info` lines missing, behavior mismatch) while the tool UI looks updated, that is a **session reload** problem — fix it with **Setup → Reload Dependencies**, shelf/menu relaunch (`tool_calls.cgmSimChain()`), or restart Maya. **Do not** patch stale code by reloading mid-call.
+
+## Do not use (agents)
+
+- `importlib.reload(...)` or **`importlib.import_module`** for session reload
+- bare **`reload(...)`** (py2 built-in)
+- `imp.reload(...)`
+- **`__import__(__name__)`** (or `__import__(__name__)` passed to `_reloadMod`) on dotted names — Python returns the **top-level package** (e.g. `cgm`), not the tool module → `AttributeError` on `.ui`
+- **`sys.modules[__name__]`** (or any `sys.modules[...]` trick) **instead of** a normal `import full.path as ALIAS` before `_reloadMod`
+- Telling the user to **`importlib.reload`** in docs, comments, or Script Editor snippets
+
+Session cache modules (e.g. **`cgm.core.lib.perforce_session`**): same **`import` + `cgmGEN._reloadMod`**, or **`P4UTIL.reload_session_cache()`** when that helper exists.
+
+## Related
+
+- Module placement: **`cgm-module-placement`**
+- Stale session: **`cgm-stale-session-diagnosis`**
+- Debug order: **`cgm-debug-order`**
+- Match nearby callers: tool **`Setup → Reload`**, `reloadSceneStuff()`, `cgm.core._reload()`, `mocapBakeTools.reload_dependencies`

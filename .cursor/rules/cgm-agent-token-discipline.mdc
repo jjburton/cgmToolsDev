@@ -1,0 +1,24 @@
+---
+description: Agent discipline — one inference from logs, minimal diff until session proven fresh
+alwaysApply: true
+---
+
+# Agent token discipline (cgm)
+
+Avoid long debug loops when the user pastes Maya Script Editor output.
+
+## When the user provides logs
+
+1. **Quote what is present vs absent** (specific module / function log lines), then state **one** inference before editing.
+2. If UI and backend log lines **disagree on freshness**, next step is **reload verification** (per-module reload logs, meta rebind) — not another feature patch.
+3. If the same symptom persists after a reload-path fix, **ask** whether Reload Dependencies ran and which reload lines appeared — do not assume silent failure and rewrite build code again.
+
+## Diff size
+
+- Prefer **minimal diff** until session freshness is proven (logging + reload-path rebind only).
+- Do not re-explain the same root cause across multiple turns without a **new** log or user confirmation.
+
+## Related
+
+- **`cgm-stale-session-diagnosis`**
+- **`cgm-debug-order`**

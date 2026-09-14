@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: September 1, 2026
+- **Last Updated**: September 14, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -27,6 +27,22 @@
 | **Display strings** | Aliases rebuilt for the scroll list | Anything written to disk or used as resolve keys without stripping |
 
 **Do not** “fix” polluted strings at save/load time with regex strip helpers. **Prevent pollution at the source**: only pass display strings into the scroll widget; read/write canonical data from parallel structures indexed by row number.
+
+### Runtime: meta handles, not node strings
+
+**Iron rule:** persisted and on-screen text may be strings; **everything that runs after load** should be **`cgmMeta`** (or a project meta subclass) until the Maya API boundary.
+
+| OK as string | Must be meta at runtime |
+|--------------|-------------------------|
+| Scroll list `.alias`, labels, ann strings | `self._mDynFK`, chain joint lists, target lists, loaded setup |
+| optionVar / dat / CCL field values | Handler args after `asMeta` / `validateObjArg` |
+| Log line text (derived from `p_nameShort` at log time) | Parenting, duplicate, snap, msgList, skin, constraints |
+
+Meta keeps a live handle: **`.mNode` / long path is resolved when needed**, not copied through a multi-step pipeline as the only identity.
+
+**Boundary:** load string → **`cgmMeta.asMeta`** → work in meta → save **`.mNode`** once at serialize. Cursor rule: **`.cursor/rules/cgm-runtime-meta-not-strings.mdc`**.
+
+**Anti-pattern:** append **`mc.joint(...)`** names to a string list and pass that list through ensure → skin → msgList. **Prefer:** **`ml_sim`** meta list from **`doCreateAt('joint')`**, **`p_parent`**, hierarchy normalize, connect from meta.
 
 ```mermaid
 flowchart TB
@@ -421,6 +437,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
 | Reset Mel `_NEXT_KEY` on Reload Core (class-only counter) | Layout hangs ~80% probing leftover `MelButton0__`..N__ from Toolbox / retained windows | Persist ids on `sys._cgmMelWidgetNextKey`; catch up after exists loop |
 | `MelOptionMenu.clear()` then `append` (especially on an empty menu) | `itemListShort` + `deleteUI` can empty or kill the control; new items never show | Replace via `optionMenu -q -itemListLong` + `deleteUI` + `menuItem(parent=)` (cgmAnimClip Layer menu) |
+| `MelTextField` with `enable=False` on `cgmUISubTemplate` rows | Disabled Maya field = dark text on dark row; unreadable | Keep `enable=True`; toggle `editable=False` + `bgc=SHARED._d_gui_state_colors['help']` when inactive, `editable=True` + `['normal']` when active (Scene.py / cgmSimChain follicle segment length) |
 | Store command items (`New`) in the optionVar | Next open lands on a prompt, not a real target | Run the command, then persist the created/selected value (cgmAnimClip Layer) |
 
 ---
@@ -500,4 +517,5 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 | 2026-08-13 | animFilter-style checkbox + frame + compact header buttons; p4Tool changelist R/S batch pattern |
 | 2026-08-13 | Section layout: `column adj` = horizontal stretch; full-width centered labels via `MelHSingleStretchLayout`; compact status block kwargs; p4Tool ref |
 | 2026-08-12 | Session persistence pattern: last-file optionVar + pathList recent + status bar; refs animFilterTool + mocapBakeTools autoload |
+| 2026-09-14 | Runtime meta rule: tool/rig pipelines use cgmMeta; strings for UI + saved data only; link to `cgm-runtime-meta-not-strings.mdc` |
 | 2026-08-11 | Initial doc: data vs display rule, parallel lists, `cgmListItem`, `cgmScrollList`, `MelObjectScrollList` caveat, CCL IO, anti-patterns; refs Builder + mocapBakeTools |

@@ -1,0 +1,50 @@
+---
+description: Put shared lookup tables and static Maya/cgm data in shared modules, not inline in callers
+alwaysApply: true
+---
+
+# cgm shared lookup and static data
+
+## Default home
+
+Put **reusable lookup tables, alias maps, enums, and version-compat data** in **`cgm/core/lib/shared_data.py`** — import as **`SHARED`**.
+
+Examples that belong there:
+
+- Maya node-type aliases / canonical names (`d_mayaNodeType_canonical`)
+- Naming suffix maps, axis/color tables, rotate-order maps
+- Project-wide option lists and type vocab that multiple modules compare against
+
+Callers should **read** from `SHARED` — do not copy the dict into another module.
+
+## Do not define module-local shared maps
+
+Avoid adding new module-level dicts/constants in implementation files when the data is:
+
+- Compared against in more than one place
+- Maya-version or API-compat normalization (e.g. `addDL` → `addDoubleLinear`)
+- A vocabulary other tools/tests might need
+
+```python
+# BAD — local alias table in validateArgs.py
+_MAYA_NODE_TYPE_CANONICAL = {'addDL': 'addDoubleLinear'}
+
+# GOOD — shared_data.py
+d_mayaNodeType_canonical = {'addDL': 'addDoubleLinear'}
+
+# GOOD — caller
+return SHARED.d_mayaNodeType_canonical.get(_intialCheck, _intialCheck)
+```
+
+Module-local constants are fine only when they are **private to that file** and not part of project vocabulary.
+
+## Before adding new data
+
+1. **Search** `shared_data.py` and nearby `lib/*_utils.py` for an existing table or helper.
+2. For Maya query helpers (`mc.ls`, `listConnections`, type checks), read [`Features/Feature_CoreLibLookups.md`](../../Features/Feature_CoreLibLookups.md) — do not duplicate lookup **logic** in `shared_data`; tables live there, functions live in `lib/`.
+3. **Extend** an existing `d_*` / `_d_*` table when the category already exists; add a new named section when it does not.
+
+## Related rules
+
+- Module placement: **`cgm-module-placement`**
+- Search-first for existing helpers: **`cgm-meta-and-existing-patterns`**

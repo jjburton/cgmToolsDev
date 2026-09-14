@@ -1,0 +1,41 @@
+---
+description: cgmSimChain hair counts, addEndJoint, and debug log contract
+globs: "**/dynFKTool.py,**/dynamic_utils.py,**/simChain_dat.py,**/Feature_SimChain.md"
+alwaysApply: false
+---
+
+# cgmSimChain debug contract
+
+Canonical detail: [`Features/Feature_SimChain.md`](../../Features/Feature_SimChain.md) (Dev debug section).
+
+## Count vocabulary (do not conflate)
+
+| Term | Typical count for N target controls |
+|------|--------------------------------------|
+| **Target controls** (`mBaseTargets` / item list) | N |
+| **Sim joints** (`mObjJointChain` under follicle) | N, or **N+1** when **Add end joint** is on — serial **`p_parent`** chain under root |
+| **Driven joints** (spline IK) | Same as sim after **`_hair_reparent_sim_chain_ordered`**; duplicate sim **root** + child hierarchy; **`ik_utils.spline`** needs **≥ 3** |
+| **Follow locs** (`mLocs`, spline or legacy) | **N** (one per target — not N+1) |
+| **inCurve CVs** | Match sim joint count at rebuild (MCD interim may differ) — not the same as loc count |
+
+When the user says “only 4 joints,” clarify **sim chain** vs **follow locs** vs **CV count** before changing code.
+
+## Add end joint
+
+- UI / grp attr: **`addEndJoint`** (legacy **`extendEnd`** on chain grp / dat JSON).
+- **On**: expect **N+1** sim joints; tip joint extends past last target by distance (numeric attr, e.g. `2.0`).
+- **`requireAddEndJoint`**: validation can run when checkbox is on even if numeric parse fails (coerce default distance in backend).
+
+## Debug log contract (Create Chain, hair)
+
+After **Setup → Reload Dependencies**, three checks in Script Editor:
+
+1. **`uiFunc_make_dynamic_chain`** — checkbox raw, `required`, distance raw, resolved `addEndJoint`.
+2. **`chain_create_hair` entry** — `addEndJoint`, `active`, `requireAddEndJoint`, target count.
+3. **After ensure** — `simJoints` / `l_pos` lengths.
+
+If (1) is correct and (2) is **missing**, treat as **stale session** — **`cgm-stale-session-diagnosis`**, not kwargs wiring.
+
+## Related
+
+- **`cgm-reload-mod`** — **Reload Dependencies** = backend `reload_dependencies` + `_dynfk_rebind_loaded_mDynFK`; **Relaunch Tool** / shelf = reload **`dynFKTool`** too

@@ -14,3 +14,7 @@ In **cgmToolsPy3**, **ProjectScripts**, and other in-house Maya Python:
 Match nearby modules (e.g. `MetahumanFacial.py`, `cgm/core/tools/`, `cgm/core/lib/`).
 
 `maya.mel as mel` is unchanged unless a file already uses a different local alias.
+
+## Related
+
+- **`maya-cmds-strings-only`** — every **`mc.*`** node/plug argument must be **`str`**, never meta

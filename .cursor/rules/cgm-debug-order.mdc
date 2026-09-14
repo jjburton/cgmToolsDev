@@ -1,0 +1,26 @@
+---
+description: Debug order — log at boundaries before logic patches; one root cause per turn
+alwaysApply: true
+---
+
+# Debug order (cgm Maya tools)
+
+For “data not getting through” or “option on but behavior off” reports.
+
+## Order of work
+
+1. **Log at boundaries** — UI handler → public API kwargs → first backend branch (`log.info` with raw + resolved values). Do this **before** new validation, coercion, or joint/curve logic.
+2. **Read kwargs pop order** on the actual code path (e.g. `require*` flags must be popped **before** blocks that use them).
+3. **One root cause per turn** — do not stack trim + append + reload + validation fixes in one response without Maya confirmation between them.
+4. **Session vs logic** — if boundary logs show UI correct but backend entry logs absent, follow **`cgm-stale-session-diagnosis`**; do not keep editing `chain_create_*` until reload is verified.
+
+## Do not
+
+- Propose **`reload_dependencies()` inside button handlers** to “pick up” edited libs.
+- Add large behavioral changes when the user only asked for **clear logging** of what values are passed.
+- Interpret counts without naming **which object** (sim joints vs follow locs vs inCurve CVs) — see **`cgm-simchain-debug-contract`** for hair.
+
+## Related
+
+- **`cgm-stale-session-diagnosis`**
+- **`cgm-agent-token-discipline`**

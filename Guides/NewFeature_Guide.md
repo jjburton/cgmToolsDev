@@ -170,3 +170,19 @@ Use **[`Features/Feature_ProjectManager.md`](../Features/Feature_ProjectManager.
 
 Do not paste branch timeline prose into the feature doc beyond a short revision-history table.
 
+### Worked Example: MRS Mesh Creation (proxy / puppet / skinned)
+
+Use **[`Features/Feature_MRSMeshCreation.md`](../Features/Feature_MRSMeshCreation.md)** when documenting or extending the MRS mesh pipeline (module proxy, puppet mesh, batch post, face-block attrs).
+
+| Section | Mesh example |
+|---------|----------------|
+| **Status & Overview** | Face26 mesh routing; audience dev/TA; link `Branch_Face26.md` |
+| **Scope** | In: `meshBuild`, `proxyBuild`, `puppetMesh_create`, face block `build_proxyMesh` modes. Out: FBX export, MetaHuman solve |
+| **Architecture** | Mermaid: batch `proxyMesh_verify` → `puppetMesh_create`; table of block attrs and msgLists |
+| **Implementation** | `block_proxy_mesh_flow`, `puppet_geoGroup_get`, head `create_simpleMesh` invariants |
+| **Configuration** | Face defaults (`proxyBuild` off); batch kws `proxyMesh` / `puppetMesh` |
+| **Testing** | Checklists for skin-unify, proxyBuild on/off, geoGroup stability, armature reparent |
+| **Revision history** | Point timeline to branch doc |
+
+**When to update**: new face block type, change to `puppetMesh_create` unify rules, geoGroup/armature parenting, or post-create normal/shader helpers.
+

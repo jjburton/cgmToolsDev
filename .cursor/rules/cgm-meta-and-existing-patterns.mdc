@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Canonical meta reference
 
-- In the **cgmToolsPy3** checkout, **`cgm/core/cgm_Meta.py`** is the primary place to learn how **cgmMeta / cgmObject** (and related classes) behave: properties (`p_nameShort`, `p_nameLong`, etc.), message links, `msgList_*`, `getMessageAsMeta`, `connectChildNode`, and other shared rig/meta conventions.
+- Dev scope inventory: [`Features/Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md). Implementation source: **`cgm/core/cgm_Meta.py`** — **cgmNode / cgmObject** properties (`p_nameShort`, `p_nameLong`, etc.), message links, `msgList_*`, `getMessageAsMeta`, `connectChildNode`, hierarchy (`p_parent` on **`cgmObject`**), and other shared rig/meta conventions.
 - When unsure whether a capability exists on meta instances, **read or search that file and nearby callers** instead of assuming Maya-only or ad-hoc patterns.
 
 ## Do not invent lookups that already exist
@@ -24,3 +24,8 @@ Do not add a wrapper whose only job is that query. A new lib function is allowed
 ## Module placement (non-meta code)
 
 - General new utilities belong under **`cgm/core/lib/`**, not vendored trees or unrelated large modules — see **`cgm-module-placement`** rule.
+
+## Runtime: meta handles (mandatory)
+
+- Tool and rig **runtime** code must use **`cgmMeta` instances**, not bare DAG strings, for anything that still exists in the scene. Strings belong in **UI labels** and **saved files** only; convert at load/save boundaries.
+- Full rule: **`cgm-runtime-meta-not-strings`**. At **`mc.*`**: **`maya-cmds-strings-only`**.

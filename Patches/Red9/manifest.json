@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "patches": [
+    {
+      "id": "pyperclip-vendored-import",
+      "summary": "Use Red9.packages.pyperclip so batch mayapy works without addPythonPackages",
+      "upstream_tested": "unknown",
+      "edits": [
+        {
+          "file": "core/Red9_Meta.py",
+          "find": "import pyperclip",
+          "replace": "import Red9.packages.pyperclip as pyperclip",
+          "count": 1
+        },
+        {
+          "file": "core/Red9_PoseSaver.py",
+          "find": "import pyperclip",
+          "replace": "import Red9.packages.pyperclip as pyperclip",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "dead-mnode-getattribute-swallow",
+      "summary": "Swallow MetaInstanceError in __getattribute__ and re-raise it cleanly from mNode so stale cache entries do not break meta.delete()",
+      "upstream_tested": "unknown",
+      "edits": [
+        {
+          "file": "core/Red9_Meta.py",
+          "find": "                return _result\n            except Exception as error:\n                raise Exception(error)\n\n    @mNode.setter",
+          "replace": "                return _result\n            except MetaInstanceError as error:\n                raise\n            except Exception as error:\n                raise Exception(error)\n\n    @mNode.setter",
+          "count": 1
+        },
+        {
+          "file": "core/Red9_Meta.py",
+          "find": "        except MetaInstanceError as error:\n            raise MetaInstanceError('MObject is no longer valid - Last good dag path was: \"%s\"' %\n                                     object.__getattribute__(self, \"_lastDagPath\"))\n        except AttributeError as error:\n            raise AttributeError(error)",
+          "replace": "        except MetaInstanceError as error:\n            #...this is to match previous function where a dead mNode wouldn't throw an exception but AttributeError would\n            log.error(error)\n            # raise MetaInstanceError('MObject is no longer valid - Last good dag path was: \"%s\"' %\n            #                          object.__getattribute__(self, \"_lastDagPath\"))\n        except AttributeError as error:\n            raise AttributeError(error)",
+          "count": 1
+        }
+      ]
+    }
+  ]
+}
