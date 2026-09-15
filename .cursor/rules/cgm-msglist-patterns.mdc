@@ -1,0 +1,68 @@
+---
+description: Prefer msgList_* for ordered scene-linked collections; ml_* at runtime; connectBack; clean before re-append
+alwaysApply: true
+---
+
+# cgm msgList patterns
+
+**Scope:** New code and files you touch in **`tools/`**, **`rig/`**, **`mrs/`**, and their **`lib/`** helpers — use **message lists** on meta for **ordered, persistent** collections of scene nodes. Do not mirror the same membership with parallel string lists or ad-hoc **`mc.listConnections`** walks.
+
+Canonical API: [`Features/Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md) § Indexed lists (`msgList_*`). Implementation: **`cgm_Meta.py`** → **`attribute_utils`**.
+
+## When to use msgList
+
+| Use | Instead of |
+|-----|------------|
+| Setup owns **N chains**, hair systems, targets, locs, follicles, etc. | **`chain_0`…`chain_N` name parsing**, outliner scan, or **`self._chains = ['|foo', …]`** |
+| **Ordered** pipeline (connect/bake/rebuild by index) | Unordered **`set`** / dict without index attr |
+| **Back-link** from child to owner (setup, segment curve, block) | Guessing parent from DAG only |
+
+Single optional link → **`getMessage` / `getMessageAsMeta` / `connectChildNode`**. Serialized list attrs without live messages → **`datList_*`** (see feature doc).
+
+## Runtime shape
+
+- **Read:** **`ml_* = mOwner.msgList_get('chain') or []`** — default **`asMeta=True`**; iterate **`m*`** instances.
+- **Write at boundary:** **`msgList_connect`**, **`msgList_append`**, **`msgList_remove`**, **`msgList_purge`**, **`msgList_clean`** on the **holder** meta (or **`ATTR.msgList_*`** when the holder is only available as **`str`** at a thin lib edge — pass **`.mNode`**).
+- **Index:** **`msgList_index(attr, mChild)`** for stable row index; store **`chainIndex`** (or equivalent) on the child when UI/details need it — see **`chain_connect_to_setup`** / **`chain_sync_chain_index_attrs`** in **`dynamic_utils`**.
+
+## connectBack
+
+When the **child** must know its **owner** (setup, puppet, segment curve), pass **`connectBack`** on append/connect:
+
+```python
+mSetup.msgList_append('chain', mGrp.mNode, connectBack='owner')
+mSegmentCurve.msgList_append('ikHandles', mIKHandle.mNode, connectBack='segmentCurve')
+```
+
+Match existing attr names on the child (`owner`, `puppet`, `block`, …) — **grep callers** before inventing a new back-link attr.
+
+## Rebuild and artist deletes
+
+If nodes can be removed outside your pipeline (outliner delete, broken chain cleanup):
+
+1. **`msgList_clean(attr)`** on the holder (drops dead message slots).
+2. Then **`msgList_append`** / **`msgList_connect`** — do not assume indices are still dense after manual deletes.
+
+**`chain_connect_to_setup`** pattern: clean **`chain`** on setup before append when re-wiring.
+
+## Do not
+
+- **`msgList_get`** then pass results to **`mc.*`** without **`.mNode`** — see **`maya-cmds-strings-only`**.
+- Duplicate registry: e.g. maintain **`mHairSystems`** msgList **and** a separate Python-only list that can drift.
+- Replace msgList with **UI scroll row strings** — parallel **meta list** + display alias per **`Feature_CgmToolUI.md`**.
+- Use **`mc.listRelatives`** / **`listConnections`** to **discover** members that are already stored on a msgList for that rig feature.
+
+## Examples in tree
+
+| msgList attr | Holder | Typical child content |
+|--------------|--------|------------------------|
+| `chain` | `cgmDynFK` setup | Per-chain grp (`connectBack='owner'`) |
+| `mHairSystems` | `cgmDynFK` setup | Registered hairSystem shapes |
+| `mTargets`, `mLocs`, `mObjJointChain` | Chain grp | Rig joints, follow locs, sim joints |
+| `mMeshFollicles`, `mRivets`, `mUvPins` | Cloth-attach chain grp | Surface trackers |
+
+## Related
+
+- **`cgm-runtime-meta-not-strings`** — **`ml_*`** in memory, not bare DAG strings through pipelines
+- **`cgm-meta-naming-hierarchy`** — **`ml_*`** naming; hierarchy vs duplicate DAG walks
+- **`cgm-meta-and-existing-patterns`** — search **`cgm_Meta.py`** / existing rig before new list storage

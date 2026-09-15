@@ -285,7 +285,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 ---
 
 ### August 8, 2026 (d) - Presets menu only (remove body preset dropdowns)
-**What**: Removed Details Fabric/Solver enums and Nucleus/Hair Load Preset dropdowns — **Presets** top menu is the sole cgm profile UI. Body rows keep status + `>>` only. Follicle Maya `nodePreset` dropdown retained (not covered by Presets).  
+**What**: Removed Details Fabric/Solver enums and Nucleus/Hair Load Preset dropdowns — **Presets** top menu is the sole cgm profile UI. Body rows keep status + `<<` map only. *(Later: Sept 2026 multi-hair work removed Maya **`nodePreset`** entirely; per registered hairSystem Details row **Load Dat** / **Save Hair Dat…** mirrors top **Presets** — see **`Feature_SimChain.md`**.)*  
 **Files**:
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — cloth row slimmed; nucleus/hair `presetOptions=False`; removed fabric/solver apply helpers
 - DOCS: `Features/Feature_SimChain.md`

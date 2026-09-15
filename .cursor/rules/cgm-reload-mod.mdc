@@ -25,6 +25,28 @@ cgmGEN._reloadMod(P4UTIL)
 
 Multi-module tools (e.g. cgmSimChain): reload **dependencies first**, **consumer last** (e.g. lib → `ik_utils` → **`dynamic_utils` last**), then reload the **tool module** so its imports see fresh libs.
 
+## Meta / `mClass` — do **not** partial-reload in tool `reload_dependencies()`
+
+Registered **`mClass`** subclasses (**`cgmDynFK`**, blocks, puppets, …) depend on **Red9’s registry** and **`registerMClassInheritanceMapping()`** running in **`cgm.core._reload`** order ([`cgm/core/__init__.py`](../../cgmToolsPy3/cgm/core/__init__.py) `_l_core_order`).
+
+**Do not** add a “mini” Red9 → **`cgm_Meta`** → **`cgm_RigMeta`** stack inside a single tool’s **`reload_dependencies()`** — it **breaks other metaclasses** still bound to the previous registry.
+
+| After editing… | In Maya |
+|----------------|---------|
+| **`lib/`**, **`rig/`** module functions, presets, tool UI (no **`mClass`** class body change) | Tool **Reload Dependencies** + rebind RETAIN meta (**`_dynfk_rebind_loaded_mDynFK`**, etc.) |
+| **`cgm_Meta`**, **`cgm_RigMeta`**, **`mrs/`** / **`rig/`** subclass **`class`** defs, **`registerMClassInheritanceMapping`** tails | **Prompt the user** to run **full cgm core reload** — e.g. **`import cgm.core as CGM; CGM._reload()`** (or team toolbox equivalent). Then relaunch tools / rebind handles. |
+
+**Agents:** if you changed metaclass code, **tell the user to core-reload** before expecting new subclass behavior. Do not wire partial meta reload into tools.
+
+**Stale symptoms** (module fn works, instance method does not; wrong **`mClass`** wrapper): core reload + tool rebind — not another tool-only meta patch.
+
+**API placement (agents):**
+
+- **Default:** **`lib/`** / **`rig/`** / **`mrs/`** **module functions** taking meta — see **`cgm-meta-and-existing-patterns`**.
+- **New subclass instance methods:** **explicit user approval only**; user must **core-reload** after merge.
+
+**Header “refresh”** (re-read scene) = **`reinitializeMetaClass` + re-wrap** only — does not load new Python from disk.
+
 ```python
 import cgm.core.cgm_General as cgmGEN
 import cgm.core.rig.dynamic_utils as RIGDYN
@@ -56,11 +78,11 @@ RETAIN windows: clear stale Mel widget attrs on `self` before `super(...).reload
 
 ## Rebind loaded meta after backend reload
 
-`importlib.reload` updates module-level functions and **new** instances. **Existing** `cgmMeta` / **`cgmDynFK`** on the tool (`self._mDynFK`) stay on the **old Python class** (Red9 node cache) until re-wrapped.
+`cgmGEN._reloadMod` updates module-level functions. **Existing** meta handles on the tool stay on the **old Python class** (Red9 cache) until re-wrapped.
 
 On the **Reload Dependencies** path only (not Create Chain / bake):
 
-- After `reload_dependencies()`, rebind the loaded setup — e.g. **`dynFKTool._dynfk_rebind_loaded_mDynFK`** (`cgmMeta.reinitializeMetaClass` + fresh `RIGDYN.cgmDynFK(node)`).
+- After `reload_dependencies()`, rebind the loaded setup — e.g. **`dynFKTool._dynfk_rebind_loaded_mDynFK`** (`cgmMeta.reinitializeMetaClass` + fresh `RIGDYN.cgmDynFK(node)`). After **`mClass`** **class** edits, user **core-reloads** first, then tool reload + rebind.
 - Same idea applies to any RETAIN tool that keeps a meta handle to code in a reloaded backend module.
 
 ## Multi-module `reload_dependencies()` logging

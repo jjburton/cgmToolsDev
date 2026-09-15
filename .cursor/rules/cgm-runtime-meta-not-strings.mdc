@@ -36,7 +36,7 @@ In **`cgm/core/tools/`**, **`cgm/core/rig/`**, **`cgm/core/mrs/`**, and **`lib/`
 
 - **Load / Create / Bake / Connect** handlers: resolve inputs to meta **at the top of the handler** (or on load into `self._m*`).
 - **Reload Dependencies**: rebind **`self._m*`** from existing nodes after backend reload (see **`cgm-reload-mod`**, e.g. **`dynFKTool._dynfk_rebind_loaded_mDynFK`**).
-- **Parallel lists**: canonical row = meta or wrapper with **`.item` meta**; scroll shows **`.alias` string** only.
+- **Parallel lists**: canonical row = meta or wrapper with **`.item` meta**; scroll shows **`.alias` string** only. Persistent membership on nodes → **`msgList_get`** into **`ml_*`** (see **`cgm-msglist-patterns`**), not a second string list of DAG paths.
 
 ## Lib helpers
 

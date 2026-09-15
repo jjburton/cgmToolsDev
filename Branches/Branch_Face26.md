@@ -3,7 +3,7 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: September 14, 2026 (cgmSimChain spline IK + hair create hardening Maya-verified)  
+**Last Updated**: September 15, 2026 (cgmSimChain Details refresh, chain rename, nested list UI)  
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
@@ -257,11 +257,36 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 
 ---
 
+### September 15, 2026 - cgmSimChain Details UX (refresh, rename, nested lists)
+**What**: cgmSimChain header **refresh** re-reads the loaded setup from scene; per-chain **Name** field renames `chain_*_grp` and hair infrastructure via **`chain_set_name`**; Targets/Locators/Joints use zebra sub-header collapsibles under each chain frame.  
+**Files**:
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — refresh icon (`refresh.png`), `uiFunc_refresh_loaded_setup`, chain Name row, nested list chrome
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `chain_cgm_name`, module `chain_set_name(mDynFK, …)`, `_chain_rename_hair_infrastructure`
+- EXTENDED: `Features/Feature_SimChain.md` — UI surface rows
+
+**Status**: Code complete — Maya verify: refresh after scene edit; rename hair chain; collapse chain hides sub-lists; **Reload Dependencies** logs Red9 + **`cgm_Meta`** + **`dynamic_utils`**
+
+**Docs**: **`Feature_CgmMetaAPI.md`** § Session reload (core **`CGM._reload`** for **`mClass`**); **`cgm-reload-mod.mdc`** — no partial meta reload in tools
+
+---
+
+### September 15, 2026 - Multi hairSystem + Details dat presets
+**What**: Per-chain **`mHairSysShape`** and setup **`msgList mHairSystems`**; Create **Hair system** (New / Default / registered); Details **Hair systems** block with per-shape **Load Dat** / **Save Hair Dat…** (same **`.cgmSimHairDat`** library as top **Presets** menu — Maya **`nodePreset`** removed from **`dynFKTool`**). Nucleus connect dedupe for playback perf when re-registering hair systems.  
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — hair registry, `chain_create_hair` modes, `hair_system_resolve_for_chain`, nucleus dedupe on register
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — hair system rows, `uiFunc_sim_dat_capture_save_for_target`, library-only preset option menus
+- EXTENDED: `cgm/core/lib/simChain_dat.py` — `SimHairDat` per-target apply/capture; setup dat `hairSystems[]`
+- EXTENDED: `Features/Feature_SimChain.md` — multi-hair patterns, UI surface, verification #25–28
+
+**Status**: Code complete — Maya verify: two chains, two hairSystems, independent **Load Dat** per row; **Presets → Hair** still default-only
+
+---
+
 ### September 14, 2026 - cgmSimChain hair create hardening (Maya-verified)
 **What**: Face26 bang/fringe **Make Dynamic Chain** path stabilized after spline-default rollout: **`addEndJoint`** through ensure/skin/MCD; sim joints parented **root→tip**; spline **driven** chain from **duplicate sim root**; incomplete chains surfaced in Details; dev reload split (backend vs tool UI); **`mc.*`** accepts DAG **strings** only at API edge.  
 **Files**:
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `_hair_reparent_sim_chain_ordered`, sim **`p_parent`** create, `_hair_chain_integrity_missing`, `_dag_str` / follicle constraint driver strings, driven duplicate-root contract
-- EXTENDED: `cgm/core/tools/dynFKTool.py` — broken-chain UI, **Push build → Create**, **Reload Dependencies** vs **Relaunch Tool**, preset **`nodePreset`** via **`.mNode`**, **`getMessageAsMeta('mFollicle')`**
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — broken-chain UI, **Push build → Create**, **Reload Dependencies** vs **Relaunch Tool**, **`getMessageAsMeta('mFollicle')`** on load
 - EXTENDED: `Features/Feature_SimChain.md` — sim/driven contract, reload, broken chain, anti-patterns, checklist #21–22
 - EXTENDED: `.cursor/rules/maya-cmds-strings-only.mdc`, **`cgm-runtime-meta-not-strings`** — **`asMeta=False`** / **`.mNode`** at **`mc.*`**
 
@@ -272,7 +297,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 ### September 10, 2026 - cgmSimChain dat library (artist presets)
 **What**: Shipped and tuned **`.cgmSim*Dat`** preset library under `cgm/cgmDat/sim/`; **Presets → Hair / Cloth / Nucleus** in dynFK now loads library files only (Python module menus removed). Capture fix for cloth/hair/nucleus from loaded setup **`mCloth`** / hair / nucleus messages. Hair and nucleus presets Maya-tuned on Edna test hair.  
 **Files**:
-- EXTENDED: `cgm/core/tools/dynFKTool.py` — library-first Presets menu; **Reset → Base**; Details follicle dropdown uses library; `uiFunc_library_apply_by_name`
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — library-first Presets menu; **Reset → Base**; `uiFunc_library_apply_by_name` (Details per-hair row dat menus added later — see Sept 15 multi hairSystem entry)
 - EXTENDED: `cgm/core/lib/simChain_dat.py` — capture resolves mapped nodes from loaded cgmDynFK
 - ADDED/EXTENDED: `cgm/cgmDat/sim/hair/*.cgmSimHairDat` — `bob`, **`bob_hold`**, `bangs_firm`, `shoulder`, `ponytail`, `long_flow`, `ribbon`, `tail`, **`tail_firm`**, `limb`, `rope` (+ user `bobTest` capture on disk)
 - ADDED/EXTENDED: `cgm/cgmDat/sim/cloth/*.cgmSimClothDat` — Autodesk seeds: silk, chiffon, cotton, denim, leather, burlap; user `bangs_firm`, `bangs_2`

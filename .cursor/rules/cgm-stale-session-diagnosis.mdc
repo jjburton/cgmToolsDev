@@ -20,6 +20,7 @@ If Script Editor shows new **`log.info`** (or UI-only strings) from the **tool m
 1. Ask (or infer from logs): did **Reload Dependencies** run and print **per-module** reload lines (see **`cgm-reload-mod`**)?
 2. If reload lines are missing, the session may still be on old **tool** code — relaunch once from toolbox.
 3. If reload lines appear but backend entry logs still missing on the **loaded setup**, verify **meta rebind on reload path** (`dynFKTool._dynfk_rebind_loaded_mDynFK`) — not mid-call.
+4. **`mClass`** / subclass edits need **cgm core reload** (`CGM._reload`) — **not** a partial meta stack in tool Reload Dependencies. **`AttributeError`** on **`mObj.<new_method>`** while **`SOMEMOD.<fn>(mObj)`** works ⇒ prompt **core reload** + tool rebind — **`cgm-reload-mod`**, **`Feature_CgmMetaAPI.md`**.
 
 ## Stop condition
 

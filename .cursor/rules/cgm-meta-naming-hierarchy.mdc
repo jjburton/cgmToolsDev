@@ -1,11 +1,11 @@
 ---
-description: Draft — m/ml/md meta naming; hierarchy via meta APIs; str at mc edge only; not always on
-alwaysApply: false
+description: m/ml/md meta naming; hierarchy via meta APIs; str at mc edge only; new edits first (no full tool retrofit)
+alwaysApply: true
 ---
 
-# cgm meta naming and hierarchy (draft)
+# cgm meta naming and hierarchy
 
-**Status**: Rule file only — **`alwaysApply: false`**. Enable or merge into always-on rules when the team is ready.
+**Scope:** Follow **`m*` / `ml_*` / `md_*`** and hierarchy preferences on **new code and files you touch** — not a mandate to rename or refactor entire tools in one pass.
 
 ## Naming: know meta vs string at a glance
 
@@ -30,7 +30,7 @@ In **`tools/`**, **`rig/`**, **`mrs/`**, and their **`lib/`** call chains for sc
 |--------|--------|----------------------------------------|
 | Parent child under parent | **`mChild.p_parent = mParent`** | **`mc.parent(...)`** mid-pipeline |
 | Read parent | **`mObj.getParent(asMeta=True)`** or **`asMeta=False`** when the next step is **`mc.*`** only | **`listRelatives`** as a second way to “discover” parent while also holding **`mParent`** meta |
-| Read children | **`getChildren(asMeta=True)`**, **`getAllChildren`**, **`msgList_get`**, **`getMessageAsMeta`** | Re-walking the DAG when meta already exposes the list |
+| Read children / owned lists | **`msgList_get`** → **`ml_*`**, **`getMessageAsMeta`**, **`getChildren(asMeta=True)`**, **`getAllChildren`** | Re-walking the DAG or **`listConnections`** when a **msgList** already owns membership |
 | Ordered joint chain | Ordered **`ml_*`** + **`p_parent`** / shared helpers | Bare **`list` of path strings** through create/skin/connect |
 
 **`mc.listRelatives` / `mc.parent` are still fine** when:
@@ -50,4 +50,5 @@ Many **`cgmMeta`** query methods take **`asMeta`** (default varies by method):
 - **`cgm-runtime-meta-not-strings`** — runtime pipelines carry meta, not bare DAG strings
 - **`maya-cmds-strings-only`** — **`mc.*`** arguments must be **`str`**
 - **`cgm-meta-and-existing-patterns`** — [`Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md) + **`cgm_Meta.py`**
+- **`cgm-msglist-patterns`** — **`msgList_*`**, **`connectBack`**, **`msgList_clean`** before re-append
 - **`Features/Feature_CoreLibLookups.md`** — do not reinvent **`mc.ls`** / connection queries; meta wrappers first

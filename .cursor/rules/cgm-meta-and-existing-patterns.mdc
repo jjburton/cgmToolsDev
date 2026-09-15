@@ -10,6 +10,21 @@ alwaysApply: true
 - Dev scope inventory: [`Features/Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md). Implementation source: **`cgm/core/cgm_Meta.py`** — **`cgmNode`** for **non-transform** nodes (shapes, networks, …); **`cgmObject`** is the **transform default** (joints, groups, rig DAG). Shared: `p_nameShort` / `p_nameLong`, messages, `msgList_*`, `getMessageAsMeta`, `connectChildNode`; hierarchy / **`p_parent`** on **`cgmObject`** only.
 - When unsure whether a capability exists on meta instances, **read or search that file and nearby callers** instead of assuming Maya-only or ad-hoc patterns.
 
+## Do not add new meta **instance** APIs without approval
+
+**Agents must not** add new **methods on registered `mClass` subclasses** (`cgmDynFK`, `cgmRigBlock`, `cgmObject` subclasses in `mrs/`, `rig/`, etc.) or call **new** `mObj.<method>()` from tools unless the **user explicitly asked** for that meta-class API.
+
+| Default | Instead |
+|---------|---------|
+| New tool / rig step behavior | **`lib/`** or **`rig/`** **module function** — first arg **`mObj` / `mDynFK` meta** (e.g. **`RIGDYN.chain_set_name(mDynFK, …)`**) |
+| User asked for a persistent type method on nodes | Extend the **`mClass`** class **only with approval**; **prompt user to run cgm core reload** (`CGM._reload`) so meta registers in order — **never** partial meta reload inside tool **`reload_dependencies()`** |
+
+Using **existing** meta methods (`p_parent`, `msgList_get`, `msgList_append`, `getMessageAsMeta`, …) is required runtime practice — this rule is about **new** instance methods and **new** calls to methods you just invented. For **ordered scene-linked collections**, prefer **`msgList_*`** over parallel string lists or connection walks — see **`cgm-msglist-patterns`**.
+
+After **module-function** backend edits: tool **Reload Dependencies** + **`reinitializeMetaClass`** re-wrap. After **`mClass` subclass** edits: user **core reload**, then tool reload/rebind. Header “refresh” does not load new Python from disk.
+
+Detail: [`Features/Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md) § Session reload and agent policy.
+
 ## Do not invent lookups that already exist
 
 **Before** any new `def` that uses `mc.ls`, `listConnections`, `listAttr`, `keyframe`, or name-string hacks: **Read** [`Features/Feature_CoreLibLookups.md`](../../Features/Feature_CoreLibLookups.md) and call those names.

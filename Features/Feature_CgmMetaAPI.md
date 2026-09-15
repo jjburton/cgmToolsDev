@@ -2,9 +2,18 @@
 
 Living inventory of **`cgm/core/cgm_Meta.py`** (~6k lines) and closely related **`cgmMeta.*`** subclasses elsewhere. Source of truth for behavior remains the py3 module; this doc is for navigation and agent/human onboarding.
 
-**Related rules:** **`cgm-runtime-meta-not-strings`**, **`maya-cmds-strings-only`**, draft **`cgm-meta-naming-hierarchy`** (`m*` / `ml_*` / `md_*`).
+**Related rules:** **`cgm-runtime-meta-not-strings`**, **`maya-cmds-strings-only`**, **`cgm-meta-naming-hierarchy`** (`m*` / `ml_*` / `md_*`; new edits first).
 
-**Revision:** 2026-09-14 — initial scope pass; clarify **cgmNode = non-transform**, **cgmObject = transform default**.
+**Revision:** 2026-09-15 — session reload / **`mClass`** registry order; module vs instance APIs.
+
+**Reload / registry:** [`Feature_SimChain.md`](Feature_SimChain.md) **Reload contract** (reference tool). Rules: **`cgm-reload-mod`** § Meta / `mClass` — **no partial meta reload in tools**; **`cgm-meta-and-existing-patterns`**.
+
+### Agent policy (all `mClass` work)
+
+1. **Do not** add new **methods on meta subclasses** or wire tools to **new** `mObj.<method>()` without **explicit user approval** for that instance API.
+2. **Default:** implement behavior as a **module function** (`lib/`, `rig/`, `mrs/`) with **`mObj` meta** as an argument; tools and pipelines call the module, not a method you invented on the wrapper class.
+3. If the user **did** approve **`mClass` / subclass** code changes: **prompt them to run cgm core reload** (`import cgm.core as CGM; CGM._reload()`) so Red9 + **`cgm_Meta`** + subclass modules register **in order**. **Do not** add Red9/**`cgm_Meta`** partial reload inside a tool’s **`reload_dependencies()`** — it breaks other metaclasses.
+4. **Calling existing** documented meta APIs (`p_parent`, `msgList_*`, `connectChildNode`, …) is normal — this policy targets **new** instance surface area.
 
 ---
 
@@ -245,10 +254,51 @@ At **`mc.*`**: **`asMeta=False`**, **`.mNode`**, or **`p_nameLong`** — never p
 
 ---
 
+## Session reload and `mClass` subclasses
+
+Subclasses defined outside **`cgm_Meta.py`** (e.g. **`cgmDynFK`** in **`cgm/core/rig/dynamic_utils.py`**) register at **module import** via **`cgmMeta.r9Meta.registerMClassInheritanceMapping()`** at the file tail. Red9 maps the node’s **`mClass`** string → **Python class**. That mapping and per-node wrappers go stale in Maya if you reload modules out of order.
+
+### Full core reload
+
+**`import cgm.core as CGM; CGM._reload()`** (see **`cgm/core/__init__.py`**) runs:
+
+1. **`Red9.core._reload()`** (after **`addPythonPackages()`**)
+2. **`_l_core_order`** modules in sequence — includes **`cgm_Meta`**, **`cgm_RigMeta`**, **`rig.dynamic_utils`**, …
+3. Remaining **`cgm.core.*`** packages
+
+Use when **`mClass`** subclasses, **`cgm_Meta`**, **`cgm_RigMeta`**, or **`registerMClassInheritanceMapping`** modules changed. **Only** this path safely re-initializes the full registry — partial Red9/**`cgm_Meta`** reload inside one tool’s **`reload_dependencies()`** is **forbidden** (breaks other metaclasses).
+
+### Tool `reload_dependencies()` (feature backends only)
+
+Reload **libs** → **rig helpers** → **subclass module last** (e.g. **`dynamic_utils`**), rebind module aliases (**`RIGDYN`**), **`reinitializeMetaClass` + re-wrap** RETAIN handles. **Does not** replace core reload after subclass **class** edits.
+
+**cgmSimChain:** **`dynFKTool.reload_dependencies()`** + **`_dynfk_rebind_loaded_mDynFK`**; shelf **`cgmSimChain()`** also **`cgmGEN._reloadMod(dynFKTool)`**. Log line reminds: **mClass edits need `CGM._reload`**.
+
+### Symptoms (mis-reload)
+
+| Symptom | Likely cause |
+|---------|----------------|
+| **`AttributeError: object instance has no attribute : foo`** on **`mDynFK.foo()`** | Stale wrapper after subclass edit — **core reload** + rebind; or use module API |
+| **`RIGDYN.foo(mDynFK)`** works, **`mDynFK.foo()`** does not | **`foo`** is module-level only — preferred pattern |
+| New **`log.info`** in **`dynamic_utils`**, UI handler logs only | Stale **`dynamic_utils`** — **Reload Dependencies** + rebind |
+| Other tools’ **`mClass`** types misbehave after SimChain reload | Partial meta reload was used — **avoid**; use core reload only |
+
+### Where to put new behavior
+
+| Kind | Prefer | Reload note |
+|------|--------|-------------|
+| Tool action, rig op, new pipeline step | **`lib.*` / `rig.*` / `mrs.*` module function** taking **`mObj` meta** | Tool **`reload_dependencies()`** + rebind RETAIN meta |
+| Persistent type API on scene nodes | New **`def`** on an **`mClass` subclass | **User approval**; then user runs **`CGM._reload`**; update this doc + **`Feature_*`** |
+| UI re-read scene graph | **`reinitializeMetaClass` + fresh wrap** | Does not load new Python — **Reload Dependencies** after module-fn edits |
+
+**Examples:** **`RIGDYN.chain_set_name(mDynFK, …)`** (module) vs **`mDynFK.chain_set_name`** (instance — avoid without approval). **`cgmRigBlock`**, puppet meta, and other registered types follow the same rule.
+
+---
+
 ## Gaps and maintenance
 
 - **`cgmMetaFactory`** does not fully branch on every **`mClass`** value yet (logs “specialized processing not implemented” in places).
 - **`cgmNode.p_parent`** is read-only; assigning parent requires **`cgmObject`** (or **`TRANS.parent_set`** at lib boundary).
-- When adding public meta methods, update this doc and any **`Feature_*`** contract that depends on the behavior.
+- New **subclass instance methods** require **explicit user approval**, user **core reload** after subclass edits, and updates to this doc + **`Feature_*`** contracts. Prefer **module functions** taking meta unless the user asked for a type method.
 
 **Primary code path:** `d:\Repos\cgmToolsPy3\cgm\core\cgm_Meta.py`

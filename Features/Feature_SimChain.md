@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, July 2026)
-- **Last Updated**: September 14, 2026 (Maya-verified: addEndJoint + sim/driven chain + broken-chain UI; reload split; `mc.*` string boundary)
+- **Last Updated**: September 15, 2026 (curve **extendEnd** split from **addEndJoint**; Create + Details UI)
 - **Audience**: Dev / TA — design contract for dynamic follow chains (hair + cloth attach), presets, connect/bake behavior
 - **Purpose**: Canonical reference for what **cgmSimChain** (`dynFKTool` / `cgmDynFK`) does, how hair vs cloth attach chains differ, and what scene/setup invariants must hold. Use when debugging regressions, reviewing PRs, or adding nCloth / dynFK presets.
 
@@ -95,8 +95,11 @@ flowchart TD
 - Child messages (typical):
   - **`mNucleus`** — shared solver
   - **`mCloth`** — mapped nCloth **transform** (not shape — shape `viewName` breaks message readback)
-  - **`mHairSysDag` / `mHairSysShape`** — when hair chain exists
+  - **`mHairSysDag` / `mHairSysShape`** — **default** hairSystem (Create **Default** + **Presets → Hair** menu target)
+  - **`msgList mHairSystems`** — all registered hairSystem **shapes** on this setup (shared nucleus)
   - **`chain_{i}`** — per-chain groups (msgList `chain`)
+
+**Multi hairSystem:** Each **hair** chain grp has **`mHairSysShape`** (its sim feel). **Create → Hair system** = **New** (new `{baseName}_{chainName}_hairSys`) | **Default** | pick a registered system. When **New** and a hairSystem already exists on the setup nucleus, the tool **pre-creates an empty hairSystem** and selects it for **makeCurvesDynamic** (MCD alone would add the curve to the existing system). **Details** per chain: **Hair system `<<`** rewire follicle (`chain_map_hair_system`). Legacy setups backfill chain + registry from follicle DG on **get_dat** / refresh.
 
 ### Chain modes
 
@@ -107,17 +110,20 @@ flowchart TD
 
 Per-chain group stores `cgmName`, `surfaceTrack` (cloth only), and msgLists:
 
-| msgList | Hair | Cloth attach |
+| msgList / message | Hair | Cloth attach |
 |---------|------|----------------|
 | `mTargets` | Rig joints to follow | Rig joints to follow |
 | `mLocs` | Curve-follow locs | Loc under surface track |
 | `mObjJointChain` | Sim-driven joints | — |
+| `mHairSysShape` | This chain’s hairSystem shape | — |
 | `mMeshFollicles` / `mRivets` / `mUvPins` | — | Surface trackers |
+
+**Hair preset targets:** **Presets → Hair** → setup **default** `mHairSysShape` only. Per **registered hairSystem** in Details (**Hair system 1**, **2**, …): row menu **Load Dat** / **Save Hair Dat…** applies or captures **`.cgmSimHairDat`** on **that shape** (same library + capture path as the top **Presets** menu — not Maya **`nodePreset`**). Per-chain **Hair system `<<`** picks which system a chain uses; tune feel on the matching Details row (`bangs_firm` vs `bob` on separate systems). **Presets → Reset → Base** resets **all** `mHairSystems` + nucleus.
 
 ### Connect / bake contract (normative)
 
 1. **Connect Targets** (`targets_connect`):
-   - Scrub to **`startFrame - 1`** (hairSystem / nucleus start, same as spline rebuild pre-sim frame)
+   - Scrub to **`startFrame - 1`** per chain (hair chains use **that chain’s** hairSystem `startFrame`; cloth attach uses setup nucleus / default)
    - For each target/loc pair: delete existing target constraints, **`SNAP.go(loc, target)`** (align loc to target at that frame), **`SNAP.matchTarget_set(target, loc)`**, **`parentConstraint(loc, target)`**
    - Restore previous timeline time
 2. **Bake All Targets** (`bake_nodes`):
@@ -132,7 +138,7 @@ Per-chain group stores `cgmName`, `surfaceTrack` (cloth only), and msgLists:
 
 | Step | Contract |
 |------|----------|
-| **inCurve CVs** | One CV per target joint position by default — **`extendEnd` / `extendStart` default `False`** (opt-in only for ponytail-style overshoot) |
+| **inCurve CVs** | One CV per **sim joint** by default; optional **+1** CV when **`extendEnd`** is on (curve overshoot past tip sim joint if **`addEndJoint`**, else past last target). **`extendStart`** default off (not wired in UI yet) |
 | **Curve degree** | **`curveLinear`** (degree 1) so chord length between CVs equals joint spacing (cubic EP curves bow and stretch arc length) |
 | **Sim joints** | **`skinCluster` on the full `mObjJointChain`**, not root joint only — all joints follow inCurve deformation |
 | **Follicle sim sampling (default)** | **`fixedSegmentLength=off`**, **`sampleDensity=1`** — one sim/collision segment per inCurve CV span (matches joint count) |
@@ -146,7 +152,7 @@ Per-chain group stores `cgmName`, `surfaceTrack` (cloth only), and msgLists:
 | **inCrv hierarchy** | **`startPosition`** uses curve **`worldSpace`**; inCrv must stay world-aligned on the chain grp | **Do not** snap follicle then **`parent inCrv` with `relative=True`** — shifts CV world positions and lifts the chain off the rig; use **`parentConstraint`** + inCrv on chain grp |
 | **Chain floating above rig after rebuild** | Stale DG eval or scene state after heavy hair edits | **Setup → Reload** `dynamic_utils`; delete broken chain grp; fresh **Make Dynamic Chain**; confirm inCrv on chain grp at frame 0 |
 
-Optional **`extendEnd`** / **`extendStart`** (numeric distance or bool guess) adds CVs beyond the joint chain for tail overshoot; do not use for bob / blunt-cut hair where sim length must match rig joints.
+Optional **`extendEnd`** (numeric distance or bool guess; Create default distance **1.0**) adds one CV beyond the chain end for tail overshoot — separate from **`addEndJoint`** (sim joint only). Do not use for bob / blunt-cut hair where sim length must match rig joints.
 
 ### Surface tracks (cloth attach only)
 
@@ -277,10 +283,11 @@ cgm/cgmDat/sim/
 **UI:**
 
 - **Presets → Hair / Cloth / Nucleus** — scan `cgmDat/sim`, load + apply on pick; **Save * Dat…** captures from selection or loaded cgmDynFK
+- **Details → Hair systems** — one option menu per registered shape: **Load Dat** (library names, **SearchDir** dev/workspace) + **Save Hair Dat…** (`SimHairDat.capture(nodes=<shape>, mDynFK=…)` + save dialog — parity with **Presets → Save Hair Dat…**)
 - **Presets → Reset → Base** — nucleus + hairSystem reset via module `base` profile (not a dat file)
 - **Presets → Setups** — `.cgmSimChainSetup` dev library
 - **File → Load/Save Dat** — in-memory dat I/O + **Apply Loaded Dat**
-- Menu rebuilds when **Presets** opens (`uiMenu_PresetsMenu.clear()`)
+- Menu rebuilds when **Presets** opens (`uiMenu_PresetsMenu.clear()`); Details hair row menus refresh on **Details** rebuild (library scan uses same **`cgmSimChain_libraryDirMode`** optionVar)
 
 **Phase 2 (shipped):** `.cgmSimChainSetup` under `cgmDat/sim/setups/` — serializable `cgmDynFK` setup recipe for re-wire when scene nodes still exist. See **Setup dat** below.
 
@@ -296,9 +303,9 @@ Extension: **`.cgmSimChainSetup`**. Class: `SimChainSetup` in [`simChain_dat.py`
 |-------|---------|
 | `baseName` | cgmDynFK base name (`{baseName}_dynFK`) |
 | `setupRoot` | Long name of setup transform when captured |
-| `options` | `fwd`, `up`, `startFrame`, `upSetup`, `extendStart`, `extendEnd`, `aimUpMode` |
-| `mapped` | Long names: `nucleus`, `cloth`, `hairSystem`, optional `clothOutMesh` |
-| `chains[]` | Per chain: `index`, `name`, `chainMode`, `surfaceTrack`, `targets[]`, optional `options`, `presetRefs` |
+| `options` | `fwd`, `up`, `startFrame`, `upSetup`, `extendStart`, `addEndJoint`, `extendEnd`, `advancedTwist`, `aimUpMode`, follicle / follow defaults |
+| `mapped` | Long names: `nucleus`, `cloth`, `hairSystem` (default), `hairSystems[]` (all registered), optional `clothOutMesh` |
+| `chains[]` | Per chain: `index`, `name`, `chainMode`, `surfaceTrack`, `targets[]`, optional `hairSystem` (per-chain), optional `options` (hair: …), `presetRefs` |
 | `presetRefs` | Setup-level library keys (`hair/bob`, `cloth/bangs_firm`, `nucleus/solver_balanced`) |
 
 **Capture:** `SimChainSetup.capture(mDynFK)` — from loaded setup via `cgmDynFK.get_dat()`.
@@ -343,6 +350,7 @@ Apply rules (`dynamic_utils.profile_load`):
 | Area | Control | Backend |
 |------|---------|---------|
 | Header | `<<` load selected setup | `cgmDynFK(selection)` |
+| Header | refresh icon | **`uiFunc_refresh_loaded_setup`** — rebind loaded setup meta from scene + rebuild Details (no selection change; does not load Python from disk) |
 | Header | autoload on open | **`LastDynFK`** optionVar (`cgmVar_cgmSimChain.ui_LastDynFK`) — reload last setup if node still exists |
 | Details | **Base Name** (text field) | `set_base_name` |
 | Details | Nucleus / Cloth / Hair rows | Status + `<<` map from selection (`map_nucleus` / `map_cloth_surface` / `map_hair_system`) |
@@ -350,14 +358,20 @@ Apply rules (`dynamic_utils.profile_load`):
 | Details | Bake range, Connect/Bake buttons | `targets_connect`, `bake_nodes` |
 | Create | Target list + Add/Remove/Clear | Shared joint/control list for hair or cloth attach |
 | Create | **Naming & aim** (above Hair / Cloth) | Base Name, chain Name, Fwd/Up — shared by both workflows |
-| Create | **Hair** (collapsible) | Fixed segment, **sample density** (create default, not live), follow mode, in/out degrees, add end joint; **Make Dynamic Chain** |
+| Create | **Hair** (collapsible) | **Hair system** (New / Default / registered), fixed segment, sample density, follow mode, in/out degrees, add end joint; **Make Dynamic Chain** |
 | Details | Per hair chain — **Sample density** | Live follicle attr + `follicleSampleDensity` on chain grp; **Rebuild Chain** honors stored value |
 | Create | **Cloth** (collapsible) | Cloth link status, mesh track (default **uvPin**); **Attach to Cloth** → `attach_to_cloth_dynFK` when nCloth mapped |
+| Details | **Hair systems** header — rows **Hair system 1**, **2**, … (DAG name in data column) + **Load Dat** / **Save Hair Dat…**; **Default** enum picks setup default; **Register** `<<` adds from selection | Library **`.cgmSimHairDat`** only (`uiFunc_library_apply_hair_to_target`, `uiFunc_sim_dat_capture_save_for_target`); no follicle-row preset menu |
+| Details | **Baking** | Collapsible frame (start time, bake range, bake/connect all) |
+| Details | **Chains** | Outer collapsible; per-chain frames **`[index] - name`** with alternating header `bgc` |
+| Details | Per hair chain — **Hair system** row (`<<` map / rewire) | **`chain_map_hair_system`** |
+| Details | Chain frames | Title **`[index] - chainName`** (`uiFunc_chain_section_label`) |
 | Details | Per hair chain — **Rebuild Chain** (spline) or **Rebuild Locators** (legacy) | **`chain_rebuild_hair`** → **`chain_rebuild_spline_follow`** or **`chain_rebuild_follow`** |
 | Details | Per hair chain — **Push build → Create** | Copies chain grp hair build attrs to Create **Options** (another setup) |
+| Details | Per chain — **Name** + **Apply** | **`RIGDYN.chain_set_name(mDynFK, idx, name)`** on **Apply** only (not per keystroke); `chain_{name}_grp` + `cgmName`; hair infra (curves, follicle, sim/driven joints, follow locs when name-prefixed); **not** rig **mTargets**; cloth attach renames grp only. Setup **discovery** = **`chain` msgList** (`chain_0`… + grp **`owner`**), not outliner name — **`chain_connect_to_setup`** / **`chainIndex`** on grp. **Create** auto-unique names; **Details** runs **`chain_fixup_duplicate_names`** + **`chain_sync_chain_index_attrs`** |
+| Details | Per chain — Targets / Locators / Joints collapsibles | Nested under chain frame; zebra sub-header `bgc` per [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) nested frames |
 | Details | Broken / partial chain | **`_hair_chain_integrity_missing`** → frame label **`[BROKEN — incomplete build]`**, warning log, **Delete broken chain** (confirm); skip bake/connect/rebuild rows until fixed or deleted |
-| Setup menu | **Reload Dependencies** | **`reload_dependencies()`** only + **`_dynfk_rebind_loaded_mDynFK`** + refresh Details — **does not** reload **`dynFKTool`** module |
-| Setup menu | **Relaunch Tool** | Backend reload + **`cgmGEN._reloadMod(dynFKTool)`** + **`ui()`** (same as toolbox **`cgmSimChain()`** for UI code) |
+| Setup menu | **Relaunch Tool** | **`reload_dependencies()`** (libs → **`dynamic_utils` last**) + **`_dynfk_rebind_loaded_mDynFK`** + **`cgmGEN._reloadMod(dynFKTool)`** + **`ui()`** — same as toolbox **`cgmSimChain()`** (see **Reload contract** below) |
 | **Presets** menu | **Hair** / **Cloth** / **Nucleus** | `.cgmSim*Dat` library load + apply |
 | **Presets** menu | **Save * Dat…** / **Reset → Base** | Capture to `cgmDat/sim/`; module base reset |
 | **Presets → Setups** | Load + apply `.cgmSimChainSetup` | `SimChainSetup.apply()` |
@@ -368,13 +382,13 @@ Apply rules (`dynamic_utils.profile_load`):
 
 **Presets menu**: Hair / Cloth / Nucleus = **`.cgmSim*Dat` library** under `cgmDat/sim/`. Details body has no Fabric/Solver dropdowns — status + `<<` map only. Hair / cloth / nucleus applies stay section-isolated.
 
-**Create — Hair section**: **Add end joint** → `addEndJoint` / `requireAddEndJoint` (**N+1** sim joints when on). Add-end **distance** places the **tip sim joint** along the last segment; **inCurve CVs** are built from sim joint ws positions (optional `extendStart` lead CV only), not a separate curve extension. Changing distance on an existing chain requires **Rebuild Chain** (spline) so the tip joint moves before the inCurve is reskinned. **Follow mode** (`Spline IK` \| **Legacy**), **In/Out curve degree** — see hair follow modes below. **Fixed segment length** checkbox default **off**. When fixed segment is on, **sample density** create field is inactive (follicle uses fixed segment length instead). When off, **Sample density** text field sets the default for **Make Dynamic Chain** only (no live follicle edit — use per-chain **Details** slider for that). **Sample density** slider on each hair chain in **Details** remains live + stored on `mGrp.follicleSampleDensity`. When fixed segment is on, sets **`fixedSegmentLength=1`** and **`segmentLength`** (default **1.0** scene unit). Segment length field uses **`editable=False` + light `bgc`** when inactive (see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) — do not use `enable=False` on dark template rows).
+**Create — Hair section**: **Add end joint** → `addEndJoint` / `requireAddEndJoint` (**N+1** sim joints when on; default distance **2.0**). **Extend end** → `extendEnd` (default off; distance **1.0** when on) — extra **inCurve** CV past the chain end (after tip sim joint when add end is on, else past last target); tip CVs bind to last sim joint. **Advanced twist** → `advancedTwist` (default off; **Spline IK** only) — see [Spline IK advanced twist](#spline-ik-advanced-twist-advancedtwist) below; stored on **`mGrp.advancedTwist`** + setup dat; toggle on existing chain → **Rebuild Chain**. Legacy follow ignores this flag. Changing add-end, extend-end, or advanced-twist on an existing spline chain requires **Rebuild Chain**. **Follow mode** (`Spline IK` \| **Legacy**), **In/Out curve degree** — see hair follow modes below. **Fixed segment length** checkbox default **off**. When fixed segment is on, **sample density** create field is inactive (follicle uses fixed segment length instead). When off, **Sample density** text field sets the default for **Make Dynamic Chain** only (no live follicle edit — use per-chain **Details** slider for that). **Sample density** slider on each hair chain in **Details** remains live + stored on `mGrp.follicleSampleDensity`. When fixed segment is on, sets **`fixedSegmentLength=1`** and **`segmentLength`** (default **1.0** scene unit). Segment length field uses **`editable=False` + light `bgc`** when inactive (see [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) — do not use `enable=False` on dark template rows).
 
 ## Hair follow modes
 
 | Mode | UI default | Follow rig | Out curve at rest | Rebuild |
 |------|------------|------------|-------------------|---------|
-| **Spline IK** | Yes | Duplicate **sim** hierarchy → **driven** chain (**one duplicate-root**, child joints under root) + **`ik_utils.spline`** on **`outCrv`**; **locators** parented under driven joints (one loc per **target**, not per add-end sim joint) → **Connect Targets** unchanged (`mLocs` → `mTargets`) | **`follicleShape.degree`** → **`follicle_regenerate_out_curve`** → **`_refresh_hair_rest_output`** (follicle eval, not CV match) | **Rebuild Chain** — frame **`startFrame - 1`**: teardown driven/IK/locs/outCrv; rebuild inCrv via **`follicle_set_input_curve`**; regenerate outCrv; rebuild driven + locators |
+| **Spline IK** | Yes | Duplicate **sim** hierarchy → **driven** chain (**one duplicate-root**, child joints under root) + **`ik_utils.spline`** on **`outCrv`**; optional **`_apply_hair_spline_ik_advanced_twist`** when **`advancedTwist`**; **locators** parented under driven joints (one loc per **target**, not per add-end sim joint) → **Connect Targets** unchanged (`mLocs` → `mTargets`) | **`follicleShape.degree`** → **`follicle_regenerate_out_curve`** → **`_refresh_hair_rest_output`** (follicle eval, not CV match) | **Rebuild Chain** — frame **`startFrame - 1`**: teardown driven/IK/locs/outCrv; rebuild inCrv via **`follicle_set_input_curve`**; regenerate outCrv; rebuild driven + locators (+ advanced twist if on) |
 | **Legacy** | Opt-in | POC + aim locators on **`outCrv`** (`_build_hair_chain_follow`) | **`_finalize_hair_outcurve_rest`** + **`CURVES.match`** inCurve → outCrv | **Rebuild Locators** — **`chain_rebuild_follow`** at **`startFrame`** |
 
 Shared (both modes): nucleus / hairSys / MCD, bind-before-dynamic, **`_consolidate_hair_incurve_after_mcd`**, sim **`mObjJointChain`** skins **`inCrv`**, cloth attach unchanged.
@@ -386,21 +400,54 @@ Shared (both modes): nucleus / hairSys / MCD, bind-before-dynamic, **`_consolida
 
 **Rebuild Locators workflow** (legacy hair chain, Details): scrub to **`hairSystem.startFrame`**; tune follicle attrs in AE if needed; click **Rebuild Locators** → `chain_rebuild_follow` runs **`_finalize_hair_outcurve_rest`**, tears down POC/aim locators, rebuilds follow rig from **`mBaseTargets`**, reconnects targets if connected. Preserves follicle, inCurve, sim joints — no **`makeCurvesDynamic`** redo.
 
-**Rebuild Chain workflow** (spline hair chain): **`chain_rebuild_spline_follow`** seeks **`startFrame - 1`**, disconnects targets if connected, tears down spline IK + driven + locators + **`mOutCrv`**, rebuilds inCurve/outCurve and follow rig, restores time and connect state.
+**Rebuild Chain workflow** (spline hair chain): **`chain_rebuild_spline_follow`** seeks **`startFrame - 1`**, disconnects targets if connected, tears down spline IK + driven + locators + **`mOutCrv`**, deletes inCurve **skinCluster**, removes **stray joint children** under sim (orphan driven dupes), **renames sim joints** to **`{cgmName}_sim_##_jnt`**, re-syncs add-end / extend-end, consolidates inCurve, regenerates outCurve, rebuilds driven + spline IK (+ advanced twist when on), restores time and connect state.
 
-**Reload contract** (dev):
+### Spline IK advanced twist (`advancedTwist`)
 
-- **Backend-only** — **Setup → Reload Dependencies**: logs **each** reloaded module (`libs` → `rig` → dat → **`dynamic_utils` last**), **`cgmSimChain backend done`**, rebinds loaded **`cgmDynFK`** (**`_dynfk_rebind_loaded_mDynFK`**), refreshes Details. Use after editing **`dynamic_utils`**, **`simChain_dat`**, **`ik_utils`**, presets, etc.
-- **Tool UI code** — **Setup → Relaunch Tool** or toolbox **`cgmSimChain()`**: backend reload + **`cgmGEN._reloadMod(dynFKTool)`** + open UI.
-- **Never** call reload/rebind from **Make Dynamic Chain** or other one-shot buttons — see **`cgm-reload-mod`** / **`cgm-stale-session-diagnosis`**.
+Optional spline-follow rig step in **`dynamic_utils`** (not cgm **`ik_utils.spline`** `advancedTwistSetup` ramp mode).
 
-**Maya API boundary**: **`maya.cmds`** arguments must be **`str`** ( **`meta.mNode`** or **`getParent(asMeta=False)`** ). Do not pass meta instances into **`mc.*`** — see **`maya-cmds-strings-only`**. Details follicle **Load Preset** uses **`.mNode`** for **`nodePreset`**.
+| Item | Contract |
+|------|----------|
+| **When** | **`hairFollowMode`** = spline IK and **`mGrp.advancedTwist`** / **`cgmDynFK.advancedTwist`** true |
+| **Where applied** | **`_apply_hair_spline_ik_advanced_twist`** after **`IKUTIL.spline`** + default **`IKHandle_addSplineIKTwist`** (curve **`twistStart`** / **`twistEnd`** → roll unchanged) |
+| **UI** | Create **Advanced twist** checkbox + optionVar; Details per-chain row; **Push build → Create** copies grp value |
+| **Persist** | **`mGrp.advancedTwist`**; **`SimChainSetup`** setup + per-chain **`options.advancedTwist`** |
+
+**ikHandle attrs set** (Maya spline IK advanced twist):
+
+| Maya plug | Value |
+|-----------|--------|
+| **`dTwistControlEnable`** | `1` |
+| **`dWorldUpType`** | **`4`** = Object Rotation Up (Start/End) — `SHARED._ikSpline_worldUpType_objectRotationUpStartEnd` |
+| **`dForwardAxis`** | Chain **`fwd`** (`mGrp.fwd` / setup fwd) via **`_ik_spline_handle_twist_axis_enum(..., 'dForwardAxis', …)`** — fallback **`SHARED._d_simple_axis_to_ikSpline_forward_axis_enum`** (positive x=0 … negative z=5) |
+| **`dWorldUpAxis`** | Chain **`up`** via same helper with **`'dWorldUpAxis'`** — **not** the forward enum table; **`listEnum`** on the handle picks **positive/negative** label for the axis letter and **skips `closest*`** entries (e.g. `y+` must be **Positive Y**, not Closest Y) |
+| **`dWorldUpVector`** / **`dWorldUpVectorEnd`** | **`simpleAxis(up).p_vector`** (e.g. `y+` → `(0,1,0)`) — local offsets for object-rotation-up mode |
+| **`dWorldUpMatrix`** / **`dWorldUpMatrixEnd`** | **`worldMatrix[0]`** from **sim** joints: index **0** and last **base-target** sim (`ml_baseTargets`, not add-end tip). Attribute Editor “World Up Object” fields are these **matrix** inputs — there is **no** **`dWorldUpObject`** message plug on ikHandle |
+
+**Driven vs sim naming**: Spline **driven** joints are **`{name}_driven_##_jnt`** (duplicate of sim hierarchy under follicle). **Sim** joints stay **`{name}_sim_##_jnt`**; rebuild enforces sim names and deletes non-sim joint children accidentally parented under the sim chain.
+
+**Reload contract** (dev) — **`cgmDynFK`** is a registered **`mClass`** subclass (`cgmObject` in **`dynamic_utils`**). See [`Feature_CgmMetaAPI.md`](Feature_CgmMetaAPI.md) § Session reload. **Do not** partial-reload Red9/**`cgm_Meta`** inside this tool — use **core reload** for subclass registry.
+
+| Path | What runs | When |
+|------|-----------|------|
+| **Setup → Relaunch Tool** / shelf **`cgmSimChain()`** | **`reload_dependencies()`** libs/dat/presets + **`dynamic_utils` last** + **`_dynfk_rebind_loaded_mDynFK`** + **`cgmGEN._reloadMod(dynFKTool)`** + **`ui()`** | **`dynamic_utils`**, **`dynFKTool`**, **`simChain_dat`**, presets, **`ik_utils`**, and other backend module edits |
+| **Header refresh icon** | **`reinitializeMetaClass`** + **`RIGDYN.cgmDynFK(node)`** + Details refresh | Scene/message graph changed; **does not** load new Python from disk |
+| **`import cgm.core as CGM; CGM._reload()`** | Red9 + **`_l_core_order`** + all **`mClass`** modules in sequence | **`cgmDynFK` class** / **`registerMClassInheritanceMapping`** / **`cgm_Meta`** / **`cgm_RigMeta`** subclass **class body** edits — run **before** relaunch; then relaunch + rebind loaded setup |
+
+**API placement:** **`RIGDYN.<fn>(mDynFK, …)`** (e.g. **`chain_set_name`**). No new **`cgmDynFK`** instance methods without explicit approval; then **core reload**.
+
+**Script Editor check:** Relaunch / **`reload_dependencies()`** logs each backend **`module.__name__`** and **`cgmSimChain backend done`**. It does **not** log Red9/**`cgm_Meta`** — use **CGM._reload** for those.
+
+- **Never** call **`reload_dependencies()`** / rebind from **Make Dynamic Chain** or other one-shot buttons — see **`cgm-reload-mod`** / **`cgm-stale-session-diagnosis`**.
+
+**Maya API boundary**: **`maya.cmds`** arguments must be **`str`** ( **`meta.mNode`** or **`getParent(asMeta=False)`** ). Do not pass meta instances into **`mc.*`** — see **`maya-cmds-strings-only`**. Details **Hair system** row preset menus use **cgmDat/sim** library dats only (same as **Presets** top menu — **Load Dat** / **Save Hair Dat…**); not Maya **`nodePreset`**.
 
 ### Dev debug: stale session vs bad wiring
 
 | Observation | Likely cause | Next step |
 |-------------|--------------|-----------|
-| UI create log shows correct `addEndJoint=2.0`, no `chain_create_hair` entry logs | Stale **`dynamic_utils`** or stale **`self._mDynFK`** class | **Reload Dependencies** (confirm per-module reload lines); relaunch tool if needed |
+| UI create log shows correct `addEndJoint=2.0`, no `chain_create_hair` entry logs | Stale **`dynamic_utils`** or stale **`self._mDynFK`** class | **Relaunch Tool** or shelf **`cgmSimChain()`** (per-module reload lines) |
+| **`AttributeError: object instance has no attribute : …`** on **`self._mDynFK.<method>`** | Subclass edit without **core reload**, or use **`RIGDYN.<fn>(mDynFK)`** instead | **CGM._reload** + tool rebind; prefer module API |
 | Entry logs show `addEndJoint` off while checkbox on | UI → kwargs wiring | Fix tool/options read only after reload verified |
 | **N** targets, add end on, **N** sim joints | Trim/ensure bug or addEnd off in backend | Backend logic — not reload |
 | **N** follow locs with **N+1** sim joints | Expected (spline follow) | Do not treat as missing “5th loc” |
@@ -408,9 +455,9 @@ Shared (both modes): nucleus / hairSys / MCD, bind-before-dynamic, **`_consolida
 | Meta passed to **`mc.*`** | `TypeError: Object (node: '…' \| mClass: …) is invalid` | **`.mNode`** or **`getParent(asMeta=False)`** at command; meta OK for **`p_parent`** / msgList |
 | Spline IK **needs at least three joints** | Driven count **1** while **`ml_sim`** lists N | Sim joints not parented serially under root — **`_hair_reparent_sim_chain_ordered`**; verify duplicate-root driven count |
 
-**Log contract** (hair create, after reload): (1) `uiFunc_make_dynamic_chain` raw/required/distance/resolved → (2) `chain_create_hair` entry `addEndJoint` / `requireAddEndJoint` / targets → (3) after ensure `simJoints` count. Missing step (2) with correct (1) ⇒ session, not feature patch loop.
+**Log contract** (hair create, after reload): (1) `uiFunc_make_dynamic_chain` resolved `addEndJoint` + `extendEnd` → (2) `chain_create_hair` entry both flags + targets → (3) after ensure `simJoints` + **`l_pos` CV** counts. Missing step (2) with correct (1) ⇒ session, not feature patch loop.
 
-**Count reminder**: **Add end joint** adds a **sim** joint only; **follow locators** stay **one per target**.
+**Count reminder**: **Add end joint** adds a **sim** joint only; **Extend end** adds an **inCurve** CV only; **follow locators** stay **one per target**.
 
 ---
 
@@ -471,9 +518,19 @@ Shared (both modes): nucleus / hairSys / MCD, bind-before-dynamic, **`_consolida
 
 **vs `bob`**: use `bangs_firm` for forehead fringe; use **`bob`** for sides/back volume where tips need more sway.
 
+### Pattern: Bangs + bob (two hairSystems, one setup)
+
+| Item | Value |
+|------|-------|
+| **Setup** | One `cgmDynFK`, shared nucleus |
+| **Bangs chain** | Create **Hair system → New** → **Make Dynamic Chain** → Details **Hair system *n*** row **Load Dat** → **`bangs_firm`** |
+| **Bob chain** | Create **Hair system → New** again → chain build → matching hair row **Load Dat** → **`bob`** or **`bob_hold`** |
+| **Solver** | **Presets → Nucleus** once (both systems share nucleus) |
+| **Finish** | **Connect Targets** / **Bake All Targets** per chain or global |
+
 ### Pattern: Hair / curve library (`.cgmSimHairDat`)
 
-Apply via **Presets → Hair** after **Make Dynamic Chain**. Collision attrs omitted from seeds — set in AE when needed.
+Apply via **Presets → Hair** (default system only) or **Details → Hair system *n* → Load Dat** when multiple hairSystems exist. Collision attrs omitted from seeds — set in AE when needed.
 
 | Library preset | Chain / use | Character |
 |----------------|-------------|-----------|
@@ -538,6 +595,10 @@ Tuned attrs matching **`cotton`** fabric layer (stretch 50, bend 0.4, friction 0
 | **Hair viz / collision chain off curve at frame 0** | outCurve rest stale after inCurve rebuild; or follicle **`fixedSegmentLength`** / hairSystem **`extraBendLinks`** | **Sync outCurve to inCurve** + **`restPose`** at build; default **`sampleDensity=1`**; tune hairSystem bend attrs if collision samples are finer than joints |
 | **Collision segments ≠ joint/CV spacing** | **Fixed segment length** option uses uniform world-length steps; shared **`extraBendLinks` / `subSegments`** subdivide further | Default off (CV-matched); enable in Create **Options → Fixed segment length** for Maya-style 1-unit sampling |
 | **Follicle attrs changed without Rebuild Locators** | Locators misaligned on reshaped **`outCrv`** | Scrub to **startFrame**; **Rebuild Locators** after AE changes to sampling / **`degree`** |
+| **Rebuild Chain hang after add-end distance edit** | Tip sim joint moved while **skinCluster** + spline IK still driving dynamic inCurve | **Rebuild Chain** tears down spline follow + deletes inCurve skin before repositioning sim joints (then consolidate + rebind) |
+| **Sim joint named like duplicate** (`…_fk_anim_…_fk_anim_jnt`) after rebuild | Orphan **driven** duplicate parented under sim; normalize walked wrong child | **Rebuild Chain** runs **`_hair_delete_stray_joints_under_sim`** + **`_hair_rename_sim_joint_chain`**; driven dup uses **`renameChildren=False`** then **`_driven_##_jnt`** rename |
+| **Advanced twist `dWorldUpAxis` = Closest Y** for chain **y+** | Reused **dForwardAxis** integer map on **`dWorldUpAxis`** | Use **`_ik_spline_handle_twist_axis_enum`** per attr; verify AE shows **Positive Y** / **Positive Z** etc. |
+| **Advanced twist on but no WU matrices** | Looking for **`dWorldUpObject`** in attr tools | Connect **`dWorldUpMatrix`** / **`dWorldUpMatrixEnd`** from sim **`worldMatrix[0]`**; log lines in **`_apply_hair_spline_ik_advanced_twist`** |
 | High **`inputMeshAttract`** on head-follow cloth | Firm but stuck in rest shape; outMesh does not move with head | Firmness via stretch/bend/damp/drag; keep **`inputMeshAttract` ≤ ~0.15** on animated input panels |
 | **Save Cloth Dat** with `_dynFK` selected only (old capture) | `get_nCloth` warns on setup root; capture aborts despite mapped **`mCloth`** | **Setup → Reload**; capture uses loaded setup **`mCloth`** (not selection-only); map cloth if Details shows unset |
 
@@ -582,7 +643,7 @@ Run in Maya after cgmSimChain changes:
 7. **Hair + cloth coexist** — one nucleus, two chain modes
 8. **Query Settings** — select nCloth → paste block in Script Editor; cotton diff sane
 9. **Base name edit** — rename `{baseName}_dynFK` in Details
-10. **Reload** — edit `dynamic_utils` → **Setup → Reload Dependencies** (backend) → **Make Dynamic Chain** picks up new logs/behavior; edit **`dynFKTool`** → **Relaunch Tool** or shelf
+10. **Reload** — edit `dynamic_utils` / **`dynFKTool`** / presets → **Relaunch Tool** or shelf **`cgmSimChain()`** → **Make Dynamic Chain** picks up new logs/behavior; **`cgmDynFK` / `cgm_Meta` class edits** → **`CGM._reload()`** first
 11. **Hair dat — bob** — **Presets → Hair → bob** on Edna-style chin hair; try **`bob_hold`** if rest shape drifts
 12. **Cloth + nucleus dat** — **Presets → Cloth** `cotton` then **Presets → Nucleus** `solver_balanced` (layered; no cross-section bleed)
 13. **Dat capture round-trip** — tune sim → **Presets → Save * Dat…** → **File → Load Dat** → **Apply Loaded Dat**
@@ -595,6 +656,12 @@ Run in Maya after cgmSimChain changes:
 20. **Rebuild Locators** — at startFrame after AE follicle tweak: locators realign on **`outCrv`**; **Connect Targets** state preserved (disconnect → rebuild → reconnect)
 21. **Spline IK + add end** — 4 targets + add end → **5** sim joints, **5** driven, **4** locs; **Make Dynamic Chain** completes past follicle constraint + spline IK (Edna bang verify)
 22. **Broken chain** — interrupt create → load setup → Details shows **BROKEN** + delete confirm; intact chain unchanged
+23. **Curve extend end** — 4 targets, extend on (1.0), add end off → **4** sim, **5** CVs, **4** locs
+24. **Add end + extend** — 4 targets, both on → **5** sim, **6** CVs, **4** locs; **Rebuild Chain** preserves CV count
+25. **Multi hairSystem** — bangs **New** + **Load Dat** `bangs_firm` on that system’s Details row; bob **New** + **Load Dat** `bob` on its row — AE attrs independent; **Presets → Hair** still applies to **default** `mHairSysShape` only
+26. **Hair row dat save** — tune one hairSystem in AE → its row **Save Hair Dat…** → file under `cgmDat/sim/hair/` → **Load Dat** on same row round-trips attrs
+27. **Chain hair rewire** — Details **Hair system `<<`** map other registered system; sim runs; **Refresh** backfills messages
+28. **Connect per-system startFrame** — two hairSystems with different `startFrame` if needed; connect logs per chain frame
 
 Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets + setup schema round-trip).
 
@@ -612,6 +679,7 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 - [`cgm/core/rig/dynamic_utils.py`](../../cgmToolsPy3/cgm/core/rig/dynamic_utils.py)
 - [`cgm/core/lib/nCloth_utils.py`](../../cgmToolsPy3/cgm/core/lib/nCloth_utils.py)
 - [`cgm/core/lib/simChain_dat.py`](../../cgmToolsPy3/cgm/core/lib/simChain_dat.py)
+- [`cgm/core/lib/shared_data.py`](../../cgmToolsPy3/cgm/core/lib/shared_data.py) — `_d_simple_axis_to_ikSpline_forward_axis_enum`, `_d_simple_axis_to_ikSpline_worldUp_axis_enum`, `_ikSpline_worldUpType_objectRotationUpStartEnd`
 - [`cgm/core/presets/cgmNCloth_presets.py`](../../cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)
 
 ---
@@ -620,7 +688,10 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 
 | Date | Summary |
 |------|---------|
-| 2026-09-14 | **Maya-verified hair create** — **`addEndJoint`** / **`requireAddEndJoint`** UI→backend logging; sim chain **`p_parent`** serial create + **`_hair_reparent_sim_chain_ordered`**; spline **driven** = duplicate **sim root** + hierarchy walk; **`_hair_chain_integrity_missing`** broken-chain Details + delete; **Reload Dependencies** (backend only) vs **Relaunch Tool**; **`mc.*`** string boundary + follicle **`nodePreset`**; **`getMessageAsMeta('mFollicle')`** on load |
+| 2026-09-15 | **Multi hairSystem per chain** — `mHairSystems` registry + per-chain `mHairSysShape`; Create hair system menu; setup dat `hairSystems[]` / per-chain `hairSystem`; `chain_map_hair_system` rewire; Details hair rows **Load Dat** / **Save Hair Dat…** (library dats only; **`nodePreset`** removed from **`dynFKTool`**) |
+| 2026-09-15 | **Spline IK advanced twist** — **`advancedTwist`** (Create + Details + setup dat); **`_apply_hair_spline_ik_advanced_twist`** (`dWorldUpType` 4, separate **`dForwardAxis`** / **`dWorldUpAxis`** via **`listEnum`**, WU matrices from base sim joints); rebuild sim rename + stray driven cleanup; rebuild hang fix (teardown/skin before sim move) |
+| 2026-09-15 | **Curve `extendEnd`** split from **`addEndJoint`** — optional inCurve tip CV (default off, distance **1.0**); Create + Details UI; consolidate/rebuild; setup dat capture; legacy API `extendEnd` kw → add-end joint when `addEndJoint` omitted |
+| 2026-09-14 | **Maya-verified hair create** — **`addEndJoint`** / **`requireAddEndJoint`** UI→backend logging; sim chain **`p_parent`** serial create + **`_hair_reparent_sim_chain_ordered`**; spline **driven** = duplicate **sim root** + hierarchy walk; **`_hair_chain_integrity_missing`** broken-chain Details + delete; **Reload Dependencies** (backend only) vs **Relaunch Tool**; **`mc.*`** string boundary at API edge; **`getMessageAsMeta('mFollicle')`** on load |
 | 2026-09-14 | **Hair follow modes** — default **Spline IK** (driven chain + spline IK on **`outCrv`**, locators on driven); **Legacy** POC/aim path retained; Create **Options** follow mode + in/out curve degree; **`chain_rebuild_hair`** / **Rebuild Chain** vs **Rebuild Locators**; **`follicle_set_input_curve`** / **`follicle_regenerate_out_curve`**; setup dat captures **`hairFollowMode`** + degrees |
 | 2026-09-11 | **`chain_rebuild_follow`** + **Rebuild Locators** (rest sync order + POC/aim rebuild; no tool UI for **`follicle.degree`**) |
 | 2026-09-10 | **Presets menu** — Hair / Cloth / Nucleus load **`.cgmSim*Dat` library** only; **Reset → Base** for module baseline; Python preset menus removed from UI |
