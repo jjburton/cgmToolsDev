@@ -4,7 +4,22 @@ Living inventory of **`cgm/core/cgm_Meta.py`** (~6k lines) and closely related *
 
 **Related rules:** **`cgm-runtime-meta-not-strings`**, **`maya-cmds-strings-only`**, draft **`cgm-meta-naming-hierarchy`** (`m*` / `ml_*` / `md_*`).
 
-**Revision:** 2026-09-14 — initial scope pass from `cgm_Meta.py` + registry grep.
+**Revision:** 2026-09-14 — initial scope pass; clarify **cgmNode = non-transform**, **cgmObject = transform default**.
+
+---
+
+## Which class wraps a Maya node?
+
+| Maya node | Default meta class | Notes |
+|-----------|-------------------|--------|
+| **`transform`**, **`joint`** (DAG object with TRS) | **`cgmObject`** | Factory and **`validateObjArg`** (no **`mType`**) pick **`cgmObject`** for transforms. Rig/runtime parenting and hierarchy APIs live here. |
+| **Shapes** (`mesh`, `nurbsCurve`, …), **`network`**, deformers, etc. | **`cgmNode`** | Non-transform dependency/DAG shapes and utility nodes. Shared attr/message/msgList API; no full **`p_parent`** setter. |
+| **`objectSet`** | **`cgmObjectSet`** | Factory special case. |
+| Node with **`mClass`** attr | Registered subclass | e.g. **`cgmDynFK`**, **`cgmRigBlock`** — via Red9 registry / **`createMetaNode`**. |
+
+**Convention:** In rig and tools, **`m*`** on something you move, parent, or constrain is almost always **`cgmObject`** (or a subclass). **`cgmNode`** is for the shape side, buffer networks, sets, and other non-transform nodes you still need messages/attrs on.
+
+**Factory logic** (`cgmMetaFactory.__new__`): objectSet → **`cgmObjectSet`**; **`mc.ls(node, type='transform')`** → **`cgmObject`**; else → **`cgmNode`**.
 
 ---
 
@@ -40,8 +55,8 @@ flowchart TB
 | Layer | Role |
 |--------|------|
 | **Red9 `MetaClass`** | `mNode`, node cache, message graph UI, **`disconnectChild`**, **`delete`**, attr/message helpers not reimplemented in cgm |
-| **`cgmNode`** | cgm attrs, messages, msgList/datList, naming, duplicate/loc, component mode |
-| **`cgmObject`** | Transforms only: hierarchy via **`transform_utils`**, TRS/pivot/BB, constraints, grouping |
+| **`cgmNode`** | **Non-transform** nodes (shapes, networks, …): attrs, messages, msgList/datList, naming, duplicate/loc, component mode |
+| **`cgmObject`** | **Transform default** (incl. joints): hierarchy via **`transform_utils`**, TRS/pivot/BB, constraints, grouping |
 | **`cgmControl`** | Rig control: module/switch hooks, aim/mirror/controller tags |
 | **Specialized nodes** | Sets, buffer lists, optionVars, per-attr wrapper **`cgmAttr`**, naming **`NameFactory`** |
 
@@ -73,9 +88,9 @@ End of file: **`r9Meta.registerMClassInheritanceMapping()`** — cgm classes joi
 
 ---
 
-## `cgmNode` — all node types
+## `cgmNode` — non-transform nodes
 
-Subclasses **`Red9_Meta.MetaClass`**. Network nodes, shapes used as nodes, etc. **Not** full transform hierarchy API (see **`cgmObject`**).
+Subclasses **`Red9_Meta.MetaClass`**. Use for **shapes**, **network** nodes, and other Maya types that are **not** classified as **`transform`** in the factory. Inherits the shared cgm attr/message API. **Not** the default wrapper for joints/nulls/groups — those are **`cgmObject`**. Limited read-only **`getParent`** only; no **`p_parent`** assignment (see **`cgmObject`**).
 
 ### Attributes and connections
 
@@ -142,9 +157,9 @@ Implementation delegates to **`attribute_utils`** on **`self.mNode`**.
 
 ---
 
-## `cgmObject` — transforms and joints
+## `cgmObject` — transform default
 
-**`__init__`:** default transform; **`nodeType='joint'`** creates a joint. Requires **`VALID.is_transform`**.
+**Default meta class for transforms** (groups, nulls, locators, **joints**, etc.). **`__init__`:** default transform; **`nodeType='joint'`** creates a joint. Requires **`VALID.is_transform`**.
 
 ### Hierarchy (prefer in rig/tool logic)
 

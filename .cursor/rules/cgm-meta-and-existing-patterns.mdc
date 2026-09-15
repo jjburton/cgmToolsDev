@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Canonical meta reference
 
-- Dev scope inventory: [`Features/Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md). Implementation source: **`cgm/core/cgm_Meta.py`** — **cgmNode / cgmObject** properties (`p_nameShort`, `p_nameLong`, etc.), message links, `msgList_*`, `getMessageAsMeta`, `connectChildNode`, hierarchy (`p_parent` on **`cgmObject`**), and other shared rig/meta conventions.
+- Dev scope inventory: [`Features/Feature_CgmMetaAPI.md`](../../Features/Feature_CgmMetaAPI.md). Implementation source: **`cgm/core/cgm_Meta.py`** — **`cgmNode`** for **non-transform** nodes (shapes, networks, …); **`cgmObject`** is the **transform default** (joints, groups, rig DAG). Shared: `p_nameShort` / `p_nameLong`, messages, `msgList_*`, `getMessageAsMeta`, `connectChildNode`; hierarchy / **`p_parent`** on **`cgmObject`** only.
 - When unsure whether a capability exists on meta instances, **read or search that file and nearby callers** instead of assuming Maya-only or ad-hoc patterns.
 
 ## Do not invent lookups that already exist

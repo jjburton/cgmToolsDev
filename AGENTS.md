@@ -40,7 +40,7 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 16. **MRS mesh creation design contract**: [`Features/Feature_MRSMeshCreation.md`](Features/Feature_MRSMeshCreation.md) — module proxy vs puppet mesh, face `meshBuild`/`proxyBuild`, `block_proxy_mesh_flow`, batch post (`proxyMesh_verify` → `puppetMesh_create`), skin-unify vs proxy dup, `puppet_geoGroup_get` / protected delete, normals and `color_mesh` helpers. Timeline on [`Branches/Branch_Face26.md`](Branches/Branch_Face26.md). Update when changing face block mesh attrs, `build_proxyMesh` / `create_simpleMesh`, or puppet-level mesh unify.
 
-17. **cgmMeta API scope**: [`Features/Feature_CgmMetaAPI.md`](Features/Feature_CgmMetaAPI.md) — class hierarchy (`cgmNode` → `cgmObject` → `cgmControl`), factory/validation, messages/msgList/datList, hierarchy vs Red9, registered `mClass` subclasses. Update when adding meta base APIs or new registered types.
+17. **cgmMeta API scope**: [`Features/Feature_CgmMetaAPI.md`](Features/Feature_CgmMetaAPI.md) — **`cgmNode`** = non-transform (shapes, networks); **`cgmObject`** = transform default; **`cgmControl`** subclass; factory/validation, messages/msgList/datList, registered `mClass` subclasses. Update when adding meta base APIs or new registered types.
 
 ## Python 2 backport (exceptional)
 
