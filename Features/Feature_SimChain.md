@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, July 2026)
-- **Last Updated**: September 15, 2026 (curve **extendEnd** split from **addEndJoint**; Create + Details UI)
+- **Last Updated**: September 21, 2026 (Init Sim no auto-chain; hair/HairShape/cloth/nucleus apply isolation)
 - **Audience**: Dev / TA — design contract for dynamic follow chains (hair + cloth attach), presets, connect/bake behavior
 - **Purpose**: Canonical reference for what **cgmSimChain** (`dynFKTool` / `cgmDynFK`) does, how hair vs cloth attach chains differ, and what scene/setup invariants must hold. Use when debugging regressions, reviewing PRs, or adding nCloth / dynFK presets.
 
@@ -26,7 +26,7 @@
 - **Cloth attach chains** — mapped nCloth `outMesh`, surface trackers (follicle / rivet / uvPin), loc→target connect/bake
 - Shared **nucleus** on one setup; dynFK nucleus + hair presets (`cgmDynFK_presets`)
 - **nCloth** fabric/solver/wind presets (`cgmNCloth_presets` + `nCloth_utils`)
-- **cgmSim*Dat** preset files (`simChain_dat` — hair / cloth / nucleus JSON under `cgmDat/sim/`)
+- **cgmSim*Dat** preset files (`simChain_dat` — hair / hairShape / cloth / nucleus JSON under `cgmDat/sim/`)
 - **Connect Targets** / **Bake All Targets** / **Bake All Joints**
 - **Tools → Query Settings** (preset capture from selection)
 - Rigging Utils **Attach by** surface-track items (shared `attach_toShape`)
@@ -704,6 +704,7 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 
 | Date | Summary |
 |------|---------|
+| 2026-09-21 | **Init Sim / New** — `setup_sim_dynFK(objs=[])`; selection does not auto `chain_create`. **Hair vs HairShape apply** — hair `clean` seeds dynamic `base.hs` only; HairShape drops dynamic keys. **Cloth/nucleus isolation** — fabric→`nc` only; nucleus solver/wind overlay only; cross-kind table in apply contract |
 | 2026-09-15 | **Multi hairSystem per chain** — `mHairSystems` registry + per-chain `mHairSysShape`; Create hair system menu; setup dat `hairSystems[]` / per-chain `hairSystem`; `chain_map_hair_system` rewire; Details hair rows **Load Dat** / **Save Hair Dat…** (library dats only; **`nodePreset`** removed from **`dynFKTool`**) |
 | 2026-09-15 | **Spline IK advanced twist** — **`advancedTwist`** (Create + Details + setup dat); **`_apply_hair_spline_ik_advanced_twist`** (`dWorldUpType` 4, separate **`dForwardAxis`** / **`dWorldUpAxis`** via **`listEnum`**, WU matrices from base sim joints); rebuild sim rename + stray driven cleanup; rebuild hang fix (teardown/skin before sim move) |
 | 2026-09-15 | **Curve `extendEnd`** split from **`addEndJoint`** — optional inCurve tip CV (default off, distance **1.0**); Create + Details UI; consolidate/rebuild; setup dat capture; legacy API `extendEnd` kw → add-end joint when `addEndJoint` omitted |
