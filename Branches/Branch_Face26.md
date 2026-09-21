@@ -28,7 +28,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[distance_utils.py](../../cgmToolsPy3/cgm/core/lib/distance_utils.py)** — `get_normalizedWeightsByDistanceToObj` (muzzle constraint weights)
 - **[curve_Utils.py](../../cgmToolsPy3/cgm/core/lib/curve_Utils.py)** — `polyline_length_fractions` (joint-length POC sampling on dynFK outCurve)
 - **[dynamic_utils.py](../../cgmToolsPy3/cgm/core/rig/dynamic_utils.py)** — `cgmDynFK` / `chain_create_hair`, cloth attach, profile load
-- **[simChain_dat.py](../../cgmToolsPy3/cgm/core/lib/simChain_dat.py)** — cgmSimHairDat / Cloth / Nucleus dat IO + dev library
+- **[simChain_dat.py](../../cgmToolsPy3/cgm/core/lib/simChain_dat.py)** — cgmSimHairDat / HairShape / Cloth / Nucleus dat IO + dev library
 - **[cgmDynFK_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmDynFK_presets.py)** — `base` seed + script API (artist hair presets → `cgmDat/sim/hair/`)
 - **[cgmNCloth_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** — `base` nc/n seed + script API (artist cloth/nucleus presets → `cgmDat/sim/`)
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** — `fortniteMetaHuman` pose-buffer schema
@@ -526,6 +526,7 @@ None intended — new enum values and rig paths are opt-in via block attrs. Exis
 - Design blockDat key-based remap for new prerig handles (cheek, etc.)
 - Maya-verify cgmSimChain **`bob`** vs **`bob_hold`** on Edna production hair sim
 - Maya-verify cgmSimChain **`bangs_firm`** hair + nCloth on production fringe / hair-cage rigs
+- Maya-verify Sept 21: Init Sim with selection; differential hair leaves shape; cloth↔nucleus↔hair↔HairShape layering
 - Phase 2: **`cgmSimChainSetup`** — shipped; production rig verify pending
 - Consider Feature doc for facial MRS blocks when blockDat / mesh contract is settled
 
@@ -550,13 +551,15 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **Follicle sampling default**: **`fixedSegmentLength=off`**, **`sampleDensity=1`** (CV-matched); optional Create **Options → Fixed segment length**
 - **Add-to-existing hairSys**: POC / up-aim on **outCurve**; full-chain **`skinCluster`** before MCD
 - **Last-joint aim default**: forward tangent offset at tip (**`+fwd`**) when **`extendEnd=False`**
-- **cgmSim*Dat library**: `.cgmSimHairDat` / `.cgmSimClothDat` / `.cgmSimNucleusDat` under **`cgm/cgmDat/sim/`**; **Presets → Hair / Cloth / Nucleus** + **File** Save/Load (Maya-verified)
+- **cgmSim*Dat library**: `.cgmSimHairDat` / `.cgmSimHairShapeDat` / `.cgmSimClothDat` / `.cgmSimNucleusDat` under **`cgm/cgmDat/sim/`**; **Presets → Hair / Cloth / Nucleus** + **File** Save/Load (Maya-verified)
 - **cgmSimChainSetup Phase 2**: `.cgmSimChainSetup` under **`cgm/cgmDat/sim/setups/`**; **File → Capture Setup Dat**, **Presets → Setups**, **Tools → Apply Setup Dat**
+- **Init Sim / New**: setup + nucleus only — Maya selection does **not** auto-build a hair chain (**Make Dynamic Chain** does)
+- **Preset apply isolation**: hair = dynamic feel; HairShape = shape/follicle; cloth = `nc` fabric; nucleus = `n` solver/wind overlay; `differential` = capture only
 - **dynFK hair feel**: **`bob`** (lively volume), **`bob_hold`** (rest-shape), **`bangs_firm`** (fringe) — **Presets → Hair**
 - **Nucleus solver tiers**: **`solver_balanced`** → **`solver_quality`** → **`solver_high`** — **Presets → Nucleus** (never bundled into hair/cloth dats)
 - **nCloth short panels**: fabric **`bangs_firm`** — high stretch/compression, low bend, moderate damp; **`inputMeshAttract` ≤ ~0.08** on head-follow cages (not **`inputAttract`** preset)
 
 ---
 
-*Last Updated: September 11, 2026 (cgmSimChain hair bind/rebuild + follicle sampling options)*  
+*Last Updated: September 21, 2026 (Init Sim + preset apply isolation)*  
 *Branch Status: Active*
