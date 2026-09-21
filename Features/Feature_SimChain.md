@@ -261,7 +261,8 @@ Shipped and user-authored preset files live under **`cgm/cgmDat/sim/`** as JSON 
 
 | Dat class | Extension | Section | Target | UI |
 |-----------|-----------|---------|--------|-----|
-| `SimHairDat` | `.cgmSimHairDat` | `hs` | `hairSystem` | **Presets → Hair** |
+| `SimHairDat` | `.cgmSimHairDat` | `hs` (dynamic feel) | `hairSystem` | **Presets → Hair** |
+| `SimHairShapeDat` | `.cgmSimHairShapeDat` | follicle + `hs` shape | chain / hairSystem | **Presets → HairShape** / Details |
 | `SimClothDat` | `.cgmSimClothDat` | `nc` | `nClothShape` | **Presets → Cloth** |
 | `SimNucleusDat` | `.cgmSimNucleusDat` | `n` | `nucleus` | **Presets → Nucleus** |
 
@@ -279,6 +280,20 @@ cgm/cgmDat/sim/
 **JSON schema (v1):** `schemaVersion`, `name`, `datKind`, `section`, `profileKind`, `differential`, `profile` (attr dict), `meta` (user/date/scene/sourceNode).
 
 **Apply contract:** dat apply calls `NCLOTH.profile_apply_section()` / `RIGDYN.profile_apply_section()` — same clean/seed, skip-list, and gravity remap rules as module `profile_load`. Layered combos (e.g. cotton + solver_high) remain **two dat applies** (cloth dat, then nucleus dat).
+
+**Hair vs HairShape:** `.cgmSimHairDat` is **dynamic feel only**. With `clean=True` (default), it seeds **dynamic** `base.hs` keys then overlays the profile — it does **not** reset or write shape groups (`base` / `clumpAndHairShape`: `hairWidth`, `clumpWidth`, `subSegments`, …). Shape lives in **`.cgmSimHairShapeDat`**. `differential: true` only controls what was **captured** vs base; it must not change this apply boundary.
+
+**Cross-kind isolation (apply must not quash):**
+
+| Load | Target node | Clean seed | Must not write |
+|------|-------------|------------|----------------|
+| Hair | hairSystem | dynamic `base.hs` only | shape groups, follicle, nucleus, nCloth |
+| HairShape | hairSystem (+ follicle if chain) | shape `base.hs` groups only | dynamic feel, nucleus, nCloth |
+| Cloth | nClothShape | `base.nc` (fabric) | nucleus (`n`), hairSystem |
+| Nucleus | nucleus | **none** (solver/wind overlay) | nCloth (`nc`), hairSystem; never dump full `base.n` |
+| Reset → Base | nucleus + all hairSystems | full module `base` | cloth (untouched) |
+
+Solver vs wind on the same nucleus are both overlay-only, so loading `solver_high` keeps prior `wind_*` keys and vice versa unless the dat profile itself contains those attrs.
 
 **UI:**
 
@@ -338,7 +353,8 @@ Module: `cgmDynFK_presets.py` — sections `n` (nucleus), `hs` (hairSystem). Sam
 
 Apply rules (`dynamic_utils.profile_load`):
 
-- **Hair feel** on hairSystem: seeds `base.hs` when `clean`, writes `hs` only — never nucleus / cloth
+- **Hair feel** on hairSystem: seeds **dynamic** `base.hs` when `clean` (excludes shape groups) — never nucleus / cloth / HairShape attrs
+- **HairShape** on hairSystem: seeds **shape** `base.hs` groups only when `clean`
 - **Wind / solver** on nucleus: layer keys only (no full `base.n` dump) unless kind is `base`
 - **Presets → Nucleus** + dynFK wind/solver: always apply `n` to setup nucleus; apply `hs` **only if hair exists** (cloth-only setups skip hs)
 - **Do not** merge `cgmNCloth_presets` into `cgmDynFK_presets` (`nc` vs `hs` are separate concerns); shared nucleus sim from nCloth solvers/wind stays in **Presets → Nucleus** (ncloth source)
@@ -376,7 +392,7 @@ Apply rules (`dynamic_utils.profile_load`):
 | **Presets** menu | **Save * Dat…** / **Reset → Base** | Capture to `cgmDat/sim/`; module base reset |
 | **Presets → Setups** | Load + apply `.cgmSimChainSetup` | `SimChainSetup.apply()` |
 | **File** menu | Load / Save / Apply Dat / Capture Setup | Preset + setup dat I/O |
-| Tools menu | **Init Sim Setup** | `setup_sim_dynFK` / `cgmDynFK.setup_sim` |
+| Tools menu | **Init Sim Setup** / header **New** | `setup_sim_dynFK` / `cgmDynFK.setup_sim` — nucleus + `{baseName}_dynFK` only; **never** builds a hair chain (Maya selection ignored; use **Make Dynamic Chain** for chains) |
 | Tools menu | **Apply Setup Dat** | Re-wire from loaded setup dat |
 | Tools menu | **Query Settings** | `query_settings_selection` |
 
@@ -634,7 +650,7 @@ Tuned attrs matching **`cotton`** fabric layer (stretch 50, bend 0.4, friction 0
 
 Run in Maya after cgmSimChain changes:
 
-1. **Init Sim only** — nucleus exists, timeline drives `currentTime`, no hair system
+1. **Init Sim only** — with joints selected, header **New** / **Init Sim Setup** → nucleus + setup only (no hair chain / hairSystem); timeline drives `currentTime`
 2. **Map cloth** — `mCloth` set; nCloth rewired to setup nucleus; Z-up gravity sane after preset
 3. **Fabric + solver** — **Presets → Cloth** `cotton` then **Presets → Nucleus** `solver_high`; no collision / `isDynamic` / unrelated nucleus env; body UI has no preset dropdowns
 4. **Attach follicle / rivet / uvPin** — locs follow outMesh; three modes on test mesh

@@ -20,8 +20,21 @@
               "icon": "lucide-file",
               "title": "Branch_UnrealWorkflow"
             }
+          },
+          {
+            "id": "d5ff25a034ef8dba",
+            "type": "leaf",
+            "state": {
+              "type": "release-notes",
+              "state": {
+                "currentVersion": "1.13.7"
+              },
+              "icon": "lucide-book-up",
+              "title": "Release Notes 1.13.7"
+            }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "vertical"
@@ -41,7 +54,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -183,7 +198,7 @@
       "bases:Create new base": false
     }
   },
-  "active": "9885c27e8a5a544d",
+  "active": "d5ff25a034ef8dba",
   "lastOpenFiles": [
     "Branches/Branch_Jan2026.md",
     "Branches/Branch_UnrealWorkflow.md",
