@@ -5,7 +5,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, July 2026)
-- **Last Updated**: September 18, 2026 (load progress bar; Create Hair layout; chain **Targets** row; no per-chain HairShape UI)
+- **Last Updated**: September 21, 2026 (Init Sim no auto-chain; hair/HairShape/cloth/nucleus apply isolation; load progress bar; Create Hair layout; chain Targets row; no per-chain HairShape UI)
 - **Audience**: Dev / TA — design contract for dynamic follow chains (hair + cloth attach), presets, connect/bake behavior
 - **Purpose**: Canonical reference for what **cgmDynSimTool** (`dynFKTool` / `cgmDynFK`) does, how hair vs cloth attach chains differ, and what scene/setup invariants must hold. Use when debugging regressions, reviewing PRs, or adding nCloth / dynFK presets.
 
@@ -28,8 +28,10 @@
 - **Cloth attach chains** — mapped nCloth `outMesh`, surface trackers (follicle / rivet / uvPin), loc→target connect/bake
 - Shared **nucleus** on one setup; dynFK nucleus + hair presets (`cgmDynFK_presets`)
 - **nCloth** fabric/solver/wind presets (`cgmNCloth_presets` + `nCloth_utils`)
-- **cgmSim*Dat** preset files (`simChain_dat` — hair / cloth / nucleus JSON under `cgmDat/sim/`)
-- **Bake Input** (input joints from targets) / **Connect Targets** / **Bake All Targets** (output)
+- **cgmSim*Dat** preset files (`simChain_dat` — hair / hairShape / cloth / nucleus JSON under `cgmDat/sim/`)
+- **Bake Input** (input joints from targets) / **Connect Targets** / **Bake All Targets** / **Bake All Joints** (output)
+- **Tools → Query Settings** (preset capture from selection)
+- Rigging Utils **Attach by** surface-track items (shared `attach_toShape`)
 - **Tools → Query Settings** (preset capture from selection)
 - Rigging Utils **Attach by** surface-track items (shared `attach_toShape`)
 
@@ -288,8 +290,10 @@ Shipped and user-authored preset files live under **`cgm/cgmDat/sim/`** as JSON 
 
 | Dat class | Extension | Section | Target | UI |
 |-----------|-----------|---------|--------|-----|
-| `SimHairDat` | `.cgmSimHairDat` | `hs` | `hairSystem` (dynamic attrs) | **Presets → Hair**; **Hair system N** → `Hair:` |
-| `SimHairShapeDat` | `.cgmSimHairShapeDat` | `hs` | `hairSystem` shape / chain + follicle | **Presets → HairShape**; **Hair system N** → `Shape:` |
+| `SimHairDat` | `.cgmSimHairDat` | `hs` (dynamic feel) | `hairSystem` | **Presets → Hair** |
+| `SimHairShapeDat` | `.cgmSimHairShapeDat` | `hs` shape + follicle | chain / hairSystem | **Presets → HairShape** / Details |
+| `SimClothDat` | `.cgmSimClothDat` | `nc` | `nClothShape` | **Presets → Cloth** |
+| `SimNucleusDat` | `.cgmSimNucleusDat` | `n` | `nucleus` | **Presets → Nucleus** |
 | `SimClothDat` | `.cgmSimClothDat` | `nc` | `nClothShape` | **Presets → Cloth** |
 | `SimNucleusDat` | `.cgmSimNucleusDat` | `n` | `nucleus` | **Presets → Nucleus** |
 
@@ -309,7 +313,21 @@ cgm/cgmDat/sim/
 
 **Apply contract:** dat apply calls `NCLOTH.profile_apply_section()` / `RIGDYN.profile_apply_section()` — same clean/seed, skip-list, and gravity remap rules as module `profile_load`. Layered combos (e.g. cotton + solver_high) remain **two dat applies** (cloth dat, then nucleus dat).
 
-**Legacy hair dats:** `.cgmSimHairDat` files that still use `section` / `profileKind: hairShape` or embed HairShape attrs are **not applied** (or shape keys are stripped with a **warning**). Re-save dynamic feel with **Save Hair Dat…** and shape with **Save HairShape Dat…**.
+**Apply contract:** dat apply calls `NCLOTH.profile_apply_section()` / `RIGDYN.profile_apply_section()` — same clean/seed, skip-list, and gravity remap rules as module `profile_load`. Layered combos remain two dat applies.
+
+**Hair vs HairShape:** `.cgmSimHairDat` is **dynamic feel only**. With `clean=True` (default), it seeds **dynamic** `base.hs` keys then overlays the profile — it does **not** reset or write shape groups (`base` / `clumpAndHairShape`: `hairWidth`, `clumpWidth`, `subSegments`, …). Shape lives in **`.cgmSimHairShapeDat`**. **Legacy hair dats:** `.cgmSimHairDat` files that still use `section` / `profileKind: hairShape` or embed HairShape attrs are **not applied** (or shape keys are stripped with a **warning**). Re-save dynamic feel with **Save Hair Dat…** and shape with **Save HairShape Dat…**.
+
+**Cross-kind isolation (apply must not quash):**
+
+| Load | Target node | Clean seed | Must not write |
+|------|-------------|------------|----------------|
+| Hair | hairSystem | dynamic `base.hs` only | shape groups, follicle, nucleus, nCloth |
+| HairShape | hairSystem (+ follicle if chain) | shape `base.hs` groups only | dynamic feel, nucleus, nCloth |
+| Cloth | nClothShape | `base.nc` (fabric) | nucleus (`n`), hairSystem |
+| Nucleus | nucleus | **none** (solver/wind overlay) | nCloth (`nc`), hairSystem; never dump full `base.n` |
+| Reset → Base | nucleus + all hairSystems | full module `base` | cloth (untouched) |
+
+Solver vs wind on the same nucleus are both overlay-only, so loading `solver_high` keeps prior `wind_*` keys and vice versa unless the dat profile itself contains those attrs.
 
 **UI:**
 
@@ -368,7 +386,8 @@ Module: `cgmDynFK_presets.py` — sections `n` (nucleus), `hs` (hairSystem). Sam
 
 Apply rules (`dynamic_utils.profile_load`):
 
-- **Hair feel** on hairSystem: seeds `base.hs` when `clean`, writes `hs` only — never nucleus / cloth
+- **Hair feel** on hairSystem: seeds **dynamic** `base.hs` when `clean` (excludes shape groups) — never nucleus / cloth / HairShape attrs
+- **HairShape** on hairSystem: seeds **shape** `base.hs` groups only when `clean`
 - **Wind / solver** on nucleus: layer keys only (no full `base.n` dump) unless kind is `base`
 - **Presets → Nucleus** + dynFK wind/solver: always apply `n` to setup nucleus; apply `hs` **only if hair exists** (cloth-only setups skip hs)
 - **Do not** merge `cgmNCloth_presets` into `cgmDynFK_presets` (`nc` vs `hs` are separate concerns); shared nucleus sim from nCloth solvers/wind stays in **Presets → Nucleus** (ncloth source)
@@ -409,7 +428,12 @@ Apply rules (`dynamic_utils.profile_load`):
 | **Presets** menu | **Hair** / **Cloth** / **Nucleus** | `.cgmSim*Dat` library load + apply |
 | **Presets** menu | **Save * Dat…** / **Reset → Base** | Capture to `cgmDat/sim/`; module base reset |
 | **Presets → Setups** | Load + apply `.cgmSimChainSetup` | `SimChainSetup.apply()` |
-| Tools menu | **Init Sim Setup** | `setup_sim_dynFK` / `cgmDynFK.setup_sim` |
+| **Presets** menu | **Hair / HairShape / Cloth / Nucleus** | `.cgmSim*Dat` library load + apply |
+| **File** menu | Load / Save / Apply Dat / Capture Setup | Preset + setup dat I/O |
+| **Presets → Setups** | Load + apply `.cgmSimChainSetup` | `SimChainSetup.apply()` |
+| Tools menu | **Init Sim Setup** / header **New** | `setup_sim_dynFK` / `cgmDynFK.setup_sim` — nucleus + `{baseName}_dynFK` only; **never** builds a hair chain (Maya selection ignored; use **Make Dynamic Chain** for chains) |
+| Tools menu | **Apply Setup Dat** | Re-wire from loaded setup dat |
+| Tools menu | **Query Settings** | `query_settings_selection` |
 | Tools menu | **Query Settings** | `query_settings_selection` |
 
 **Presets menu**: Hair / Cloth / Nucleus = **`.cgmSim*Dat` library** under `cgmDat/sim/`. Details map rows use **set_25** + **select** icons (no text `<<`). Hair / cloth / nucleus applies stay section-isolated.
@@ -670,7 +694,7 @@ Tuned attrs matching **`cotton`** fabric layer (stretch 50, bend 0.4, friction 0
 
 Run in Maya after cgmDynSimTool changes:
 
-1. **Init Sim only** — nucleus exists, timeline drives `currentTime`, no hair system
+1. **Init Sim only** — with joints selected, header **New** / **Init Sim Setup** → nucleus + setup only (no hair chain / hairSystem); timeline drives `currentTime`
 2. **Map cloth** — `mCloth` set; nCloth rewired to setup nucleus; Z-up gravity sane after preset
 3. **Fabric + solver** — **Presets → Cloth** `cotton` then **Presets → Nucleus** `solver_high`; no collision / `isDynamic` / unrelated nucleus env; body UI has no preset dropdowns
 4. **Attach follicle / rivet / uvPin** — locs follow outMesh; three modes on test mesh
@@ -729,6 +753,7 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 
 | Date | Summary |
 |------|---------|
+| 2026-09-21 | **Init Sim / New** — `setup_sim_dynFK(objs=[])`; selection does not auto `chain_create`. **Hair vs HairShape apply** — hair `clean` seeds dynamic `base.hs` only; HairShape drops dynamic keys. **Cloth/nucleus isolation** — fabric→`nc` only; nucleus solver/wind overlay only; cross-kind table in apply contract |
 | 2026-09-18 | **Load progress** — **`with_progress`** on **`uiFunc_update_details`** / autoload / load selected; interruptable main progress bar (sync, read dat, build, per chain); autoload no double Details rebuild |
 | 2026-09-18 | **Create Hair layout** — Build + end rows aligned with chain Details; **Follicle** / **Hair system** Project-style sub-headers; **Chain → Make Dynamic Chain** action row |
 | 2026-09-18 | **Chain Details** — per-chain action row label **Targets** (not Connect); removed per-chain **HairShape** collapsible (presets on **Hair systems** rows only) |
