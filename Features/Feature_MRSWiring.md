@@ -12,7 +12,7 @@
 **Related docs**
 
 - [`Feature_SceneExportFlow.md`](Feature_SceneExportFlow.md) — export uses puppet/module sets (orthogonal)
-- [`Feature_SimChain.md`](Feature_SimChain.md) — dyn drivers collected to puppet space groups
+- [`Feature_DynSimTool.md`](Feature_DynSimTool.md) — dyn drivers collected to puppet space groups
 
 ---
 
@@ -335,7 +335,7 @@ Run in Maya after wiring changes:
 ## Related Documentation
 
 - **[Feature_SceneExportFlow.md](Feature_SceneExportFlow.md)** — export bake/prep uses puppet/module qss sets (orthogonal)
-- **[Feature_SimChain.md](Feature_SimChain.md)** — dyn drivers collected to puppet `worldSpaceObjects` / `puppetSpaceObjects` groups
+- **[Feature_DynSimTool.md](Feature_DynSimTool.md)** — dyn drivers collected to puppet `worldSpaceObjects` / `puppetSpaceObjects` groups
 - **[Guides/NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature doc conventions
 
 ### Code references (py3)

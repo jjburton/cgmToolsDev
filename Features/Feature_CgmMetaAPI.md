@@ -6,7 +6,7 @@ Living inventory of **`cgm/core/cgm_Meta.py`** (~6k lines) and closely related *
 
 **Revision:** 2026-09-15 — session reload / **`mClass`** registry order; module vs instance APIs.
 
-**Reload / registry:** [`Feature_SimChain.md`](Feature_SimChain.md) **Reload contract** (reference tool). Rules: **`cgm-reload-mod`** § Meta / `mClass` — **no partial meta reload in tools**; **`cgm-meta-and-existing-patterns`**.
+**Reload / registry:** [`Feature_DynSimTool.md`](Feature_DynSimTool.md) **Reload contract** (reference tool). Rules: **`cgm-reload-mod`** § Meta / `mClass` — **no partial meta reload in tools**; **`cgm-meta-and-existing-patterns`**.
 
 ### Agent policy (all `mClass` work)
 
@@ -272,7 +272,7 @@ Use when **`mClass`** subclasses, **`cgm_Meta`**, **`cgm_RigMeta`**, or **`regis
 
 Reload **libs** → **rig helpers** → **subclass module last** (e.g. **`dynamic_utils`**), rebind module aliases (**`RIGDYN`**), **`reinitializeMetaClass` + re-wrap** RETAIN handles. **Does not** replace core reload after subclass **class** edits.
 
-**cgmSimChain:** **`dynFKTool.reload_dependencies()`** + **`_dynfk_rebind_loaded_mDynFK`**; shelf **`cgmSimChain()`** also **`cgmGEN._reloadMod(dynFKTool)`**. Log line reminds: **mClass edits need `CGM._reload`**.
+**cgmDynSimTool:** **`dynFKTool.reload_dependencies()`** + **`_dynfk_rebind_loaded_mDynFK`**; shelf **`cgmDynSimTool()`** (legacy **`cgmSimChain()`**) also **`cgmGEN._reloadMod(dynFKTool)`**. Log line reminds: **mClass edits need `CGM._reload`**.
 
 ### Symptoms (mis-reload)
 

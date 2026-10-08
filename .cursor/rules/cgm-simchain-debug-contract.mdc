@@ -1,12 +1,12 @@
 ---
-description: cgmSimChain hair counts, addEndJoint, and debug log contract
-globs: "**/dynFKTool.py,**/dynamic_utils.py,**/simChain_dat.py,**/Feature_SimChain.md"
+description: cgmDynSimTool (dynFK) hair counts, addEndJoint, and debug log contract
+globs: "**/dynFKTool.py,**/dynamic_utils.py,**/simChain_dat.py,**/Feature_DynSimTool.md"
 alwaysApply: false
 ---
 
-# cgmSimChain debug contract
+# cgmDynSimTool debug contract
 
-Canonical detail: [`Features/Feature_SimChain.md`](../../Features/Feature_SimChain.md) (Dev debug section).
+Canonical detail: [`Features/Feature_DynSimTool.md`](../../Features/Feature_DynSimTool.md) (Dev debug section).
 
 ## Count vocabulary (do not conflate)
 

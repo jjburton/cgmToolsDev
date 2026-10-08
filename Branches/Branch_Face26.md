@@ -3,16 +3,16 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: September 15, 2026 (cgmSimChain Details refresh, chain rename, nested list UI)  
+**Last Updated**: October 7, 2026 (TD toolbox/menu rig flags; Query distance status-line warnings; head neck ribbon; Builder scene-load; form `trackCrv`; handle proxy; puppet mesh)  
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
 ## Goals
-Improve MRS facial block rigging — starting with **muzzle** lip follow/constraints and **eye** prerig parameter cleanup. Broader facial-block work (blockDat remapping when adding prerig handles, cheek controls, brow/face block parity) is in scope for this branch but not started yet. MetaHuman solve / project-script work stays on [`Branch_UnrealWorkflow.md`](Branch_UnrealWorkflow.md) and [`Feature_Metahuman.md`](../Features/Feature_Metahuman.md) unless we deliberately factor helpers into py3.
+Improve MRS facial block rigging — starting with **muzzle** lip follow/constraints and **eye** prerig parameter cleanup. Broader facial-block work (blockDat remapping when adding prerig handles, cheek controls, brow/face block parity) is in scope for this branch but not started yet. This branch also carries shared **MRS body** work used by face-adjacent rigs: **scaleSetup** dyn-parent defaults from **attachPoint**, pivot-result naming, and digit-limb ship bypass. MetaHuman solve / project-script work stays on [`Branch_UnrealWorkflow.md`](Branch_UnrealWorkflow.md) and [`Feature_Metahuman.md`](../Features/Feature_Metahuman.md) unless we deliberately factor helpers into py3.
 
 ## Related Documentation
 - **[Feature_MRSMeshCreation.md](../Features/Feature_MRSMeshCreation.md)** — MRS proxy/puppet/skinned mesh contract (`meshBuild`, `proxyBuild`, batch post, geoGroup invariants)
-- **[Feature_SimChain.md](../Features/Feature_SimChain.md)** — cgmSimChain dynFK / `.cgmSim*Dat` library, hair chain segment-length contract, connect/bake
+- **[Feature_DynSimTool.md](../Features/Feature_DynSimTool.md)** — **cgmDynSimTool** dynFK / `.cgmSim*Dat` library, hair chain segment-length contract, connect/bake
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** — MetaHuman facial retarget / SDK transfer (Perforce `MetahumanFacial.py`; reference for facial solve patterns)
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** — module/puppet message graphs, block parent wiring
 - **[Branch_Jan2026.md](Branch_Jan2026.md)** — prior muzzle handle / ribbon / face-handle work
@@ -21,19 +21,193 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — branch doc format
 - **[muzzle.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/muzzle.py)** — primary iteration target
 - **[eye.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/eye.py)** — eye / lid prerig
-- **[block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** — blockDat load/match (future non-destructive remap); `block_proxy_mesh_flow`, `puppetMesh_create`, `puppetMesh_normalCheck`, `puppetMesh_colorGeo`
+- **[block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** — blockDat load/match (future non-destructive remap); **`form_segment`** (shared form + sub shapers); `block_proxy_mesh_flow`, `puppetMesh_create`, `puppetMesh_normalCheck`, `puppetMesh_colorGeo`; **`pivots_setup`** (parents **`pivotResult`** at end of pivot chain)
 - **[puppet_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/puppet_utils.py)** — `proxyMesh_verify`, puppet-level `puppetMesh_create`
 - **[batch_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py)** — batch post rig; `resolve_build_output_path`
 - **[blockShapes_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/blockShapes_utils.py)** — face handle creation (`mParent` contract)
 - **[distance_utils.py](../../cgmToolsPy3/cgm/core/lib/distance_utils.py)** — `get_normalizedWeightsByDistanceToObj` (muzzle constraint weights)
+- **[geo_Utils.py](../../cgmToolsPy3/cgm/core/lib/geo_Utils.py)** — `is_reversed`, `normalCheck` (proxy/puppet inside-out fix)
 - **[curve_Utils.py](../../cgmToolsPy3/cgm/core/lib/curve_Utils.py)** — `polyline_length_fractions` (joint-length POC sampling on dynFK outCurve)
 - **[dynamic_utils.py](../../cgmToolsPy3/cgm/core/rig/dynamic_utils.py)** — `cgmDynFK` / `chain_create_hair`, cloth attach, profile load
 - **[simChain_dat.py](../../cgmToolsPy3/cgm/core/lib/simChain_dat.py)** — cgmSimHairDat / Cloth / Nucleus dat IO + dev library
 - **[cgmDynFK_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmDynFK_presets.py)** — `base` seed + script API (artist hair presets → `cgmDat/sim/hair/`)
 - **[cgmNCloth_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** — `base` nc/n seed + script API (artist cloth/nucleus presets → `cgmDat/sim/`)
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** — `fortniteMetaHuman` pose-buffer schema
+- **[builder_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py)** — `get_dynParentTargetsDat`, scaleSetup dyn-parent helpers
+- **[handle.py](../../cgmToolsPy3/cgm/core/mrs/blocks/simple/handle.py)** — handle dyn parents; pivot result driver
+- **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — limb rigRoot / IK-FK dyn parents; digit scaleSetup bypass
+- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — segment rigRoot scaleSetup dyn parents
+- **[head.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)** — head rigRoot scaleSetup dyn parents; **neck form** `formAim` / `shapersAim` / `shapersAimUp`; **neck `rig_segments`** ribbon / **ribbonLive**
+- **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — **`IK.ribbon`** arcLength squash aim-scale hookup (shared with segment blocks)
 
 ## Timeline
+
+### October 7, 2026 — MRS body (scaleSetup dyn-parent, pivot naming)
+> **Agent note:** Keep **one** `### October 7, 2026` day block. Add or extend **`####`** subsections below; do **not** replace sibling subsections or delete prior Oct 7 notes.
+
+**Day status**: In progress — Maya verify arm/prop handle attach **end** → wrist; digit builds on temp bypass until finger attach stable.
+
+#### scaleSetup dyn-parent — shared helpers + first rollout (head / segment / handle / limb)
+**What**: With block **scaleSetup** on, improve dyn-parent defaults and parent lists on body blocks (started on **head** rigRoot vs part driver).  
+**Files**: `cgm/core/mrs/lib/builder_utils.py`, `head.py`, `segment.py`, `handle.py`, `limb.py`
+
+**Features**:
+- **`scaleSetup_scaleSpacePuppetDefault`** — when scaleSetup + dyn parent scale mode **space** (and not **parentToDriver**), default **scaleSpace** to **puppet**
+- **`scaleSetup_dynParentDefaultIndex`** + **`_scaleSetup_dynParentModeInt`** — set **space** / **orientTo** / **follow** from block **root_dynParentMode** / **dynParentMode** (not dyn group default alone)
+- **rigRoot** (scaleSetup): default enum toward **parent-module** driver slot (index **1** after part driver) without reordering parent list; **limb** later experiment keeps rigRoot **scaleSpace** at **0** on scaleSetup
+- **IK / FK / mid** (not rigRoot): **`ml_baseDynParents.append(mRoot)`** + **`LISTS.get_noDuplicates`** on composed lists; **`ml_endDynParents.insert(0, mRoot)`** unchanged pattern
+- **Limb rigRoot**: extend **ml_dynParentsAbove** when **b_scaleSetupDynSpace** or **root_dynParentScaleMode == space**
+- **Handle**: **scaleSetup** on **mHandle** + **rigRoot** when present; **orientTo** / **follow** use block mode attrs
+
+**Decisions**:
+- Do **not** prepend **mRoot** onto rigRoot’s own parent list (rigRoot stays part-driver-first)
+- Index **1** default is **rigRoot-only**; IK/FK use **{part}_root** on base lists instead
+
+**Status**: Code in tree — verify per block profile in Maya
+
+#### scaleSetup dyn-parent — attachPoint-aware rigRoot / handle defaults
+**What**: Default **space** / **orientTo** / **follow** from block **attachPoint** against parent-driver menu (shoulder, wrist, limb root on arm, etc.).  
+**Files**: `builder_utils.py` (**`scaleSetup_dynParentDefaultIndexFromAttach`**, **`_scaleSetup_attach_driver_target`**, **`_scaleSetup_walk_parent_nondigit_driver_point`**); callers in head/segment/handle/limb **rig_cleanUp**
+
+**Features**:
+- Resolve enum index on **rebuilt** **`mDynGroup.msgList_get('dynParents')`** (not pre-dedupe Python build list)
+- **Child** modules (prop **handle**, digit under arm): **`mModule.get_driverPoint`** / walk to first non-**digit** parent
+- **Non-digit limb rigRoot**: own **rigJoints** base/end → **masterGroup** / **dynParentGroup** when attach maps to local chain
+- **end** attach → wrist: prefer driver-point match; fallback **second** slot in **ml_dynParentsAbove** enum order (not last / limb root)
+- Avoid stale **`md_dynTargetsParent['end']`** (overwritten in **`get_dynParentTargetsDat`** parent loop)
+
+**Status**: In progress — finger **end** was defaulting to shoulder (index 1); digit path still tuning
+
+#### Pivot result null — module naming + wiring
+**What**: Pivot **result** driver nulls include module **partName**; document create/wire path for artists and agents.  
+**Files**: `handle.py` (**`rig_frame`**), `segment.py`, `limb.py` (two IK paths); **`block_utils.pivots_setup`** unchanged
+
+**Features**:
+- **`cgmName`** **`{partName}_pivotResult`**, **`cgmAlias`** **`{partName}_PivotResult`**
+- **Handle**: **`pivotHelper`** in prerig → result null in **`rig_frame`** → **`pivotResultDriver`** → **`pivots_setup(..., pivotResult=...)`** → parented **`mLastParent`**
+- **One DAG transform** (message name “driver” is historical); limb **ball** **ikEnd** may use zero **`mPivotResultDriven`** between driver and setup
+- Rebuild module for new outliner names
+
+**Status**: Code complete — Maya verify naming on new builds
+
+#### Digit limb — temp skip scaleSetup dyn-space (`b_scaleSetupDynSpace`)
+**What**: Ship finger/toe **digit** rigs without scaleSetup dyn-parent / scaleSpace pass while attach defaults are unstable.  
+**Files**: `limb.py` — **`_LIMB_TEMP_SKIP_SCALE_SETUP_DIGIT`** (default **True**)
+
+**Features**:
+- **`rig_dataBuffer`**: **`b_scaleSetupDynSpace = False`** when **`rigSetup == digit`**; **`b_scaleSetup`** unchanged (squash/stretch, scale blend, toe/ball scale constraints)
+- **rig_cleanUp** dyn-parent paths use **`b_scaleSetupDynSpace`** (not **`b_scaleSetup`**) for attach index, **mRoot** on base lists, IK/FK dedupe, scaleSetup-only rigRoot extras
+
+**Decisions**: Set toggle **False** and remove gate when digit **attach end → wrist** is Maya-verified
+
+**Status**: Active temp gate
+
+#### block_utils — datList_validate `None` count guard
+**What**: Builder **Edit datList** (and similar) no longer crashes when `checkAttr` (e.g. `numControls`) is missing or unset.  
+**Files**: `block_utils.py` — coerce `len_needed` to `int` with fallbacks in **`datList_validate`** / **`nameList_validate`**
+
+**Status**: Code in tree — reload MRS backend in Maya
+
+#### Handle proxy mesh — geoOnly / geoAdd + Proxy Geo unlock
+**What**: Handle **proxyType** paths for user-only vs cast+user proxy mesh; imported **Proxy Geo** duplicates unlock override attrs before proxy coloring.  
+**Files**: `handle.py` (**`_handle_build_proxy_meshes`**, **`proxyGeo_add`** / **`proxyGeo_replace`**); `shared_dat.py` — **`proxyType`** **`geoAdd`** (legacy **`comboMesh`** → **`geoAdd`** via **`_handle_normalize_proxy_type`**)
+
+**Features**:
+- **`geoOnly`** / **`proxyShape` geoOnly**: mesh from **Proxy Geo** only (`proxyMeshGeo` / **`proxyGeoGroup`** / `*_proxyGeo`); skips cast loft/tessellate and **`proxyHelper`** form geo
+- **`geoAdd`**: cast proxy + user Proxy Geo duplicates (replaces **`comboMesh`**)
+- **`_proxy_geo_unlock_for_edit`**: DAG unlock + **`ATTR.break_connection`** + unlock **`overrideEnabled`** (and related override plugs) on transform + shapes before **`CORERIG.colorControl`** — fixes locked/connected attrs on referenced/imported geo
+
+**Decisions**:
+- Handle finalize stays **`polyCloseBorder`** after tessellate (**`_handle_proxy_finalize_mesh`**) — limb/segment Block Mesh caps use separate open-loft + end-cap helpers in **`block_utils`**
+
+**Status**: Code in tree — Maya verify Proxy Geo add/replace on production props; **core reload** if **`proxyType`** enum changed on disk
+
+#### Puppet / module proxy mesh — unify, normals, limb proxy return
+**What**: Puppet mesh join across handle skinned geo + limb module proxies; reduce false inside-out flips on unified fingers; limb proxy list return + cap/normal ordering.  
+**Files**: `block_utils.py` (**`puppetMesh_create`**, **`create_simpleLoftMesh`**, **`mesh_proxyCreate`**, **`proxy_mesh_cap_simple_loft_ends`**); `puppet_utils.py`; `limb.py` (**`build_proxyMesh`**); `geo_Utils.py`
+
+**Features**:
+- **`puppetMesh_create`**: **`polyUniteSkinned`** on handle **`ml_skinned`** + limb **`ml_proxy`**; **`polyUnite(...)[0]`** when validating unite result
+- **`limb.build_proxyMesh`**: return **`ml_segProxy`** after **`msgList_connect('proxyMesh')`**
+- **`mesh_proxyCreate`**: **`GEO.normalCheck`** after segment caps + **`match_transform`**
+- **`GEO.is_reversed`**: unit normal via **`MATH.mag`** (not **`normalizeList`**); skip degenerate vectors; slight ray origin offset for thin tubes
+- Unified puppet path: **`puppetMesh_normalCheck`** on handle skinned pre-unite only — avoid re-flipping limb pieces already checked in **`mesh_proxyCreate`** / module **`build_proxyMesh`**
+
+**Status**: Code in tree — Maya verify full puppet mesh (fingers + handle + limbs); limb **Block Mesh** end caps
+
+#### Form sub shaper track curves — per-block `seg_*_trackCrv` naming
+**What**: Fix sub shapers on a **second** block in form (e.g. second limb) riding the **first** block’s segment track curves — wrong `pointOnCurveInfo.inputCurve` / attach behavior.  
+**Files**: `limb.py` (inline form sub-shaper loop); `block_utils.py` — **`form_segment`** (used by **handle**, **head**, **segment**)
+
+**Features**:
+- Segment linear track curves renamed **`{p_nameBase}_seg_{i}_trackCrv`** (was generic **`seg_{i}_trackCrv`** on every block)
+- Sub shaper attach unchanged at call site: **`BLOCKSHAPES.attachToCurve(mHandle, mLinearCurve, …)`** on the curve created for that segment
+
+**Root cause** (debug / agent context):
+- **`create_pointOnInfoNode`** connects POC via **short** shape name from **`listRelatives(..., shapes=True)`** (no **`fullPath`**)
+- Duplicate short names across blocks → Maya resolves **`inputCurve`** to the first matching shape; **`getUParamOnCurve`** still used full DAG path (U could look sane while the wire was wrong)
+- Not a Maya 2023 vs 2026 issue; shows when **two+** form setups with sub shapers coexist
+
+**Decisions**:
+- Ship **unique track curve names** per block (**`p_nameBase`** prefix); optional follow-up: full-path shape connect in **`curve_Utils.create_pointOnInfoNode`** or pass resolved **`mShape.mNode`** from **`attachToCurve`**
+
+**Status**: Code in tree — Maya-verify dual limb (or limb + handle/segment) form with **`numSubShapers`**; existing scenes need **re-form** (or rebuild form null) to pick up new curve names
+
+#### MRS Builder — scene-load block list refresh
+**What**: Retained **mrsBuilder** window now refreshes the left **Rigblocks** scroll list when Maya fires **SceneOpened** (File → Open / New) without closing Builder.  
+**Files**: `cgm/core/mrs/Builder.py`; doc note in [`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md)
+
+**Features**:
+- **`setSceneChangeCB`** in **`ui.insert_init`** (same pattern as **setTools**, **cgmDynSimTool** — zoo **`baseMelUI`** → Maya **`scriptJob`** parented to the window)
+- **`uiFunc_on_scene_change`**: boundary log → **`mc.evalDeferred(..., lp=True)`** so the new scene DAG exists before **`BLOCKGEN.get_uiScollList_dat`**
+- **`uiFunc_refresh_blocks_after_scene_open`**: **`uiFunc_block_clearActive()`** (clear active block, inspector, **`mActive`**) + **`BlockScrollList.rebuild()`**; fallback rebuild on error
+
+**Decisions**:
+- Clear active block + right panel on scene change (not list-only refresh) — avoids stale meta on deleted nodes
+- Child windows (**blockEditor** / **picker**) out of scope; main Builder list is the file-open contract
+
+**Status**: Code in tree — Maya verify: keep Builder open → Open/New scene → list matches new scene; relaunch Builder or reload MRS if session had old **`Builder.py`**
+
+#### Head block — neck form shaper aim + ribbonLive segment rig
+**What**: Head **neck** form setup matches **Segment** shaper aim attrs and **`block_utils.form_segment`** kwargs; neck **`rig_segments`** ribbon dict aligned with **Segment** so **ribbonLive** + squash/aim-scale no longer fails in **`IK.ribbon`** (`scaleZ` connect).  
+**Files**: `head.py` (form state mask, `d_attrsToMake` / defaults, neck **`form_segment`** call, **`rig_segments`**); `ik_utils.py` — arcLength per-joint squash loop hardening
+
+**Features**:
+- **Form** (when **`neckBuild`**): block attrs **`formAim`**, **`shapersAim`**, **`shapersAimUp`** (same enums/defaults as segment: simple / chain / handle); exposed on form state + box/simple profile masks; passed into **`UTILS.form_segment`** with **`neckShapers`** / **`neckSubShapers`** and **`orientNeckHelper`**
+- **`rig_segments`**: always **`settingsControl`** = **`mRigNull.settings`**; **`parentDeformTo`** = **`scaleRoot`** / **`rigRoot`**; **`driverSetup`** from **`ribbonAim`**; **`extendEnds`** from **`ribbonExtendEnds`**; explicit **`setupAimScale`** true/false from **`segmentStretchBy`**; **`ribbonConnectBy`**; guts vis on seg measure curve; **`IK`** reload before call
+- **`d_squashStretch`**: **`additiveScaleEnds`** from **`scaleSetup`** commented out on head (matches segment — avoids fighting live-surface aim scale)
+- **`ik_utils`**: reset **`l_argBuild`** per joint in arcLength squash loop; **`mPlug_aimResult`** fallback when extra squash on but aim scale off; guard **`scaleZ`** connect when aim plug missing
+
+**Root cause** (ribbonLive failure):
+- Neck **`form_segment`** previously used **`form_segment`** defaults (`formAim`/`shapersAim` **`toEnd`**) — no artist-facing aim enums
+- Neck ribbon **`_d`** drifted from segment: conditional settings, **`mDeformNull`** parent, **`additiveScaleEnds`** on when **`scaleSetup`**, missing explicit **`setupAimScale=False`** for translate stretch → **`mPlug_aimResult`** could be **`None`** at **`doConnectOut(..., scaleZ)`**
+
+**Status**: Code in tree — Maya verify: head with **`neckBuild`**, **`segmentType`** **ribbonLive**, squash on; re-form neck then full rig rebuild; reload **`ik_utils`** + head block module (or core reload) if session stale
+
+#### TD shell — rig attr flags (toolbox + cgm menu)
+**What**: Quick **dagLock** / **dagUnlock** and standard transform **hide/unhide** on selection via existing **`cgmObject.dagLock`** and **`setAttrFlags`** — surfaced in **cgmToolbox** and **cgm → Rigging Utils**.  
+**Files**: `cgm/core/lib/rigging_utils.py` — **`dag_lock`**, **`standard_attrs_hide`**, **`standard_attrs_unhide`**; `cgm/core/tools/toolbox.py` — Rigging **Flags:** row; `cgm/core/tools/lib/tool_chunks.py` — **`uiSection_riggingUtils`** **Flags** submenu
+
+**Features**:
+- **dagLock** / **dagUnlock** — **`cgmObject.dagLock(True/False)`** on tx–sz + v (TD context **`each`**)
+- **Hide Std** — **`setAttrFlags()`** defaults (lock + hide standard transforms)
+- **Unhide Std** — **`setAttrFlags(lock=False, visible=True, keyable=True)`**
+- Toolbox layout: **Flags:** row directly under **Group:** (before **Attr:**)
+- Menu: **Rigging Utils → Flags →** same four items
+
+**Status**: Code in tree — relaunch toolbox / rebuild cgm menu to pick up UI
+
+#### TD shell — Query distance results on status line
+**What**: **cgm → Query → Distance** measurement readouts use **`log.warning`** instead of **`print`** so results show on Maya’s status line (e.g. **`|Arc length.each| >> 45.42…`**).  
+**Files**: `cgm/core/tools/markingMenus/lib/contextual_utils.py` — **`func_process`** **`resultWarning`** kwarg (popped before backend call); `tool_chunks.py` — **`uiSection_distance`** passes **`resultWarning=True`** on Sum, Ordered, Arc length, Near/Far queries (not **Surface Nodes** create)
+
+**Decisions**:
+- Opt-in per menu callback — other **`func_process`** callers unchanged
+- Same message format as prior **`print`** lines; only logging channel changes
+
+**Status**: Code in tree — rebuild cgm menu or reload **`contextual_utils`** + **`tool_chunks`** in session
+
+---
 
 ### September 1, 2026 - Eye prerig fix + muzzle constraint weights
 **What**: First Face26 commit — eye prerig uses the shared `mParent` handle contract; muzzle drops stale nostril influence target and normalizes pointConstraint weights by distance before corner bias.  
@@ -162,7 +336,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/lib/simChain_dat.py` — `SimChainSetup`, `resolve_library_filepath`, `apply_preset_ref`, setup library scan
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — **Presets → Setups**, **File → Capture Setup Dat**, **Tools → Apply Setup Dat**
 - EXTENDED: `cgm/core/tests/test_coreLib/test_SIMCHAIN.py` — setup schema + library resolve tests
-- EXTENDED: `Features/Feature_SimChain.md` — Phase 2 setup contract
+- EXTENDED: `Features/Feature_DynSimTool.md` — Phase 2 setup contract
 
 **Features**:
 - **Capture**: loaded cgmDynFK → JSON under `cgmDat/sim/setups/`
@@ -182,12 +356,12 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — Presets → Library, File Load/Save/Apply Dat; Library submenu rebuild fix (no `MelMenuItem.clear`)
 - ADDED: `cgm/cgmDat/sim/{hair,cloth,nucleus}/*.cgmSim*Dat` — seed presets (bob, bangs_firm, cotton, solver_balanced, wind_calm)
 - ADDED: `cgm/core/tests/test_coreLib/test_SIMCHAIN.py` — seed read, module export, JSON round-trip
-- EXTENDED: `Features/Feature_SimChain.md` — dat preset contract + Phase 2 setup stub
+- EXTENDED: `Features/Feature_DynSimTool.md` — dat preset contract + Phase 2 setup stub
 
 **Features**:
 - **Library**: dev scan of `cgmDat/sim` (BlockConfig-style keys e.g. `hair.bob`)
 - **Capture/Save**: selection → dat file under kind folder
-- **Apply**: reuses skip-list, base seed, gravity remap from Feature_SimChain preset contract
+- **Apply**: reuses skip-list, base seed, gravity remap from Feature_DynSimTool preset contract
 
 **Decisions**:
 - Phase 1 = preset attrs only; Phase 2 = `.cgmSimChainSetup` full setup re-wire (schema stub in feature doc)
@@ -205,7 +379,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — **`chain_create_hair`**: **`curveLinear`** inCurve (was cubic EP); POC nodes use **`parameter` + `turnOnPercentage`** from joint fractions (not `getUParamOnCurve` on extended curve); **`skinCluster`** on full joint chain (was root-only **`bindSkin`**); **`extendEnd` default `False`**; **`extendStart` / `extendEnd`** use explicit `None` handling (falsy `False` no longer overridden by instance defaults); manual **`upSetup`** no longer appends extend CV when **`extendEnd`** is off
 - EXTENDED: `cgm/core/presets/cgmDynFK_presets.py` — presets **`bob`**, **`bangs_firm`**; **`d_profileKind`** entries (`hair`)
 - EXTENDED: `cgm/core/presets/cgmNCloth_presets.py` — fabric preset **`bangs_firm`** (high stretch/compression, soft bend, moderate damp, subtle **`inputMeshAttract`**); **`d_profileKind`** entry (`fabric`)
-- EXTENDED: `Features/Feature_SimChain.md` — hair **segment length** contract; bob / bangs / firm-cloth attach patterns; nCloth input-attract anti-pattern
+- EXTENDED: `Features/Feature_DynSimTool.md` — hair **segment length** contract; bob / bangs / firm-cloth attach patterns; nCloth input-attract anti-pattern
 
 **Features**:
 - **Segment length**: linear inCurve through joint CVs; full-chain skin; locators sample outCurve at joint-length ratios
@@ -226,7 +400,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — ... **last-joint forward tangent aim** when **`extendEnd=False`** (tip **`+fwd`**, aim = tip + tangent × segment length)
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — Create layout (hair first, **Cloth Options** header); **Options → Fixed segment length** + segment length field (readable inactive styling per **Feature_CgmToolUI**)
 - EXTENDED: `cgm/core/lib/simChain_dat.py` — capture/apply **`fixedSegmentLength`**, **`follicleSegmentLength`**, **`surfaceTrack`** for `clothAttach` only
-- EXTENDED: `Features/Feature_SimChain.md` — bind-order contract, follicle sampling default vs optional, outCurve rest sync, troubleshooting + verification checklist
+- EXTENDED: `Features/Feature_DynSimTool.md` — bind-order contract, follicle sampling default vs optional, outCurve rest sync, troubleshooting + verification checklist
 - EXTENDED: `Features/Feature_CgmToolUI.md` — disabled **`MelTextField`** anti-pattern on dark template rows
 
 **Features**:
@@ -251,7 +425,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — follicle I/O helpers, **`chain_rebuild_spline_follow`**, **`chain_rebuild_hair`**, spline follow build/teardown
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — Create Options follow mode + degrees; Details **Rebuild Chain** vs **Rebuild Locators**
 - EXTENDED: `cgm/core/lib/simChain_dat.py` — capture/apply **`hairFollowMode`**, **`inCurveDegree`**, **`outCurveDegree`**
-- EXTENDED: `Features/Feature_SimChain.md` — **Hair follow modes** section
+- EXTENDED: `Features/Feature_DynSimTool.md` — **Hair follow modes** section
 
 **Status**: Code complete — Maya verify per Feature doc checklist (spline default, degrees, rebuild chain, legacy parity)
 
@@ -262,7 +436,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 **Files**:
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — refresh icon (`refresh.png`), `uiFunc_refresh_loaded_setup`, chain Name row, nested list chrome
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `chain_cgm_name`, module `chain_set_name(mDynFK, …)`, `_chain_rename_hair_infrastructure`
-- EXTENDED: `Features/Feature_SimChain.md` — UI surface rows
+- EXTENDED: `Features/Feature_DynSimTool.md` — UI surface rows
 
 **Status**: Code complete — Maya verify: refresh after scene edit; rename hair chain; collapse chain hides sub-lists; **Reload Dependencies** logs Red9 + **`cgm_Meta`** + **`dynamic_utils`**
 
@@ -276,9 +450,38 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — hair registry, `chain_create_hair` modes, `hair_system_resolve_for_chain`, nucleus dedupe on register
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — hair system rows, `uiFunc_sim_dat_capture_save_for_target`, library-only preset option menus
 - EXTENDED: `cgm/core/lib/simChain_dat.py` — `SimHairDat` per-target apply/capture; setup dat `hairSystems[]`
-- EXTENDED: `Features/Feature_SimChain.md` — multi-hair patterns, UI surface, verification #25–28
+- EXTENDED: `Features/Feature_DynSimTool.md` — multi-hair patterns, UI surface, verification #25–28
 
 **Status**: Code complete — Maya verify: two chains, two hairSystems, independent **Load Dat** per row; **Presets → Hair** still default-only
+
+---
+
+### September 18, 2026 - cgmDynSimTool load UX + Create/chain UI polish
+**What**: **Load progress bar** on autoload (**LastDynFK**) and header **load selected** while **`uiFunc_update_details`** rebuilds (sync → **`get_dat()`** → setup/baking UI → per chain; cancel supported). **Create → Hair** layout aligned with chain **Build** rows; **Follicle** / **Hair system** use Project-style centered sub-headers (not nested frames). Per-chain **Targets** action row label (was Connect). Removed redundant per-chain **HairShape** collapsible (shape presets stay on **Details → Hair systems** menus).  
+**Files**:
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — `_dynfk_progress_*`, **`with_progress`** on load/details; Create Hair + empty Details chrome
+- EXTENDED: `Features/Feature_DynSimTool.md`, `Features/Feature_CgmToolUI.md`, `.cursor/rules/cgm-long-running-ui-progress.mdc`
+
+**Status**: Code complete — Maya verify: multi-chain autoload shows progress; refresh without bar; HairShape only on hair-system rows
+
+---
+
+### September 17, 2026 - cgmSimChain Details layout + File menu
+**What**: Polish **cgmSimChain** Details/header UI to match **Project → Paths** row chrome: pinned AnimClip-style **status row** (help **`MelButton`** setup name + **set_25** load selected); map rows use **set_25** / **select** + read-only help status buttons (not `<<` or disabled text fields). Reorganize **Baking** (label + stretch separator: **All Inputs** / **All Targets**, **Connect All** / **Disconnect All**) and per-chain rows (**Build** + **Push Settings to Build Menu**; **Advanced twist** + end-joint on one row; **Input** / **Connect** / **Chain** action rows). **File** menu: load applies on pick, save captures setup; **Setup** menu removed (dock + relaunch under **File → Tool**); duplicate **Tools → Apply Setup Dat** removed.  
+**Files**:
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — `uiBuild_setup_status_row`, `uiFunc_make_load_row`, baking + chain action layout, `uiFunc_chain_push_build_to_create_options` on Build row
+- EXTENDED: `Features/Feature_DynSimTool.md` — UI surface table, layout chrome note, changelog
+
+**Features**:
+- Header **Dynamic Chain System** label + icon cluster (refresh, load selected, select, clear)
+- Details nucleus/cloth/hair/register rows: `MelSeparator` h=3, padding 5, help status + map/select icons
+- Per-chain **Rebuild** / **Delete** on **Chain** row; hair **Input → Bake**; **Connect** bake/connect/disconnect trio
+
+**Decisions**:
+- Map **values** = non-interactive help **`MelButton`** (same bgc family as header status), not `MelTextField` or instruction-template stretch labels
+- **Push build → Create** folded into **Build** row as **Push Settings to Build Menu** (no separate push row)
+
+**Status**: Code complete — Maya verify: map row spacing/icons; cloth status label refresh; baking + chain actions; push-to-create after **Reload Dependencies**
 
 ---
 
@@ -287,7 +490,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 **Files**:
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `_hair_reparent_sim_chain_ordered`, sim **`p_parent`** create, `_hair_chain_integrity_missing`, `_dag_str` / follicle constraint driver strings, driven duplicate-root contract
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — broken-chain UI, **Push build → Create**, **Reload Dependencies** vs **Relaunch Tool**, **`getMessageAsMeta('mFollicle')`** on load
-- EXTENDED: `Features/Feature_SimChain.md` — sim/driven contract, reload, broken chain, anti-patterns, checklist #21–22
+- EXTENDED: `Features/Feature_DynSimTool.md` — sim/driven contract, reload, broken chain, anti-patterns, checklist #21–22
 - EXTENDED: `.cursor/rules/maya-cmds-strings-only.mdc`, **`cgm-runtime-meta-not-strings`** — **`asMeta=False`** / **`.mNode`** at **`mc.*`**
 
 **Status**: ✅ Maya-verified — Edna 4-target bang + add end; spline IK past 3-joint gate; broken partial chain delete/recreate
@@ -304,7 +507,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - ADDED/EXTENDED: `cgm/cgmDat/sim/nucleus/*.cgmSimNucleusDat` — `solver_balanced`, `solver_quality`, **`solver_high`**, `wind_calm`
 - EXTENDED: `cgm/core/presets/cgmDynFK_presets.py` — synced **`bob`**, **`bob_hold`**, **`tail_firm`**, **`ponytail`** tuning; module header notes library is artist source
 - EXTENDED: `cgm/core/tests/test_coreLib/test_SIMCHAIN.py` — library seed list + scan asserts
-- EXTENDED: `Features/Feature_SimChain.md` — library-first UI, bob/bob_hold, solver tiers, verification checklist
+- EXTENDED: `Features/Feature_DynSimTool.md` — library-first UI, bob/bob_hold, solver tiers, verification checklist
 
 **Features**:
 - **Hair feel** (`.cgmSimHairDat`, `hs` only): **`bob`** = lively + blended hold; **`bob_hold`** = bobTest rest-shape; **`tail_firm`** vs legacy **`tail`**; retuned **`ponytail`**, **`ribbon`**
@@ -340,6 +543,16 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] Eye lid tessellation — `get_meshFromNurbs` `general` mode (`numLidSplit_u` / `numLidSplit_v`)
 - [ ] Broader eye rig constraint audit (if issues surface in production)
 
+### Handle proxy geo + puppet unify (Oct 7)
+- [x] **`geoOnly`** / **`geoAdd`** handle proxy paths; **`comboMesh`** → **`geoAdd`** normalize
+- [x] **`_proxy_geo_unlock_for_edit`** before proxy geo **`colorControl`**
+- [x] **`puppetMesh_create`** skinned + proxy **`polyUniteSkinned`**; unite result **`[0]`** fix
+- [x] **`GEO.is_reversed`** mag-based normal (no **`normalizeList`** ZeroDivisionError)
+- [x] Puppet normal-check routing on unified mesh (handle pre-unite; skip limb over-flip)
+- [x] **`limb.build_proxyMesh`** returns **`ml_segProxy`**
+- [ ] Maya-verify prop/handle **geoOnly** + **geoAdd** on production assets
+- [ ] Maya-verify unified puppet mesh finger normals vs per-module proxy
+
 ### Face proxy / puppet mesh (in progress)
 - [x] `meshBuild` + `proxyBuild` attrs on muzzle, brow, eye
 - [x] `block_proxy_mesh_flow` + split skinned/proxy paths in `puppetMesh_create`
@@ -358,19 +571,52 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] `resolve_build_output_path` in batch utils
 - [x] `SendToBuild` P4 prepare on existing BUILD output path
 
+### MRS form — sub shaper track curves (Oct 7)
+- [x] **`{p_nameBase}_seg_{i}_trackCrv`** rename in **`limb.py`** form sub-shaper loop
+- [x] Same rename in **`block_utils.form_segment`** (handle / head / segment)
+- [ ] Maya-verify two limbs in form with sub shapers (POC **`inputCurve`** on correct block curves)
+- [ ] Optional: harden **`create_pointOnInfoNode`** / **`attachToCurve`** with full-path shape plugs
+
+### Head neck — form aim + ribbon segment (Oct 7)
+- [x] **`formAim`** / **`shapersAim`** / **`shapersAimUp`** on head block + neck **`form_segment`** wiring
+- [x] Neck **`rig_segments`** ribbon **`_d`** parity with segment (**ribbonLive**, settings, **`parentDeformTo`**, **`setupAimScale`**, no **`additiveScaleEnds`** on squash dict)
+- [x] **`IK.ribbon`** arcLength squash loop guards (**`ik_utils.py`**)
+- [ ] Maya-verify head **`neckBuild`** + **ribbonLive** + squash/aim-scale rig build end-to-end
+- [ ] Maya-verify neck form shaper loft aim with **`shapersAim`** / **`formAim`** enums vs segment feel
+
+### TD toolbox / cgm menu (Oct 7)
+- [x] **`rigging_utils`** — **`dag_lock`**, **`standard_attrs_hide`**, **`standard_attrs_unhide`**
+- [x] **cgmToolbox** Rigging **Flags:** row (under **Group:**) — dagLock, dagUnlock, Hide Std, Unhide Std
+- [x] **cgm menu** **Rigging Utils → Flags** — same four actions
+- [x] **Query → Distance** — **`resultWarning`** on **`func_process`** for status-line readouts
+- [ ] Optional: toolbox Near/Far distance buttons — same **`resultWarning`** if artists want parity with menu
+
+### MRS scaleSetup dyn-parent + pivot naming (Face26)
+- [x] Pivot result **`{partName}_pivotResult`** / **`{partName}_PivotResult`** (handle **`rig_frame`**, segment, limb ×2)
+- [x] Document pivot result = **`pivotResultDriver`** message + **`pivots_setup`** **`pivotResult`** (same DAG null)
+- [x] **`builder_utils`** attachPoint → dyn-parent default index + scaleSpace puppet helper
+- [x] Wire head, segment, handle, limb rigRoot (+ handle main control)
+- [x] IK/FK/mid **`{part}_root`** on base dyn parents when scaleSetup
+- [x] TEMP digit bypass **`b_scaleSetupDynSpace`** (`_LIMB_TEMP_SKIP_SCALE_SETUP_DIGIT`)
+- [ ] Maya-verify attach **end** → wrist (arm + prop handle)
+- [ ] Maya-verify digit with temp flag off; remove temp when stable
+- [ ] Maya-verify handle/segment with **addPivot** — outliner **`{partName}_pivotResult_*`** after module rebuild
+
 ### cgmSimChain / dynFK (Face26)
 - [x] **`polyline_length_fractions`** + linear inCurve + joint-length POC sampling
 - [x] Full-chain **`skinCluster`**; **`extendEnd=False`** default; extend arg **`None`** handling
 - [x] Hair library **`bob`**, **`bob_hold`**, **`bangs_firm`**, full `.cgmSimHairDat` seed set
 - [x] Cloth library seeds (silk–burlap) + user **`bangs_firm`** / **`bangs_2`** dats
 - [x] Nucleus **`solver_balanced`**, **`solver_quality`**, **`solver_high`**
-- [x] **`Feature_SimChain.md`** — segment-length contract + library preset patterns + Sept 11 bind/rebuild/sampling
+- [x] **`Feature_DynSimTool.md`** — segment-length contract + library preset patterns + Sept 11 bind/rebuild/sampling
 - [x] **Hair bind-before-MCD** + post-MCD inCurve rebuild + outCurve rest sync
 - [x] **Add-to-existing hairSys** — skinCluster + outCurve POC path (Edna bang/hairTip)
 - [x] Create **Options → Fixed segment length** (default CV-matched sampling)
 - [x] Create panel — **Cloth Options** header row; **Mesh track** cloth-only gating
 - [x] **cgmSim*Dat** — `simChain_dat.py`; **Presets → Hair/Cloth/Nucleus** library-only UI
 - [x] **cgmSimChainSetup** Phase 2 — capture/apply setup dat, **Presets → Setups**
+- [x] Details UX — status row, Project-style map rows (**set_25** / **select**), Baking + per-chain **Input** / **Connect** / **Chain** action rows (Sept 17)
+- [x] **File** menu load/save setup dat; dock + relaunch under **File → Tool**
 - [x] **SimClothDat.capture** — resolves **`mCloth`** from loaded setup
 - [x] Maya-verify dat capture Save/Load round-trip
 - [ ] Maya-verify **`bob`** vs **`bob_hold`** on Edna production hair sim
@@ -396,7 +642,8 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] cgmSimChain — **Presets → Hair → bob** / **bob_hold** on test hair rig; Save Dat round-trip
 - [x] cgmSimChain — add hair chain to **existing** hairSys; frame 0 inCrv/outCrv on joints (Edna verify)
 - [ ] cgmSimChain — cloth attach + nCloth **`bangs_firm`** on head-follow cage
-- [ ] cgmSimChain — setup dat capture + **Apply Setup Dat** on production cloth attach rig
+- [ ] cgmSimChain — setup dat capture + **File → Load Dat** (apply on pick) on production cloth attach rig
+- [x] cgmDynSimTool — Details map/baking/chain action rows + load progress (Sept 18 polish)
 
 ---
 
@@ -449,9 +696,9 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 - **`chain_create_hair`**: **`curveLinear`** inCurve; POC **`turnOnPercentage`** from joint fractions; full-chain **`skinCluster`**; **`extendEnd=False`** default; explicit **`None`** handling for extend args
 - **`cgmDynFK_presets`**: **`bob`**, **`bangs_firm`** (hair feel); **`d_profileKind`** mappings
 - **`cgmNCloth_presets`**: fabric **`bangs_firm`** (stretch/compression firm, soft bend, damp 1.0, subtle input attract); **`d_profileKind`** mapping
-- **`Feature_SimChain.md`**: segment-length contract, preset patterns, cloth input-attract anti-pattern
+- **`Feature_DynSimTool.md`**: segment-length contract, preset patterns, cloth input-attract anti-pattern
 
-**Files**: `curve_Utils.py`, `dynamic_utils.py`, `cgmDynFK_presets.py`, `cgmNCloth_presets.py`, `Features/Feature_SimChain.md`
+**Files**: `curve_Utils.py`, `dynamic_utils.py`, `cgmDynFK_presets.py`, `cgmNCloth_presets.py`, `Features/Feature_DynSimTool.md`
 
 ##### 7. cgmSimChain — cgmSim*Dat preset library (Phase 1 + artist cutover)
 - **`simChain_dat.py`**: `SimHairDat` / `SimClothDat` / `SimNucleusDat` JSON under `cgm/cgmDat/sim/`
@@ -460,14 +707,14 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 - **Shipped seeds**: hair (`bob`, `bob_hold`, `bangs_firm`, `ponytail`, `ribbon`, `tail_firm`, …); cloth (silk–burlap); nucleus (`solver_balanced`, `solver_quality`, `solver_high`, `wind_calm`)
 - **Capture fix**: `SimClothDat` / hair / nucleus capture uses loaded setup mapped nodes
 
-**Files**: `simChain_dat.py`, `nCloth_utils.py`, `dynamic_utils.py`, `dynFKTool.py`, `cgm/cgmDat/sim/**`, `test_SIMCHAIN.py`, `Features/Feature_SimChain.md`
+**Files**: `simChain_dat.py`, `nCloth_utils.py`, `dynamic_utils.py`, `dynFKTool.py`, `cgm/cgmDat/sim/**`, `test_SIMCHAIN.py`, `Features/Feature_DynSimTool.md`
 
 ##### 8. cgmSimChain — hair preset tuning (Edna test hair)
 - **`bob`**: lively (low drag/mass) + blended rest-shape hold from bobTest comparison
 - **`bob_hold`**: bobTest capture values — max return-to-form when **`bob`** drifts
 - **`ponytail`**, **`ribbon`**, **`tail_firm`**: retuned from legacy module seeds (underwater / anti-gravity / appendage defaults)
 
-**Files**: `cgm/cgmDat/sim/hair/*.cgmSimHairDat`, `cgmDynFK_presets.py`, `Features/Feature_SimChain.md`
+**Files**: `cgm/cgmDat/sim/hair/*.cgmSimHairDat`, `cgmDynFK_presets.py`, `Features/Feature_DynSimTool.md`
 
 ##### 9. cgmSimChain — hair bind/rebuild + add-to-existing hairSys (Sept 11)
 - **`chain_create_hair`**: skin inCurve **before** `makeCurvesDynamic`; post-MCD **`_consolidate_hair_incurve_after_mcd`** (rebuild linear inCurve, wire **`startPosition`**, 1:1 CV skinPercent)
@@ -476,7 +723,22 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 - **Existing hairSys**: up/aim POC on **outCurve** (inCurve loses transform **`worldSpace`** after MCD); **`get_dat` `mInCrv`** from chain grp
 - **Hierarchy contract**: inCrv on **chain grp**; root sim joint → follicle; **`parentConstraint`** to rig — no follicle snap + relative inCrv reparent
 
-**Files**: `dynamic_utils.py`, `dynFKTool.py`, `simChain_dat.py`, `Features/Feature_SimChain.md`, `Features/Feature_CgmToolUI.md`
+**Files**: `dynamic_utils.py`, `dynFKTool.py`, `simChain_dat.py`, `Features/Feature_DynSimTool.md`, `Features/Feature_CgmToolUI.md`
+
+##### 10. cgmSimChain — Details / Baking UI layout (Sept 17)
+- Pinned header status row; map rows aligned with **Project** paths pattern (**set_25**, help status button, **select**)
+- Setup **Baking** and per-chain connect/bake/rebuild/delete as label + separator button rows
+- **File** menu owns setup dat load/save + tool dock/relaunch
+
+**Files**: `dynFKTool.py`, `Features/Feature_DynSimTool.md`
+
+##### 11. MRS scaleSetup dyn-parent + pivot naming (Oct 7)
+- See timeline **October 7, 2026** — amend **`####`** subsections there (shared helpers, attachPoint, pivot naming, digit temp bypass)
+- **Files**: `builder_utils.py`, `head.py`, `segment.py`, `handle.py`, `limb.py`, `block_utils.py` (`pivots_setup`)
+
+##### 12. Form sub shaper track curves — per-block naming (Oct 7)
+- See timeline **October 7, 2026** — **`#### Form sub shaper track curves`**
+- **Files**: `limb.py`, `block_utils.py` (`form_segment`); related **`blockShapes_utils.attachToCurve`**, **`curve_Utils.create_pointOnInfoNode`**
 
 #### Merged dependencies (separate PR notes)
 - **AnimData** — see [`Branch_AnimData.md`](Branch_AnimData.md)
@@ -494,6 +756,7 @@ None intended — new enum values and rig paths are opt-in via block attrs. Exis
 - Maya-verify cgmSimChain **`bangs_firm`** hair + nCloth on production fringe / hair-cage rigs
 - Phase 2: **`cgmSimChainSetup`** — shipped; production rig verify pending
 - Consider Feature doc for facial MRS blocks when blockDat / mesh contract is settled
+- Maya-verify scaleSetup dyn-parent **attachPoint** on limb/handle; remove **`_LIMB_TEMP_SKIP_SCALE_SETUP_DIGIT`** when digit stable
 
 ---
 
@@ -517,12 +780,22 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **Add-to-existing hairSys**: POC / up-aim on **outCurve**; full-chain **`skinCluster`** before MCD
 - **Last-joint aim default**: forward tangent offset at tip (**`+fwd`**) when **`extendEnd=False`**
 - **cgmSim*Dat library**: `.cgmSimHairDat` / `.cgmSimClothDat` / `.cgmSimNucleusDat` under **`cgm/cgmDat/sim/`**; **Presets → Hair / Cloth / Nucleus** + **File** Save/Load (Maya-verified)
-- **cgmSimChainSetup Phase 2**: `.cgmSimChainSetup` under **`cgm/cgmDat/sim/setups/`**; **File → Capture Setup Dat**, **Presets → Setups**, **Tools → Apply Setup Dat**
+- **cgmSimChainSetup Phase 2**: `.cgmSimChainSetup` under **`cgm/cgmDat/sim/setups/`**; **File → Load / Save Dat** (load applies on pick), **Presets → Setups**
+- **dynFK Details UI**: help status **`MelButton`** + **set_25** / **select** map rows; **Baking** + per-chain **Input** / **Connect** / **Chain** label rows — see **`Feature_DynSimTool.md`** UI Surface
 - **dynFK hair feel**: **`bob`** (lively volume), **`bob_hold`** (rest-shape), **`bangs_firm`** (fringe) — **Presets → Hair**
 - **Nucleus solver tiers**: **`solver_balanced`** → **`solver_quality`** → **`solver_high`** — **Presets → Nucleus** (never bundled into hair/cloth dats)
 - **nCloth short panels**: fabric **`bangs_firm`** — high stretch/compression, low bend, moderate damp; **`inputMeshAttract` ≤ ~0.08** on head-follow cages (not **`inputAttract`** preset)
+- **scaleSetup dyn-parent**: default enum from block **attachPoint** on rebuilt **`dynParents`**; digit limbs gated by **`_LIMB_TEMP_SKIP_SCALE_SETUP_DIGIT`** until finger attach verified
+- **Pivot result naming**: **`{partName}_pivotResult`** on the same DAG null as **`pivotResultDriver`**; created in handle **`rig_frame`** (not prerig); **`pivots_setup`** parents that null at end of pivot chain — rebuild module for new names
+- **Handle proxyType**: **`geoOnly`** = Proxy Geo only; **`geoAdd`** = cast + Proxy Geo (legacy **`comboMesh`**); **`proxyGeo_add`** unlocks override attrs before **`color_mesh`** / **`colorControl`**
+- **Puppet unify**: handle skinned + limb proxies via **`polyUniteSkinned`**; **`puppetMesh_normalCheck`** scoped on unified path to avoid double-flipping limb proxy geo
+- **Form sub shaper track curves**: rename **`{p_nameBase}_seg_{i}_trackCrv`** so POC **`inputCurve`** does not collide when multiple blocks are in form; shared path **`UTILS.form_segment`** + limb inline form
+- **Head neck form aim**: same **`formAim`** / **`shapersAim`** / **`shapersAimUp`** contract as segment — wired through **`form_segment`** when **`neckBuild`**
+- **Head neck segment ribbon**: **`rig_segments`** **`IK.ribbon`** kwargs match segment; **`additiveScaleEnds`** not tied to **`scaleSetup`** on head squash dict (live surface + aim **`scaleZ`**)
+- **TD rig flags**: **`RIGGING.dag_lock`** / **`standard_attrs_*`** → **`cgmObject`**; toolbox + **Rigging Utils → Flags**
+- **Query distance UX**: **`func_process(..., resultWarning=True)`** → **`log.warning`** for **Query → Distance** (not **Surface Nodes**)
 
 ---
 
-*Last Updated: September 11, 2026 (cgmSimChain hair bind/rebuild + follicle sampling options)*  
+*Last Updated: October 7, 2026 (TD toolbox/menu rig flags; Query distance warnings; head neck ribbon; Builder scene-load; form trackCrv; scaleSetup; handle proxy; puppet mesh)*  
 *Branch Status: Active*

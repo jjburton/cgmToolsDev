@@ -146,6 +146,7 @@ Used in `block_utils.puppetMesh_create`, `puppet_utils.puppetMesh_create`, and `
 | `cgm/core/mrs/blocks/organic/eye.py` | Same; **`block_puppet_mesh_self_colored`** (per-part lid shaders); lid splits via `general` mode |
 | `cgm/core/mrs/blocks/organic/head.py` | `create_simpleMesh` (head dup + optional neck loft); **intermediate geo stays at world until final unite** |
 | `cgm/core/mrs/blocks/organic/segment.py` | Canonical `build_proxyMesh` reference (`puppetMeshMode`, `ml_proxyExisting`) |
+| `cgm/core/mrs/blocks/simple/handle.py` | `proxySetColorAdded`; proxy geo shader gating in form, Proxy Geo Add, `create_simpleMesh`, `build_proxyMesh` |
 | `cgm/core/mrs/lib/block_utils.py` | `block_proxy_mesh_flow`, `puppetMesh_create`, `create_simpleMesh`, `create_simpleLoftMesh`, mesh helpers |
 | `cgm/core/mrs/lib/puppet_utils.py` | Puppet-level `proxyMesh_verify`, `puppetMesh_create`; `groups_verify` |
 | `cgm/core/mrs/lib/batch_utils.py` | Post rig: `proxyMesh_verify` → `puppetMesh_create` |
@@ -158,7 +159,8 @@ Used in `block_utils.puppetMesh_create`, `puppet_utils.puppetMesh_create`, and `
 | Function | Role |
 |----------|------|
 | `block_proxy_mesh_flow(mBlock)` | Face blocks: proxy path only when `proxyBuild` on |
-| `block_puppet_mesh_self_colored(mBlock)` | `True` for `eye` — skip blanket `puppetMesh_colorGeo` |
+| `block_proxy_skip_shader_assignment(mBlock)` | `True` for handle when `proxySetColorAdded` off — skip proxy/puppet geo shader assignment |
+| `block_puppet_mesh_self_colored(mBlock)` | `True` for `eye`, or handle with `proxySetColorAdded` off — skip blanket `puppetMesh_colorGeo` |
 | `puppetMesh_normalCheck(ml_geo)` | Per-shape `GEO.normalCheck` after create |
 | `puppetMesh_colorGeo(mBlock, ml_geo)` | `CORERIG.color_mesh` with block side (`'center'` when side is `none`/empty) |
 | `puppet_geoGroup_get(mPuppet, verify=True)` | `groups_verify` + `getMessageAsMeta('geoGroup')`; falls back to armature geo plug |
@@ -200,6 +202,7 @@ When `neckBuild` is on (or multiple visible head proxy pieces), the block runs i
 |------------|---------------------|
 | muzzle, brow, head, body, … | `puppetMesh_colorGeo` → `CORERIG.color_mesh` (`proxy=True`) |
 | eye | **Skipped** — `build_proxyMesh` / lids assign per-part shaders (eyewhite, iris, pupil) |
+| handle (`proxySetColorAdded` off) | **Skipped** — keep source materials on proxy/puppet geo; rig control colors unchanged |
 
 ---
 
@@ -211,6 +214,12 @@ When `neckBuild` is on (or multiple visible head proxy pieces), the block runs i
 |------|---------------------|-----------------|
 | `meshBuild` | `True` | Turn off to skip all mesh for that block |
 | `proxyBuild` | `False` | Turn **on** only when you want colored module + puppet proxy dup (two skinned sets) |
+
+### Handle block (`simple/handle.py`)
+
+| Attr | Default | Artist workflow |
+|------|---------|-----------------|
+| `proxySetColorAdded` | `True` | Turn **off** when proxy geo should keep its existing materials (imported/textured mesh). When off, skips cgm proxy shaders on form `proxyHelper`, Proxy Geo Add, `create_simpleMesh`, `build_proxyMesh`, and batch `puppetMesh_colorGeo`. Does not change rig control coloring. |
 
 ### Batch post toggles (`batch_utils` kws)
 

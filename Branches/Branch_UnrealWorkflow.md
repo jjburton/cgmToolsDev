@@ -11,7 +11,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 
 ## 📚 Related Documentation
 - **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Canonical dev/TA spec: export modes, tdSet contract, prep order, namespace/path rules, troubleshooting
-- **[Feature_SimChain.md](../Features/Feature_SimChain.md)** - Canonical dev/TA spec: cgmSimChain / cgmDynFK hair + cloth attach, nCloth presets, connect/bake, Query Settings
+- **[Feature_DynSimTool.md](../Features/Feature_DynSimTool.md)** - Canonical dev/TA spec: cgmSimChain / cgmDynFK hair + cloth attach, nCloth presets, connect/bake, Query Settings
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** - Module/puppet message graphs, `mirror_get` tag-matching contract, control rewire consumers
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** - MetaHuman facial solve + body align workflow (mocapBakeTools is canonical align/bake home)
 - **[Feature_MocapAlignSnap.md](../Features/Feature_MocapAlignSnap.md)** - Native mocapBakeTools local-TR align/snap/bake dual-path contract
@@ -278,17 +278,17 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 **Files**:
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `map_nucleus`, `map_hair_system`
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — load rows, Tools menu, Baking section
-- DOCS: `Features/Feature_SimChain.md`
+- DOCS: `Features/Feature_DynSimTool.md`
 
 **Status**: ✅ Code complete
 
 ---
 
 ### August 8, 2026 (d) - Presets menu only (remove body preset dropdowns)
-**What**: Removed Details Fabric/Solver enums and Nucleus/Hair Load Preset dropdowns — **Presets** top menu is the sole cgm profile UI. Body rows keep status + `<<` map only. *(Later: Sept 2026 multi-hair work removed Maya **`nodePreset`** entirely; per registered hairSystem Details row **Load Dat** / **Save Hair Dat…** mirrors top **Presets** — see **`Feature_SimChain.md`**.)*  
+**What**: Removed Details Fabric/Solver enums and Nucleus/Hair Load Preset dropdowns — **Presets** top menu is the sole cgm profile UI. Body rows keep status + `<<` map only. *(Later: Sept 2026 multi-hair work removed Maya **`nodePreset`** entirely; per registered hairSystem Details row **Load Dat** / **Save Hair Dat…** mirrors top **Presets** — see **`Feature_DynSimTool.md`**.)*  
 **Files**:
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — cloth row slimmed; nucleus/hair `presetOptions=False`; removed fabric/solver apply helpers
-- DOCS: `Features/Feature_SimChain.md`
+- DOCS: `Features/Feature_DynSimTool.md`
 
 **Status**: ✅ Code complete
 
@@ -300,7 +300,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - EXTENDED: `cgm/core/presets/cgmDynFK_presets.py` — `d_profileKind` (`hair` / `wind` / `solver` / `base`)
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `profile_kind`, `profile_list(category=)`; wind/solver no longer dump full `base.n`
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — Presets Cloth / Hair / Nucleus; Details Hair = feel only; Nucleus context-aware ncloth vs dynfk source
-- DOCS: `Features/Feature_SimChain.md`
+- DOCS: `Features/Feature_DynSimTool.md`
 
 **Decisions**:
 - **Presets → Hair** = hair feel only; **Presets → Nucleus** = shared sim (nCloth + dynFK wind/solver)
@@ -316,7 +316,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - EXTENDED: `cgm/core/lib/nCloth_utils.py` — `_merge_profile_dicts` honors `clean` + section isolation; nucleus-only path for solver/wind; skip adds `collide`, `ignoreSolverGravity`, `ignoreSolverWind` (keeps `localSpaceOutput`)
 - EXTENDED: `cgm/core/presets/cgmNCloth_presets.py` — cloth vs simulation header; removed structural keys from `base.nc` / `calm.nc`
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — Fabric dropdown = fabrics only; Solver-only apply on solver menu change; **Presets** menu cascades
-- DOCS: `Features/Feature_SimChain.md` — merge table, taxonomy, Presets UI
+- DOCS: `Features/Feature_DynSimTool.md` — merge table, taxonomy, Presets UI
 
 **Decisions**:
 - Fabric never seeds/applies `base.n`; solver/wind never write `nc`
@@ -332,7 +332,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 **Files**:
 - EXTENDED: `cgm/core/presets/cgmNCloth_presets.py` — removed `localSpaceOutput` from `base` nc
 - EXTENDED: `cgm/core/lib/nCloth_utils.py` — `l_skipPresetAttrs` adds **`localSpaceOutput`** (apply + Query Settings)
-- DOCS: `Features/Feature_SimChain.md` — Never-preset table
+- DOCS: `Features/Feature_DynSimTool.md` — Never-preset table
 
 **Decisions**:
 - **`localSpaceOutput`** is Convert nCloth Output Space / outMesh hierarchy — never apply or capture in presets
@@ -507,12 +507,12 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 ---
 
 ### July 25, 2026 - cgmSimChain bake constraint cleanup + preset menu fix
-**What**: Fixed two cloth-workflow regressions: **Bake All Targets** left loc→target `parentConstraint` nodes live after simulation bake, and **Attach to Cloth** / Details rebuild could re-apply nCloth presets because Fabric/Solver menus defaulted to `cotton` / `solver_balanced` and fired `changeCommand` on UI rebuild. Added canonical **`Feature_SimChain.md`** design contract (July 14 doc; branch cross-link maintained).  
+**What**: Fixed two cloth-workflow regressions: **Bake All Targets** left loc→target `parentConstraint` nodes live after simulation bake, and **Attach to Cloth** / Details rebuild could re-apply nCloth presets because Fabric/Solver menus defaulted to `cotton` / `solver_balanced` and fired `changeCommand` on UI rebuild. Added canonical **`Feature_DynSimTool.md`** design contract (July 14 doc; branch cross-link maintained).  
 **Files**:
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `bake_nodes` calls **`targets_disconnect`** after `bakeResults` for any chain whose `mTargets` were baked (explicit `parentConstraint` cleanup; `disableImplicitControl` alone was unreliable)
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — Fabric/Solver menus default to **`Fabric`** / **`Solver`** placeholders; **`_suppressClothPresetApply`** while wiring menus on Details rebuild; presets apply **only** on explicit menu change (not attach/map/rebuild); remembers last menu selection for display without re-apply
-- NEW: `Features/Feature_SimChain.md` — dev/TA spec: hair vs `clothAttach`, connect/bake contract, layered presets, Query Settings, verification checklist
-- EXTENDED: `Features/Feature_SimChain.md` — bake contract documents post-bake `targets_disconnect`; anti-pattern for preset auto-apply on rebuild
+- NEW: `Features/Feature_DynSimTool.md` — dev/TA spec: hair vs `clothAttach`, connect/bake contract, layered presets, Query Settings, verification checklist
+- EXTENDED: `Features/Feature_DynSimTool.md` — bake contract documents post-bake `targets_disconnect`; anti-pattern for preset auto-apply on rebuild
 
 **Features**:
 - **Bake All Targets**: keys from sim bake, then constraints removed on baked target chains
@@ -1364,7 +1364,7 @@ Harden Scene export behavior so Unreal-oriented exports are consistent, repeatab
 - [x] cgmSimChain Init Sim + layered nCloth Fabric/Solver presets + `solver_high` (`setup_sim_dynFK`, split menus, `profile_load` layering)
 - [x] cgmSimChain target bake via `bake_nodes` / `bakeResults(simulation=True)` + post-bake **`targets_disconnect`**
 - [x] cgmSimChain Fabric/Solver menus — explicit preset apply only (no auto-apply on attach/Details rebuild)
-- [x] **Feature_SimChain.md** design contract (canonical dev/TA reference)
+- [x] **Feature_DynSimTool.md** design contract (canonical dev/TA reference)
 - [x] cgmSimChain **Tools → Query Settings** (`query_settings_selection`, preset diff from `base`)
 - [x] nCloth presets exclude `isDynamic` (runtime switch, not fabric profile)
 - [x] cgmSimChain editable base name on loaded setup (`set_base_name`)
