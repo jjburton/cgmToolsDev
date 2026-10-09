@@ -3,25 +3,29 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: October 7, 2026 (TD toolbox/menu rig flags; Query distance status-line warnings; head neck ribbon; Builder scene-load; form `trackCrv`; handle proxy; puppet mesh; preset apply isolation + hair/Init Sim fixes)
+**Last Updated**: October 9, 2026 (Limb roll `segmentMidIKSetup` + `squashSkipAim`; Handle `proxySetColorAdded`; Scene browser; Segment `followParentBank`; cgmMeta hierarchy)
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
 ## Goals
-Improve MRS facial block rigging — starting with **muzzle** lip follow/constraints and **eye** prerig parameter cleanup. Broader facial-block work (blockDat remapping when adding prerig handles, cheek controls, brow/face block parity) is in scope for this branch but not started yet. This branch also carries shared **MRS body** work used by face-adjacent rigs: **scaleSetup** dyn-parent defaults from **attachPoint**, pivot-result naming, and digit-limb ship bypass. MetaHuman solve / project-script work stays on [`Branch_UnrealWorkflow.md`](Branch_UnrealWorkflow.md) and [`Feature_Metahuman.md`](../Features/Feature_Metahuman.md) unless we deliberately factor helpers into py3.
+Improve MRS facial block rigging — starting with **muzzle** lip follow/constraints and **eye** prerig parameter cleanup. Broader facial-block work (blockDat remapping when adding prerig handles, cheek controls, brow/face block parity) is in scope for this branch but not started yet. This branch also carries shared **MRS body** and **cgm.core** work used by face-adjacent rigs: **scaleSetup** dyn-parent defaults from **attachPoint**, pivot-result naming, **Segment `followParentBank`** (Limb-style parent pivot bank at module **`rigRoot`**), **Limb roll segment mid IK** (`segmentMidIKSetup` / **`limb_segment_mid`**), digit-limb ship bypass, and **cgmMeta** hierarchy queries that use long DAG paths when returning meta. MetaHuman solve / project-script work stays on [`Branch_UnrealWorkflow.md`](Branch_UnrealWorkflow.md) and [`Feature_Metahuman.md`](../Features/Feature_Metahuman.md) unless we deliberately factor helpers into py3.
 
 ## Related Documentation
 - **[Feature_MRSMeshCreation.md](../Features/Feature_MRSMeshCreation.md)** — MRS proxy/puppet/skinned mesh contract (`meshBuild`, `proxyBuild`, batch post, geoGroup invariants)
 - **[Feature_DynSimTool.md](../Features/Feature_DynSimTool.md)** — **cgmDynSimTool** dynFK / `.cgmSim*Dat` library, hair chain segment-length contract, connect/bake
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** — MetaHuman facial retarget / SDK transfer (Perforce `MetahumanFacial.py`; reference for facial solve patterns)
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** — module/puppet message graphs, block parent wiring
+- **[Feature_CgmMetaAPI.md](../Features/Feature_CgmMetaAPI.md)** — **`cgmObject`** hierarchy getters, **`_hierarchyQueryFullPath`**
+- **[Feature_CgmToolUI.md](../Features/Feature_CgmToolUI.md)** — Scene browser columns, navigation depth (filesystem walk), scroll-list contracts
+- **[Scene.py](../../cgmToolsPy3/cgm/core/mrs/Scene.py)** — asset browser, `hasSub` / `hasVariant`, `_republish_navigation_lists`, Export Selection directory helpers
+- **[cgm_Meta.py](../../cgmToolsPy3/cgm/core/cgm_Meta.py)** — **`getAllChildren`** / **`getDescendents`**, **`_hierarchyQueryFullPath`**
 - **[Branch_Jan2026.md](Branch_Jan2026.md)** — prior muzzle handle / ribbon / face-handle work
 - **[Branch_AnimData.md](Branch_AnimData.md)** — merged into Face26 (cgmAnimClip / mrsAnimClip; not Face26-native)
 - **[Branch_SpringCleaning.md](Branch_SpringCleaning.md)** — merged into Face26 (`cgm.lib` → `cgm.core` migration)
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — branch doc format
 - **[muzzle.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/muzzle.py)** — primary iteration target
 - **[eye.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/eye.py)** — eye / lid prerig
-- **[block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** — blockDat load/match (future non-destructive remap); **`form_segment`** (shared form + sub shapers); `block_proxy_mesh_flow`, `puppetMesh_create`, `puppetMesh_normalCheck`, `puppetMesh_colorGeo`; **`pivots_setup`** (parents **`pivotResult`** at end of pivot chain)
+- **[block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/block_utils.py)** — blockDat load/match (future non-destructive remap); **`form_segment`** (shared form + sub shapers); `block_proxy_mesh_flow`, `puppetMesh_create`, `puppetMesh_normalCheck`, `puppetMesh_colorGeo`, **`block_proxy_skip_shader_assignment`**, **`proxy_geo_cap_enabled`**; **`pivots_setup`** (parents **`pivotResult`** at end of pivot chain)
 - **[puppet_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/puppet_utils.py)** — `proxyMesh_verify`, puppet-level `puppetMesh_create`
 - **[batch_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py)** — batch post rig; `resolve_build_output_path`
 - **[blockShapes_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/blockShapes_utils.py)** — face handle creation (`mParent` contract)
@@ -34,13 +38,121 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[cgmNCloth_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** — `base` nc/n seed + script API (artist cloth/nucleus presets → `cgmDat/sim/`)
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** — `fortniteMetaHuman` pose-buffer schema
 - **[builder_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py)** — `get_dynParentTargetsDat`, scaleSetup dyn-parent helpers
-- **[handle.py](../../cgmToolsPy3/cgm/core/mrs/blocks/simple/handle.py)** — handle dyn parents; pivot result driver
-- **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — limb rigRoot / IK-FK dyn parents; digit scaleSetup bypass
-- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — segment rigRoot scaleSetup dyn parents
+- **[handle.py](../../cgmToolsPy3/cgm/core/mrs/blocks/simple/handle.py)** — handle dyn parents; pivot result driver; **`proxySetColorAdded`** / **`proxyGeoCap`** proxy mesh paths
+- **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — limb rigRoot / IK-FK dyn parents; roll **`segmentMidIKSetup`** / **`squashSkipAim`**; digit scaleSetup bypass
+- **[rigFrame_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py)** — **`limb_segment_mid`** (per-roll mid follow; not spine **`segment_mid`**)
+- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — segment rigRoot scaleSetup dyn parents; **`followParentBank`** (`rig_followParentBankSetup`, space lists)
 - **[head.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)** — head rigRoot scaleSetup dyn parents; **neck form** `formAim` / `shapersAim` / `shapersAimUp`; **neck `rig_segments`** ribbon / **ribbonLive**
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — **`IK.ribbon`** arcLength squash aim-scale hookup (shared with segment blocks)
 
 ## Timeline
+
+### October 9, 2026 — Limb roll segment mid IK (`segmentMidIKSetup`)
+
+**What**: Per-roll **Limb** mid IK controls (`controlSegMidIK_{i}`) get the same follow vocabulary as Segment/Head spine mids, but wired **per roll segment** (not full-chain). Artists split **create** vs **follow** with **`segmentMidIKControl`** vs **`segmentMidIKSetup`**. Roll segment **`IK.ribbon` / `IK.curve`** gain **`squashSkipAim`** + **`setupAimScale`** parity with segment/head.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/blocks/organic/limb.py` — **`segmentMidIKSetup`** enum (`ribbon`, **`ribbonLive`**, `prntConstraint`, `linearTrack`, `cubicTrack`); **`squashSkipAim`**; **`rig_segments`** (`skipAim`, influences vs follow setup); **`rig_dataBuffer`** (`sectionSpans` for ribbonLive)
+- EXTENDED: `cgm/core/mrs/lib/rigFrame_utils.py` — **`limb_segment_mid`** (localized mid follow; track modes use **`CORERIG.create_at`** + **`BLOCKSHAPES.attachToCurve`** on segment boundary **`ml_handleJoints`**, not spine **`segment_mid`**)
+- EXTENDED: `cgm/core/mrs/lib/block_utils.py`, `shared_dat.py` — block UI vis for **`segmentMidIKSetup`** / **`squashSkipAim`**
+- EXTENDED: `Features/Feature_MRSWiring.md` — Limb segment mid IK contract
+
+**Features**:
+- **`segmentMidIKControl`**: mid control + seg mid helpers; mid in roll ribbon **influences** even when **`segmentMidIKSetup`** = **`none`**
+- **`segmentMidIKSetup`**: optional follow — ribbon / live ribbon (seg-end live drivers, **`sectionSpans`** default 2) / parentConstraint / linear or cubic track along roll handle pair
+- **`squashSkipAim`**: passed to per-roll **`IK.ribbon`** and **`IK.curve`** like segment/head; **`setupAimScale`** when **`segmentStretchBy`** is scale
+- **`segmentType` ribbonLive** on limb: **`liveSurface`** on main roll ribbon build
+
+**Decisions**:
+- Limb attr name **`segmentMidIKSetup`** (not **`ikMidSetup`**) — sorts with **`segmentMidIKControl`** in rig UI; segment/head keep **`ikMidSetup`**
+- No extra seg-mid **dyn-parent** pass in limb **`rig_cleanUp`** (not requested; differs from segment spine mid dyn modes)
+- Track curves use **ordered segment handle joints** (roll index `i` → `i+1`), mids attach with **`param`** — same pattern as segment prerig **`attachToCurve`**
+
+**Status**: Code in tree — Maya verify: leg/arm with **`numRoll`**, each **`segmentMidIKSetup`** mode; **`none`** still deforms via influences; **`squashSkipAim`** toggle vs segment; reload **`limb`** + **`rigFrame_utils`** after sync
+
+---
+
+### October 9, 2026 — Handle proxy materials + proxy cap/root documentation
+
+**What**: Optional handle-block control to **skip cgm proxy shaders** on user/imported proxy geo; document **`proxyGeoCap`** (open-end close) vs **`proxyGeoRoot`** (segment/limb base ball/loft).  
+**Files**:
+- EXTENDED: `cgm/core/mrs/blocks/simple/handle.py` — bool **`proxySetColorAdded`** (default **`True`**); gate **`color_mesh`** / **`colorControl`** / **`mHandleFactory.color`** on proxy geo only; **`d_attrStateMask['proxySurface']`**
+- EXTENDED: `cgm/core/mrs/lib/block_utils.py` — **`block_proxy_skip_shader_assignment`**; **`block_puppet_mesh_self_colored`** includes handle when **`proxySetColorAdded`** off
+- EXTENDED: `cgm/core/mrs/lib/shared_dat.py` — **`proxySetColorAdded`** in **`proxySurface`** UI list + **`_d_attrsTo_make`**
+- EXTENDED: `Features/Feature_MRSMeshCreation.md` — cap vs root table, handle/segment attr guide, checklist
+
+**Features**:
+- **`proxySetColorAdded` on** (default): existing behavior — form **`proxyHelper`**, Proxy Geo Add, module/puppet proxy mesh, and batch **`puppetMesh_colorGeo`** assign cgm proxy shaders
+- **`proxySetColorAdded` off**: keep source materials; rig **control** colors unchanged
+- **`proxyGeoCap`**: **`none`** vs **`both`** — handle **`polyCloseBorder`** after cast/tessellate; segment/limb/head use **`proxy_geo_cap_enabled`** / segment cap helpers in **`block_utils`**
+- **`proxyGeoRoot`**: segment default **`loft`** in **`d_defaultSettings`** — not forced on; **`none`** disables root geo in **`build_proxyMesh`** → **`mesh_proxyCreate`**
+
+**Decisions**:
+- Inverted naming vs early draft **`proxyNoColorAdded`** — positive flag **`proxySetColorAdded`** default **on**
+- Root base on segments is **profile/default driven**, not “always on”
+
+**Status**: Code in tree — reload **`block_utils`** + **`handle`**; attr verify on existing handle blocks; Maya-verify textured Proxy Geo + **`proxyGeoCap none`** on cast props
+
+---
+
+### October 9, 2026 — Scene browser navigation (filesystem depth)
+
+**What**: Scene asset browser columns now follow **what is on disk** under the current type/set path instead of project **`hasSub`** flags. Fixes type-only layouts (`asset/type/*.ma`), mixed folders + loose scenes at the same level, and cases where the version column was forced open or files were listed in the wrong column.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — `hasSub` / `hasVariant` / `HasSub()` walk `_dir_children_dirs` (+ project `hasVariant: false` only); type-only files in panel 2 (`subTypeSearchList` via `LoadVersionList`); `_version_column_should_show` (`not hasSub` → no version column); variation list **dirs only**; mixed set loads root scenes in version column without auto-picking variation; `_republish_navigation_lists`, `_navigate_to_scene_*`, `_export_selection_directory` / `_mel_set_project_safe`; `LoadPreviousSelection` + `SetSubType` / `buildAssetForm` column gating; `uiFunc_showAllFiles` reload scope
+- EXTENDED: `Features/Feature_CgmToolUI.md` — navigation depth table + revision history
+
+**Features**:
+- **asset / type / file** — type menu (panel 2) + file scroll; version panel hidden
+- **asset / type / set / …** — sets column when type folder has subdirs; version and optional variation from selection
+- **Mixed** — loose `.ma` and subfolders at type or set level: dirs in sets/variation scrolls; loose files in sets row or version column per rules above
+- **Export Selection** — starting directory aligned with save-here (`path_set` when applicable)
+
+**Decisions**:
+- Do **not** use project **`hasSub`** for column layout; **`hasVariant: false`** in project content still disables variation tier
+- Type-only layout must not hide panel 2 scroll (type menu always on panel 2)
+
+**Status**: Code in tree — reload Scene UI from shelf after sync; verify type-only, set-only files, and mixed folders
+
+---
+
+### October 9, 2026 — Segment `followParentBank` (parent pivot bank)
+
+**What**: Port Limb digit **follow parent bank** rig to organic **Segment** blocks — child modules can bank to parent **`pivotResultDriver`** and blend with parent FK/IK like Limb fingers. Bank anchored on Segment **`rigRoot`** (not **`limbRoot`**). Works with FK-only or IK Segment builds.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/blocks/organic/segment.py` — block attr **`followParentBank`** (default **`False`**); **`rig_dataBuffer`** (`b_followParentBank`, parent pivot in **`ml_dynParentsAbove`**); skeleton / shapes / controls; **`rig_followParentBankSetup`** after **`rig_frame`**; **`rig_cleanUp`** bank drivers on rig root, first FK, **`controlIK`**, **`controlIKBase`**
+- EXTENDED: `Features/Feature_MRSWiring.md` — Segment bank contract (defaults, build table, space UI aliases)
+- EXTENDED: `AGENTS.md` — MRS wiring item points at bank build paths
+
+**Features**:
+- **Activation**: block **`followParentBank`** on + parent module **`rigNull.pivotResultDriver`**
+- **rigNull plugs**: `followParentBankJoints`, `controlFollowParentBank`, `bankParentFKDriver`, `bankParentIKDriver`; settings **`visParentBank`**
+- **Space / follow UI**: parent pivot shows as **`{partName}_PivotResult`** (via **`ml_dynParentsAbove`**); blended bank space shows as **`followParentBank`** when parent **`settings.result_FKon` / `result_IKon`** exist
+- **Bugfix**: local **`pivotResultDriver`** dyn-parent insert used list meta — now **`getMessageAsMeta`**
+
+**Decisions**:
+- Segment default **`followParentBank=False`** (opt in); Limb digit profiles stay default **on**
+- No shared `mrs/lib` extract yet — parity copy from Limb **`rig_pivotSetup`** bank block
+
+**Status**: Code in tree — Maya verify: Segment child under Limb/handle with pivot; FK-only and ribbon IK; reload **`segment`** module + full module rebuild
+
+#### cgmMeta hierarchy — `fullPath` when `asMeta`
+**What**: **`getAllChildren`** (alias **`getDescendents`**) and other DAG hierarchy getters defaulted to short **`listRelatives`** names while **`asMeta=True`**; force **`fullPath=True`** on the Maya query whenever results are wrapped as meta (unambiguous **`validateObjArg`** / **`validateObjListArg`**).  
+**Files**:
+- EXTENDED: `cgm/core/cgm_Meta.py` — **`_hierarchyQueryFullPath`**; wired on **`cgmObject`** (**`getParent`**, **`getParents`**, **`getSiblings`**, **`getChildren`**, **`getDescendents`** / **`getAllChildren`**, **`getShapes`**, **`getListPathTo`**) and **`cgmNode`** (**`getParent`**, **`getSiblings`**); **`doName(nameChildren=True)`** uses **`descendents_get(..., fullPath=True)`**
+- EXTENDED: `Features/Feature_CgmMetaAPI.md` — hierarchy table + **2026-10-09** revision
+- EXTENDED: `.cursor/rules/cgm-meta-naming-hierarchy.mdc` — **`asMeta`** + **`fullPath`** contract
+- EXTENDED: `cgm/core/examples/help_cgmObject.py` — **`getAllChildren`** examples
+
+**Features**:
+- **`asMeta=True`**: Maya query always long paths; **`fullPath`** kw ignored for the **`TRANS.*`** call
+- **`asMeta=False`**: unchanged — e.g. **`getAllChildren()`** still short names by default; **`getChildren()`** still long by default
+
+**Decisions**:
+- Centralize in **`_hierarchyQueryFullPath`** at meta layer (not per-caller **`fullPath=True`** in MRS blocks)
+
+**Status**: Code complete — **`import cgm.core as CGM; CGM._reload()`** in Maya
+
+---
 
 ### October 7, 2026 — MRS body (scaleSetup dyn-parent, pivot naming)
 > **Agent note:** Keep **one** `### October 7, 2026` day block. Add or extend **`####`** subsections below; do **not** replace sibling subsections or delete prior Oct 7 notes.
@@ -75,6 +187,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **Non-digit limb rigRoot**: own **rigJoints** base/end → **masterGroup** / **dynParentGroup** when attach maps to local chain
 - **end** attach → wrist: prefer driver-point match; fallback **second** slot in **ml_dynParentsAbove** enum order (not last / limb root)
 - Avoid stale **`md_dynTargetsParent['end']`** (overwritten in **`get_dynParentTargetsDat`** parent loop)
+- If this module has its own **cog** **`rigRoot`** (**`addCog`** handle or cog-named rigRoot), default to that slot when it appears in the control’s parent list — **not** a parent module’s cog from **`ml_dynParentsAbove`**
 
 **Status**: In progress — finger **end** was defaulting to shoulder (index 1); digit path still tuning
 
@@ -564,9 +677,13 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] Eye lid tessellation — `get_meshFromNurbs` `general` mode (`numLidSplit_u` / `numLidSplit_v`)
 - [ ] Broader eye rig constraint audit (if issues surface in production)
 
-### Handle proxy geo + puppet unify (Oct 7)
+### Handle proxy geo + puppet unify (Oct 7–9)
 - [x] **`geoOnly`** / **`geoAdd`** handle proxy paths; **`comboMesh`** → **`geoAdd`** normalize
 - [x] **`_proxy_geo_unlock_for_edit`** before proxy geo **`colorControl`**
+- [x] **`proxySetColorAdded`** (default on) — skip proxy/puppet geo shaders when off; batch **`puppetMesh_colorGeo`** via **`block_proxy_skip_shader_assignment`**
+- [x] **`proxySetColorAdded`** on **`shared_dat`** **`proxySurface`** UI list
+- [ ] Maya-verify **`proxySetColorAdded` off** on textured Proxy Geo props
+- [ ] Maya-verify **`proxyGeoCap none`** on handle castMesh (open ends)
 - [x] **`puppetMesh_create`** skinned + proxy **`polyUniteSkinned`**; unite result **`[0]`** fix
 - [x] **`GEO.is_reversed`** mag-based normal (no **`normalizeList`** ZeroDivisionError)
 - [x] Puppet normal-check routing on unified mesh (handle pre-unite; skip limb over-flip)
@@ -611,6 +728,12 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] **cgm menu** **Rigging Utils → Flags** — same four actions
 - [x] **Query → Distance** — **`resultWarning`** on **`func_process`** for status-line readouts
 - [ ] Optional: toolbox Near/Far distance buttons — same **`resultWarning`** if artists want parity with menu
+
+### Limb roll segment mid IK (Oct 9)
+- [x] **`segmentMidIKSetup`** + **`limb_segment_mid`** (ribbon, ribbonLive, prntConstraint, linear/cubic track)
+- [x] **`segmentMidIKControl`** vs **`none`** setup — mid in influences without follow rig
+- [x] **`squashSkipAim`** on limb roll **`IK.ribbon` / `IK.curve`**
+- [ ] Maya-verify all **`segmentMidIKSetup`** modes on production arm/leg roll setup
 
 ### MRS scaleSetup dyn-parent + pivot naming (Face26)
 - [x] Pivot result **`{partName}_pivotResult`** / **`{partName}_PivotResult`** (handle **`rig_frame`**, segment, limb ×2)
@@ -823,15 +946,20 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **nCloth short panels**: fabric **`bangs_firm`** — high stretch/compression, low bend, moderate damp; **`inputMeshAttract` ≤ ~0.08** on head-follow cages (not **`inputAttract`** preset)
 - **scaleSetup dyn-parent**: default enum from block **attachPoint** on rebuilt **`dynParents`**; digit limbs gated by **`_LIMB_TEMP_SKIP_SCALE_SETUP_DIGIT`** until finger attach verified
 - **Pivot result naming**: **`{partName}_pivotResult`** on the same DAG null as **`pivotResultDriver`**; created in handle **`rig_frame`** (not prerig); **`pivots_setup`** parents that null at end of pivot chain — rebuild module for new names
+- **Segment followParentBank**: Limb-style parent bank at **`rigRoot`**; **`rig_followParentBankSetup`** after **`rig_frame`**; parent pivot in **`ml_dynParentsAbove`**; space menu **`followParentBank`** + parent **`_PivotResult`** alias — default **off** on Segment; see **`Feature_MRSWiring.md`**
+- **cgmMeta hierarchy**: **`asMeta=True`** on **`getParent`** / **`getChildren`** / **`getAllChildren`** / siblings / shapes / **`getListPathTo`** → **`_hierarchyQueryFullPath`** forces **`fullPath=True`** on **`listRelatives`**; string return paths keep per-method **`fullPath`** defaults — see **`Feature_CgmMetaAPI.md`**
 - **Handle proxyType**: **`geoOnly`** = Proxy Geo only; **`geoAdd`** = cast + Proxy Geo (legacy **`comboMesh`**); **`proxyGeo_add`** unlocks override attrs before **`color_mesh`** / **`colorControl`**
+- **Handle proxy shaders**: **`proxySetColorAdded`** (default **on**) — off = keep source materials on proxy/puppet geo; **`block_proxy_skip_shader_assignment`** in **`block_utils`**
+- **Proxy caps vs root**: **`proxyGeoCap`** `none` / `both` — close open tube ends (`polyCloseBorder` on handle cast); **`proxyGeoRoot`** `none` / `loft` / `ball` — segment/limb base piece via **`mesh_proxyCreate`** (segment default **`loft`**, not locked on)
 - **Puppet unify**: handle skinned + limb proxies via **`polyUniteSkinned`**; **`puppetMesh_normalCheck`** scoped on unified path to avoid double-flipping limb proxy geo
 - **Form sub shaper track curves**: rename **`{p_nameBase}_seg_{i}_trackCrv`** so POC **`inputCurve`** does not collide when multiple blocks are in form; shared path **`UTILS.form_segment`** + limb inline form
 - **Head neck form aim**: same **`formAim`** / **`shapersAim`** / **`shapersAimUp`** contract as segment — wired through **`form_segment`** when **`neckBuild`**
 - **Head neck segment ribbon**: **`rig_segments`** **`IK.ribbon`** kwargs match segment; **`additiveScaleEnds`** not tied to **`scaleSetup`** on head squash dict (live surface + aim **`scaleZ`**)
+- **Limb roll seg mid IK**: **`segmentMidIKControl`** = create + influences; **`segmentMidIKSetup`** = follow only; **`limb_segment_mid`** per roll (not **`segment_mid`**); **`squashSkipAim`** on roll ribbons — **`Feature_MRSWiring.md`**
 - **TD rig flags**: **`RIGGING.dag_lock`** / **`standard_attrs_*`** → **`cgmObject`**; toolbox + **Rigging Utils → Flags**
 - **Query distance UX**: **`func_process(..., resultWarning=True)`** → **`log.warning`** for **Query → Distance** (not **Surface Nodes**)
 
 ---
 
-*Last Updated: October 7, 2026 (TD toolbox/menu rig flags; Query distance warnings; head neck ribbon; Builder scene-load; form trackCrv; scaleSetup; handle proxy; puppet mesh; Init Sim + preset apply isolation)*
+*Last Updated: October 9, 2026 (Limb segmentMidIKSetup + squashSkipAim; Handle proxySetColorAdded; Segment followParentBank; cgmMeta hierarchy)*
 *Branch Status: Active*

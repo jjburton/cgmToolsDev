@@ -4,7 +4,7 @@ Living inventory of **`cgm/core/cgm_Meta.py`** (~6k lines) and closely related *
 
 **Related rules:** **`cgm-runtime-meta-not-strings`**, **`maya-cmds-strings-only`**, **`cgm-meta-naming-hierarchy`** (`m*` / `ml_*` / `md_*`; new edits first).
 
-**Revision:** 2026-09-15 — session reload / **`mClass`** registry order; module vs instance APIs.
+**Revision:** 2026-10-09 — hierarchy getters force **`fullPath=True`** on Maya query when **`asMeta=True`** (**`_hierarchyQueryFullPath`** in **`cgm_Meta.py`**). 2026-09-15 — session reload / **`mClass`** registry order; module vs instance APIs.
 
 **Reload / registry:** [`Feature_DynSimTool.md`](Feature_DynSimTool.md) **Reload contract** (reference tool). Rules: **`cgm-reload-mod`** § Meta / `mClass` — **no partial meta reload in tools**; **`cgm-meta-and-existing-patterns`**.
 
@@ -179,6 +179,7 @@ Implementation delegates to **`attribute_utils`** on **`self.mNode`**.
 | **`getParents`**, **`getSiblings`** | Ancestor chain / same-level siblings. |
 | **`getChildren`**, **`getDescendents` / `getAllChildren`** | Filter by **`type`** (default transform). |
 | **`getShapes`**, **`getListPathTo(target)`** | Shape list; path between nodes. |
+| **`asMeta=True`** on any hierarchy getter above | **`listRelatives` / path helpers** always query with **`fullPath=True`** ( **`_hierarchyQueryFullPath`** ); **`fullPath`** kw only applies when **`asMeta=False`**. |
 | **`isParentTo`**, **`isChildTo`**, **`isVisible`** | Relationship / visibility checks. |
 
 ### Transform, pivot, bounding box

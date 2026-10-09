@@ -187,7 +187,24 @@ Maya **inverts the selection row background**. Light `itc` values (pastel blue, 
 - Sort: folders first, then files; case-insensitive name within group.
 - Dir tint: `SCENE_LIST_ITC_DIR`; file tint: `SCENE_LIST_ITC_FILE` (see table above).
 - Filter matches **both** `.item` and `.alias` (typing `rig` finds `+ rig/`).
-- **Show all files** toggles reload SubType + Variation + Version lists.
+- **Show all files** toggles reload SubType + Variation + Version lists (when `hasSub`, also variation/version columns; type-only file layouts reload panel 2 only).
+
+**Navigation depth (filesystem walk, October 2026)** — column count follows **immediate children** of the current browse path, not project `hasSub` / `hasVariant` flags on asset types (except explicit **`hasVariant: false`** in project content, which disables the variation tier).
+
+| On-disk layout under selected type (`path_subType`) | Visible columns (after asset) |
+|---------------------------------------------------|-------------------------------|
+| Only `.ma`/`.mb` (no child folders after `dirMask`) | **Type** menu + **panel 2 scroll** (files). **Version column off** — do not duplicate files into column 4. |
+| Child folders (± loose files at type root) | **Type** + **Sets** (dirs and files in one scroll). **Version** when a **folder** row is selected or when versions live under set/variation paths. |
+| Set folder with only scenes | **Sets** + **Version** (no variation column). |
+| Set folder with child folders (± loose scenes at set root) | **Sets** + **Variation** (subfolders only) + **Version** (scenes in selected variation dir, or at set root when nothing selected / mixed set). |
+
+**Properties** (runtime, per current selection):
+
+- **`hasSub`** — `True` when `path_subType` has filtered child **directories** (`_dir_children_dirs`). `False` → `LoadVersionList` fills **panel 2** (`subTypeSearchList`), not the version scroll.
+- **`hasVariant`** — `True` when selected **set** (`path_set`) has filtered child **directories**. Variation list lists **folders only**; loose scenes at set root appear in the **version** column. Project **`hasVariant: false`** forces variation off.
+- **`_version_column_should_show`** — hides version when the selected sets/variation row is a **file** (`b_subFile` / `b_varFile`), or when layout is type-only files (`not hasSub`).
+
+**Navigation API** (republish after disk/save): `_republish_navigation_lists`, `_navigate_to_scene_file`, `_navigate_to_scene_parts`, `_navigation_tokens_from_focus_path`. **Export Selection** uses `_export_selection_directory` (set path when `hasSub`, type root when not).
 
 **Folder marker (not icons)**: Maya **`iconTextScrollList` does not render per-row icons** from cmds (no `-image` on append; `numberOfIcons` only reserves empty gutter). Use **alias prefix** instead — dirs: `+ rig/` via `SCENE_LIST_DIR_ALIAS_PREFIX` + trailing `/`; files: plain basename. Pair with folder-first sort + dir `itc` tint.
 
@@ -521,6 +538,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
 | 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
 | 2026-08-31 | cgmAnimClip Layer optionMenu: rebuild with `itemListLong`, not `MelOptionMenu.clear` |
 | 2026-08-31 | cgmAnimClip Layer: `New` is a command item — do not store it in the optionVar |

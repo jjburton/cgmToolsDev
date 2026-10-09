@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Active — code complete on Face26; Maya-verified for skin-unify puppet path and geoGroup stability
-- **Last Updated**: September 4, 2026
+- **Last Updated**: October 9, 2026
 - **Audience**: Dev / TA — design contract for MRS **module proxy mesh**, **puppet mesh**, and **batch post** mesh steps
 - **Purpose**: Canonical reference for how rig blocks build display/geo mesh, how face blocks (`muzzle`, `brow`, `eye`) align with body blocks (`segment`, `limb`, `head`), and how puppet-level unify/skin routing works without corrupting puppet hierarchy (`geoGroup`, armature).
 
@@ -96,7 +96,7 @@ flowchart TD
     I -->|yes| J[verify_proxyMesh puppetMeshMode=True]
     I -->|no| K[create_simpleMesh skin=True]
     K --> L[puppetMesh_normalCheck]
-    L --> M{puppet_mesh_self_colored?}
+    L --> M{block_puppet_mesh_self_colored?}
     M -->|no| N[puppetMesh_colorGeo]
     M -->|yes| O[keep per-part shaders e.g. eye]
     J --> P[ml_proxy]
@@ -150,7 +150,7 @@ Used in `block_utils.puppetMesh_create`, `puppet_utils.puppetMesh_create`, and `
 | `cgm/core/mrs/lib/block_utils.py` | `block_proxy_mesh_flow`, `puppetMesh_create`, `create_simpleMesh`, `create_simpleLoftMesh`, mesh helpers |
 | `cgm/core/mrs/lib/puppet_utils.py` | Puppet-level `proxyMesh_verify`, `puppetMesh_create`; `groups_verify` |
 | `cgm/core/mrs/lib/batch_utils.py` | Post rig: `proxyMesh_verify` → `puppetMesh_create` |
-| `cgm/core/mrs/lib/shared_dat.py` | `proxyBuild` / `meshBuild` in `proxySurface` UI group |
+| `cgm/core/mrs/lib/shared_dat.py` | `proxySurface` UI group (`meshBuild`, `proxyBuild`, `proxyGeoCap`, `proxySetColorAdded`, …) |
 | `cgm/core/rig/create_utils.py` | `get_meshFromNurbs` + `GEO.normalCheck` on tessellate |
 | `cgm/core/mrs/lib/builder_utils.py` | `create_loftMesh` + `GEO.normalCheck` |
 
@@ -170,6 +170,29 @@ Used in `block_utils.puppetMesh_create`, `puppet_utils.puppetMesh_create`, and `
 | `puppetMesh_create(...)` | Block or puppet entry; unified skin/proxy split |
 | `puppetMesh_delete(self)` | Block-context delete via `puppet_mesh_delete_existing` |
 | `create_simpleMesh(self, skin=, ...)` | Dispatches to block module or `create_simpleLoftMesh` |
+| `proxy_geo_cap_enabled(mBlock)` | `True` when `proxyGeoCap` is `both` — run `polyCloseBorder` / guided caps on open tube ends |
+| `proxy_mesh_cap_after_nurbs_tessellate(...)` | Head and similar: full-mesh close after nurbs tessellate when caps enabled |
+
+### Proxy end caps vs root geo (`proxyGeoCap`, `proxyGeoRoot`)
+
+These attrs are **not** the same:
+
+| Attr | UI group | Enum / type | Role |
+|------|----------|-------------|------|
+| **`proxyGeoCap`** | `proxySurface` | `none` \| `both` | **Close open ends** after cast/tessellate/segment slices — typically **`polyCloseBorder`** (or curve-guided caps in `block_utils`). **`both`** = capped ends (often reads as a filled/rounded plug on a tube cut). **`none`** = leave open borders. |
+| **`proxyGeoRoot`** | `post` | `none` \| `loft` \| `ball` | **Extra base/root** geometry on limb/segment proxy via `mesh_proxyCreate` (`ballBase` / `ballMode`). Not the same as capping a cut face. |
+
+**Defaults (typical new blocks)**
+
+| Block | `proxyGeoCap` | `proxyGeoRoot` |
+|-------|---------------|----------------|
+| **handle** | `both` | *(attr not used on handle proxy build)* |
+| **segment** | `both` (when attr present) | **`loft`** (`d_defaultSettings` index `1`) — **not** always on; set **`none`** to disable root ball/loft (e.g. **`earUp`** profile uses `0`) |
+| **limb** | per profile | often **`loft`** on leg profiles; foot paths may add **`proxyEnd`** splits separately |
+
+**Handle castMesh** caps: `_handle_proxy_finalize_mesh` / `_proxy_geo_cap_enabled` in `handle.py` — mirrors `proxy_geo_cap_enabled` in `block_utils` for limb/segment/head.
+
+**Runtime gate for root geo** (segment example): `if mBlock.proxyGeoRoot:` then pass `ballBase=True` and `ballMode` enum string into `mesh_proxyCreate`; enum index **`none`** (`0`) is falsy → root off.
 
 ### Head `create_simpleMesh` invariants
 
@@ -217,9 +240,16 @@ When `neckBuild` is on (or multiple visible head proxy pieces), the block runs i
 
 ### Handle block (`simple/handle.py`)
 
-| Attr | Default | Artist workflow |
-|------|---------|-----------------|
-| `proxySetColorAdded` | `True` | Turn **off** when proxy geo should keep its existing materials (imported/textured mesh). When off, skips cgm proxy shaders on form `proxyHelper`, Proxy Geo Add, `create_simpleMesh`, `build_proxyMesh`, and batch `puppetMesh_colorGeo`. Does not change rig control coloring. |
+| Attr | UI group | Default | Artist workflow |
+|------|----------|---------|-----------------|
+| `proxySetColorAdded` | `proxySurface` | `True` | Turn **off** when proxy geo should keep its existing materials (imported/textured mesh). When off, skips cgm proxy shaders on form `proxyHelper`, Proxy Geo Add, `create_simpleMesh`, `build_proxyMesh`, and batch `puppetMesh_colorGeo`. Does not change rig control coloring. |
+| `proxyGeoCap` | `proxySurface` | `both` | Set **`none`** to skip `polyCloseBorder` on cast/tessellate proxy pieces (open ends at cuts). |
+
+### Segment / limb proxy root (reference)
+
+| Attr | Default (segment) | Artist workflow |
+|------|-------------------|-----------------|
+| `proxyGeoRoot` | `loft` | Set to **`none`** to drop the extra root/base proxy piece; **`ball`** / **`loft`** modes feed `mesh_proxyCreate`. |
 
 ### Batch post toggles (`batch_utils` kws)
 
@@ -249,6 +279,12 @@ When `neckBuild` is on (or multiple visible head proxy pieces), the block runs i
 - [ ] Step 2 builds puppet proxy dupes with skin copied (`SKIN.transfer_fromTo` / module path)
 - [ ] Proxy unify uses `polyUnite` (not skinned unite)
 
+**Handle — proxy materials and caps**
+
+- [ ] `proxySetColorAdded` on: Proxy Geo Add and puppet mesh get side proxy shaders (baseline)
+- [ ] `proxySetColorAdded` off: imported/textured geo keeps materials; batch `puppetMesh_colorGeo` skipped
+- [ ] `proxyGeoCap` `none`: castMesh / tessellate leaves open ends (no `polyCloseBorder`)
+
 **Body / mixed puppet**
 
 - [ ] Segment/limb/head participate in skin-unify when `skin=True`
@@ -270,7 +306,8 @@ import cgm.core.mrs.blocks.organic.head as HEADBLOCK
 import cgm.core.mrs.blocks.organic.muzzle as MUZZLEBLOCK
 import cgm.core.mrs.blocks.organic.brow as BROWBLOCK
 import cgm.core.mrs.blocks.organic.eye as EYEBLOCK
-for m in (BLOCKUTILS, PUPPETUTIL, HEADBLOCK, MUZZLEBLOCK, BROWBLOCK, EYEBLOCK):
+import cgm.core.mrs.blocks.simple.handle as HANDLEBLOCK
+for m in (BLOCKUTILS, PUPPETUTIL, HEADBLOCK, MUZZLEBLOCK, BROWBLOCK, EYEBLOCK, HANDLEBLOCK):
     cgmGEN._reloadMod(m)
 ```
 
@@ -304,6 +341,7 @@ for m in (BLOCKUTILS, PUPPETUTIL, HEADBLOCK, MUZZLEBLOCK, BROWBLOCK, EYEBLOCK):
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-10-09 | Face26 / doc pass | Handle `proxySetColorAdded` + `proxyGeoCap`; `proxyGeoCap` vs `proxyGeoRoot`; segment root default notes; checklist + reload snippet |
 | 2026-09-04 | Face26 / doc pass | Initial feature doc: face `proxyBuild`/`meshBuild`, routing, helpers, geoGroup invariants, head neckBuild fix |
 | 2026-09-03 | Face26 | Normals, `puppetMesh_colorGeo`, skin-unify proxy skip |
 | 2026-09-02 | Face26 | Face proxy/puppet pipeline; brow/eye/muzzle `build_proxyMesh` refactor |
