@@ -3,7 +3,7 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: October 9, 2026 (Limb roll `segmentMidIKSetup` + `squashSkipAim`; Handle `proxySetColorAdded`; Scene browser; Segment `followParentBank`; cgmMeta hierarchy)
+**Last Updated**: October 13, 2026 (Send To Build: skip open-scene prechecks when queued path ≠ open scene)
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
@@ -46,6 +46,23 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — **`IK.ribbon`** arcLength squash aim-scale hookup (shared with segment blocks)
 
 ## Timeline
+
+### October 13, 2026 — Send To Build: skip open-scene checks unless paths match
+
+**What**: Scene **Send To Build** queues a browser file into MRS Build (`ui_toStandAlone.l_files`). **Build** no longer runs interactive rig prechecks or dirty-save gating against the wrong open scene. When the queued path **matches** the open scene (`loc` / `sn`, `normpath`), behavior is unchanged (prechecks + dirty prompt). Batch still opens the queued file in mayapy via `process_blocks_rig`.
+
+**Files**:
+- EXTENDED: `cgm/core/mrs/Builder.py` — `ui_toStandAlone.uiFunc_process`: resolve queue before prechecks; `open_matches_queue`; `skip_prechecks` when queue ≠ open path; gate `fileDirtyCheck` on match only
+
+**Decisions**:
+- Infer match from `l_files` + path compare — no Scene-side flag
+- Empty MRS Build queue (shelf) still falls back to current scene → prechecks + dirty when paths align
+
+**Verify in Maya**: (1) open A, Send To Build on B → Build without precheck abort from A; (2) open B, Send To Build on B → prechecks + dirty if modified; (3) shelf MRS Build, empty queue → unchanged.
+
+**Status**: Code in tree — Maya verify matrix above
+
+---
 
 ### October 9, 2026 — Limb roll segment mid IK (`segmentMidIKSetup`)
 
@@ -708,6 +725,8 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 ### Build / Scene (Face26)
 - [x] `resolve_build_output_path` in batch utils
 - [x] `SendToBuild` P4 prepare on existing BUILD output path
+- [x] MRS Build `uiFunc_process`: skip interactive prechecks / dirty gate when queued path ≠ open scene (match path → unchanged)
+- [ ] Maya-verify Send To Build mismatch / match / empty-queue shelf (see Oct 13 timeline)
 
 ### MRS form — sub shaper track curves (Oct 7)
 - [x] **`{p_nameBase}_seg_{i}_trackCrv`** rename in **`limb.py`** form sub-shaper loop
@@ -837,8 +856,9 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 ##### 5. Build output path + Scene send-to-build
 - `batch_utils.resolve_build_output_path` — version file → `*_BUILD.mb` sibling
 - `Scene.SendToBuild` — `PATHUTIL.prepare_maya_scene_for_save` on existing BUILD output before MRS Build
+- `Builder.ui_toStandAlone.uiFunc_process` — when queued build path ≠ open scene, skip interactive rig prechecks and dirty-save prompt; same path as open scene keeps prior behavior
 
-**Files**: `batch_utils.py`, `Scene.py`
+**Files**: `batch_utils.py`, `Scene.py`, `Builder.py`
 
 ##### 6. cgmSimChain — dynFK segment length + presets
 - **`CURVES.polyline_length_fractions`**: chord-length 0–1 fractions for polyline joint spacing

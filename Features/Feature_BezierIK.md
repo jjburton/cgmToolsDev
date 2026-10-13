@@ -28,6 +28,7 @@
 | `scaleSetup` on | FK/IK → blend: **parent** `blendChainsBy` + **`blendChainsScaleByAttr`** (not scaleConstraint) |
 | `squash` **simple** + `scaleSetup` | `IK.bezier_spline_stretch` on IK chain (`ml_ikUse` with spline end joint) |
 | `segmentStretchBy` | **translate** or **scale** — passed to `bezier_spline_stretch` |
+| `squashMeasure` | **arcLength** (default, production) — global driver `curveInfo` ratio; **pointDist** — *(experimental)* per-segment `distanceDim` on driver **POCI** positions (bind U; scale stretch). Translate stretch may track joint U via **nearestPointOnCurve** → POCI `parameter` |
 
 ### Out of scope (this feature doc)
 
@@ -94,10 +95,13 @@ Hidden POCI **driver** curve + visible **bezierIKCurve** + ikSpline IK handle. R
 
 Arc-length stretch from **driver curve** (`bezierIKDriverCurve` on rigNull — POCI driver, not CV rig curve).
 
+**Note:** Block **`squashMeasure` → `pointDist`** (per-segment driver distances) is **experimental** for bezier scale/stretch; default **`arcLength`** for production. Segment **Step Build → prechecks** emits a warning when `pointDist` is selected.
+
 - `finalRatio = 1 + stretch * (arcRatio - 1)` (`stretch` attr on settings)
 - **translate**: per-segment `translate` on aim axis × `finalRatio`; secondary scales via squash blend
 - **scale**: aim-axis scale × `finalRatio`
 - Volume driver: see `_bezier_stretch_volume_driver` in `ik_utils` (translate vs scale paths differ)
+- **`globalScalePlug`**: Segment passes **`get_blockScale` / `segMeasure`** master scale (`mPlug_masterScale`) — drives arc-length normalize and **pointDist** segment ratios (same cancel as ribbon/spline IK)
 
 ### `RIGBEZIER.bezier_controls_wire_from_handles`
 
@@ -128,7 +132,7 @@ flowchart TD
 |-------------------|---------|
 | `bezierIKDriverCurve` | Hidden driver for stretch `curveInfo` (child of rigNull from `rigFrame_utils.bezier`) |
 | `bezierIKSubControls` | Tangent sub control joints |
-| `bezierIKTrackCurves` | Linear track curves (aux) |
+| `bezierIKTrackCurves` | Linear track curves (aux); `overrideVisibility` → settings `result_IKon` (FK/IK vis) |
 | `bezierIKSubsBase`, `bezierIKSubsMidN`, `bezierIKSubsEnd` | Subs per main IK slot |
 
 Session build buffers on block instance: `md_bezierIKSubsBySlot`, `ml_bezierIKSubControls`, `ml_bezierIKTrackCurves` — reinit after `MODULECONTROL.register` (`_bezier_ik_reinit_session_meta`).
