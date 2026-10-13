@@ -57,6 +57,7 @@
 | `squash` = simple | With `scaleSetup`, runs `bezier_spline_stretch` after IK + end follow blend |
 | `segmentStretchBy` | `translate` — segment length via joint **translate**; volume squash = linear **1/ratio** on clamped arc ratio. `scale` — aim-axis **scale**; volume = **ratio^-0.5** |
 | Settings `stretch` / `squash` | Created by `bezier_spline_stretch` on settings (or driver fallback) |
+| `squashExtraControl` | Per-joint `{part}_bezier_outFactor_i` on settings; initial values from `squashFactorMin` / `Max` / `Mode` (`MATH.get_blendList`); scales squash via `1 + (volBase - 1) * factor * squash` |
 | End IK `followIK` | Default **0** on bezier (orient blend end only; unlike spline default 1) |
 
 ---
