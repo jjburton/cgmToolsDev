@@ -42,6 +42,10 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 17. **cgmMeta API scope**: [`Features/Feature_CgmMetaAPI.md`](Features/Feature_CgmMetaAPI.md) — **`cgmNode`** / **`cgmObject`** / **`mClass`** subclasses; **no new instance methods without explicit user approval**; **`mClass` edits → prompt user for `CGM._reload`** (never partial meta reload in tool `reload_dependencies()`). Rules: **`cgm-meta-and-existing-patterns`**, **`cgm-reload-mod`**, **`cgm-msglist-patterns`** (`msgList_*` / **`ml_*`** for ordered scene-linked lists). Naming: **`cgm-meta-naming-hierarchy`**.
 
+18. **Bezier IK design contract**: [`Features/Feature_BezierIK.md`](Features/Feature_BezierIK.md) — Segment **`ikSetup=bezier`** + **`segmentType=parent`** (Maya-verified with/without **`scaleSetup`** + squash **simple**). **`RIGFRAME.bezier`**, **`bezier_spline_stretch`** (`segmentStretchBy` translate/scale), **`blendChainsScaleByAttr`**, skeleton **`segmentScaleCompensate`**. **Next:** `segmentType=bezier`. Sine/wave tabled. Prechecks: **Rig → Prechecks** / **Step Build**. Timeline + build matrix: [`Branches/Branch_BezierIK.md`](Branches/Branch_BezierIK.md). Update when changing bezier lib/MRS paths or `Builder.ui_stepBuild` precheck gate.
+
+19. **BlockCreate placement helpers design contract**: [`Features/Feature_BlockCreateHelpers.md`](Features/Feature_BlockCreateHelpers.md) — **`mrsHelpers`** msgList (`helpers_*`), Initialize/Build, height baseline pivots along profile **shapeDirection**, build size/snap, `blockCreate_open` reload. Timeline: [`Branches/Branch_Jan2026.md`](Branches/Branch_Jan2026.md). Update when changing `Helpers.py`, BlockCreate helper UI, or `mrsBlockCreate` entry.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.

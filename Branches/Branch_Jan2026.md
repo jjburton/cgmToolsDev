@@ -3,11 +3,11 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: January 16, 2026  
-**Last Updated**: February 23, 2026  
+**Last Updated**: October 12, 2026  
 **PR**: Pending
 
 ## 🎯 Goals
-Improve ribbon IK attachment configuration and face handle creation flexibility: 1) Add configurable ribbon attachment ends to influences (start/end/both/none), 2) Add flexible parent parameter to face handle creation functions, 3) Pass mStateNull through muzzle block handle creation, 4) Add debug logging for mesh creation operations, 5) Add dynParentModeEnabled option to disable dynParent setup on handle blocks, and 6) Add skeletonMode support to Segment and Head blocks for skeleton parenting control (chain/floating).
+Improve ribbon IK attachment configuration and face handle creation flexibility: 1) Add configurable ribbon attachment ends to influences (start/end/both/none), 2) Add flexible parent parameter to face handle creation functions, 3) Pass mStateNull through muzzle block handle creation, 4) Add debug logging for mesh creation operations, 5) Add dynParentModeEnabled option to disable dynParent setup on handle blocks, 6) Add skeletonMode support to Segment and Head blocks for skeleton parenting control (chain/floating), and 7) Wire BlockCreate placement helpers to **`mrsHelpers`** msgList with shapeDirection-aware height baseline pivots and build-from-helper size/snap.
 
 ## 📚 Related Documentation
 - **[brow.py](../../../repos/cgmToolsPy3/cgm/core/mrs/blocks/organic/brow.py)** - Brow block with ribbon IK setup
@@ -18,6 +18,9 @@ Improve ribbon IK attachment configuration and face handle creation flexibility:
 - **[handle.py](../../../repos/cgmToolsPy3/cgm/core/mrs/blocks/simple/handle.py)** - Handle block mesh creation and dynParent setup
 - **[shared_dat.py](../../../repos/cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py)** - Shared MRS block attributes
 - **[Scene.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Scene.py)** - Scene UI, Export Queue
+- **[Helpers.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Helpers.py)** - BlockCreate placement helpers (`mrsHelpers` msgList, baseline, build snap)
+- **[Builder.py](../../../repos/cgmToolsPy3/cgm/core/mrs/Builder.py)** - BlockCreate UI, `blockCreate_open`, helper init/build wiring
+- **[Feature_BlockCreateHelpers.md](../Features/Feature_BlockCreateHelpers.md)** - Design contract for helper persistence, baseline, and build
 
 ## 🗓️ Timeline
 
@@ -96,6 +99,29 @@ Improve ribbon IK attachment configuration and face handle creation flexibility:
 
 ---
 
+### October 12, 2026 - BlockCreate placement helpers (msgList + baseline pivots)
+**What**: BlockCreate **Helpers** section persists helper transforms on scene node **`mrsHelpers`** via indexed **`helpers_*`** msgList; **Initialize** replaces helpers and stamps baseline/shapeDirection; **Build** creates blocks sized from helper bbox and snaps using baseline-aware pivot rules.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Helpers.py` — `helpers_msglist_*`, legacy migration, `helper_apply_height_baseline` (pivot along **shapeDirection**), `helper_block_size_from_helper`, `helper_snap_block_to_helper`, registered count/names UI row, raycast finalize wiring
+- EXTENDED: `cgm/core/mrs/Builder.py` — `_init_helper_system` msgList, `uiFunc_create` size/orient from helper, `reloadMRSStuff` + `blockCreate_open`
+- EXTENDED: `cgm/core/tools/lib/tool_calls.py` — `mrsBlockCreate` → `blockCreate_open`
+- NEW: `cgmToolsDev/Features/Feature_BlockCreateHelpers.md` — design contract
+
+**Features**:
+- Helpers survive BlockCreate reopen; **Refresh** re-reads msgList from `mrsHelpers`
+- Height baseline **-1 / 0 / +1** places helper pivot on base / center / tip of length axis per profile **shapeDirection** (e.g. `y+` + `-1` → bottom Y; `z-` + `-1` → +Z)
+- Build: `baseSize` from oriented bbox measure; non-zero baseline snaps block **rp** to helper **rp**; baseline 0 keeps castNear mid-side snap
+- `helpers_ensure_mDag` / valid mDag checks after module reload
+
+**Decisions**:
+- Pivot move via `mc.xform` object-space (mesh stays centered on unit cube); no local-Y-only vtx offset
+- shapeDirection taken from BlockCreate profile UI at Initialize; stored on helper as `cgmHelperShapeDirection`
+- Reload Helpers+Builder on `blockCreate_open` so shelf/menu entry matches disk
+
+**Status**: ✅ Complete (Maya verify: Initialize → reopen UI → Build; re-Initialize replace; optional raycast path)
+
+---
+
 ## 📦 Deliverables
 
 ### Ribbon Attachment Configuration
@@ -128,6 +154,14 @@ Improve ribbon IK attachment configuration and face handle creation flexibility:
 - [x] Add skeletonMode enum definition to shared_dat.py ('chain:floating')
 - [x] Implement floating skeleton parent logic (all joints parented to first joint's parent)
 - [x] Maintain chain mode as default for backward compatibility
+
+### BlockCreate placement helpers
+- [x] msgList persistence on `mrsHelpers` (`helpers_0`, …) + legacy singular `helpers` migration
+- [x] Helpers UI registered count/names + dynamic **Build** enable
+- [x] Height baseline pivots along **shapeDirection**; attrs stamped on helpers
+- [x] Build size from helper bbox; snap rp vs castNear by baseline
+- [x] `reloadMRSStuff` / `blockCreate_open` reload **Helpers**
+- [x] Feature doc [`Feature_BlockCreateHelpers.md`](../Features/Feature_BlockCreateHelpers.md)
 
 ### Testing
 - [ ] Code implementation complete

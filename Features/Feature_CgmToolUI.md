@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: September 18, 2026
+- **Last Updated**: October 12, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -13,6 +13,7 @@
 
 - [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) — CCL + link-list UI; canonical example of `cgmListItem` + alias refresh
 - [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — MRS Builder block lists (`cgmScrollList`, `BlockScrollList`)
+- [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — BlockCreate Helpers registered readout + msgList persistence
 - [`Feature_AnimData.md`](Feature_AnimData.md) — cgmAnimClip / mrsAnimClip Dat UI; pinned-chrome hook
 - [`Feature_LibToCore.md`](Feature_LibToCore.md) — `test_UISMOKE` open/close shipped cgm windows (Maya GUI; not behavior). `Close(skipVerify=True)` for `VERIFY_CLOSE`.
 - Module placement — `.cursor/rules/cgm-module-placement.mdc` (UI in `tools/`, shared chunks in `tools/lib/`)
@@ -412,6 +413,20 @@ For header frames (`cgmUIHeaderTemplate`) with minimal vertical slack:
 
 Reference: `uiFunc_set_status_panel()` + Status block in [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py).
 
+### Registered collection status row (BlockCreate helpers)
+
+When a tool owns a **fixed set of scene nodes** (not a scroll list you edit row-by-row), show count + short names in a **read-only status control** plus **Refresh** — same idea as animClip dat status rows.
+
+| Piece | BlockCreate Helpers (`Helpers.buildFrame_helpers`) |
+|-------|-----------------------------------------------------|
+| Canonical data | `self.ml_helpers` from `helpers_msglist_get(mDag)` on **`mrsHelpers`** |
+| Status control | `MelButton` `uiTF_helpersRegistered` — label from `_helpers_registered_summary` (count + comma-separated short names, truncated) |
+| Frame chrome | `Helpers (N)` on collapsible frame label |
+| Refresh | `helpers_ui_update_registered(self, syncFromDag=True)` — re-bind `mDag` after reload |
+| Actions | **Initialize** replaces helpers + msgList; **Build** enabled only when `N > 0` |
+
+Do not parse the status button label to recover helper nodes — always use **`ml_helpers`** / msgList. Domain behavior (baseline pivot, build snap): [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md).
+
 ### Collapsible section helper (optional)
 
 Repeated pattern in newer tools — wrap `MelFrameLayout` + optionVar collapse + inner column kwargs:
@@ -545,6 +560,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 | 2026-08-28 | CLIP CONTENTS: full-width object frames (`adj=True`, no stretch-row wrap); zebra `guiButtonColor` / `guiBackgroundColor` under `guiHeaderColor` section |
 | 2026-08-28 | Even/odd collapsible-row gray (`MATH.is_even` + `bgc`); animFilter + cgmAnimClip CLIP CONTENTS |
 | 2026-08-26 | CGMDAT.ui Save disabled with no path; X clears dat filepath; Save/Save As commit LastLoaded + Recent |
+| 2026-10-12 | BlockCreate Helpers registered status row; cross-ref `Feature_BlockCreateHelpers.md` |
 | 2026-08-20 | Mel widget unique-id persist across Reload Core (`sys._cgmMelWidgetNextKey`); Layout hang at 80% from `exists` walk after `_NEXT_KEY` reset |
 | 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
 | 2026-08-17 | Scene browser popup Delete crash fix: defer Delete menu + `_defer_list_reload_after_delete`; single version delete uses `LoadVersionList` |

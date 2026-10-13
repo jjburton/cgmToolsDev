@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (core MRS; ongoing maintenance)
-- **Last Updated**: October 9, 2026
+- **Last Updated**: October 13, 2026
 - **Audience**: Dev / TA — design contract for block/module/puppet message graphs and build sync (not artist manual prose)
 - **Purpose**: Canonical reference for how `cgmRigBlock`, `cgmRigModule`, and `cgmRigPuppet` stay linked via message attributes, DAG parenting, and cached lists. Use when debugging build regressions, mirror/controller passes, module hierarchy bugs, or attach-point failures.
 
@@ -13,6 +13,8 @@
 
 - [`Feature_SceneExportFlow.md`](Feature_SceneExportFlow.md) — export uses puppet/module sets (orthogonal)
 - [`Feature_DynSimTool.md`](Feature_DynSimTool.md) — dyn drivers collected to puppet space groups
+- [`Feature_BezierIK.md`](Feature_BezierIK.md) — Segment `ikSetup=bezier` rigNull messages (`bezierIKDriverCurve`, sub CV msgLists)
+- [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — BlockCreate placement helpers on `mrsHelpers` (pre-block msgList; not module graph)
 
 ---
 
@@ -434,10 +436,33 @@ Implementation: [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/seg
 
 ---
 
+## Segment Bezier IK (`ikSetup=bezier`)
+
+Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_BezierIK.md). Branch roadmap (parent vs `segmentType` bezier): [`Branches/Branch_BezierIK.md`](../Branches/Branch_BezierIK.md).
+
+**`rigNull` messages** (written in `rigFrame_utils.bezier` / segment `rig_shapes`):
+
+| Plug / msgList | Role |
+|----------------|------|
+| `bezierIKDriverCurve` | Hidden POCI **splineIKCurve** — IK `inCurve` + `bezier_spline_stretch` `curveInfo` |
+| `bezierIKCurve` | Visible Bezier settings curve from `IK.bezier_spline` (when connected) |
+| `ikSplineHandle` | ikSpline IK handle |
+| `bezierIKSubControls` | Tangent sub controls (msgList) |
+| `bezierIKTrackCurves` | Aux track curves between main IK and subs |
+| `bezierIKSubsBase`, `bezierIKSubsMid*`, `bezierIKSubsEnd` | Sub controls per main IK slot |
+
+**Unchanged from ribbon/spline IK**: `ribbonIKDrivers` (end influence locators), `ikJoints`, `blendJoints`, standard IK controls on `rigNull`.
+
+**Precheck**: `ikSetup=bezier` requires `segmentType=parent` until non-parent segment bezier is implemented.
+
+---
+
 ## Revision History
 
 | Date | Summary |
 |------|---------|
+| 2026-10-12 | Cross-ref [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — `mrsHelpers` placement msgList (BlockCreate) |
+| 2026-10-13 | Segment Bezier IK section — rigNull message table + precheck note; cross-ref [`Feature_BezierIK.md`](Feature_BezierIK.md) |
 | 2026-10-09 | Limb roll seg mid IK: track modes via `attachToCurve`; `squashSkipAim` on roll ribbons; `segmentMidIKControl` vs setup enum contract |
 | 2026-10-09 | Segment `followParentBank`: docs (default off, space UI, build table); `rigRoot` bank; parent pivot in `ml_dynParentsAbove` |
 | 2026-10-08 | Limb roll seg mid IK: `segmentMidIKSetup` (segment/head keep `ikMidSetup`) |
