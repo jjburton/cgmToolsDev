@@ -3,7 +3,7 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: October 13, 2026 (Send To Build: skip open-scene prechecks when queued path ≠ open scene)
+**Last Updated**: October 13, 2026 (Scene browser: mixed set folder — loose scenes in Variation with subdirs; Send To Build precheck skip)
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
@@ -64,6 +64,28 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 
 ---
 
+### October 13, 2026 — Scene browser: mixed set + type navigation
+
+**What**: Fixes template **`arm/`** (and similar) where a **set** folder has both variation **subdirectories** (e.g. **`bezierSimple/`**) and a **loose** rig `.mb` at the same level. Browser had been using **set-level mixed** rules from the Oct 9 pass: variation scroll **folders only**, loose scenes in **Version** — so **`Mickey_arm_template_01.mb`** appeared one column too deep while **`+ bezierSimple/`** sat alone in Variation. **Set-level mixed** now lists **dirs + Maya files together in Variation**; **Version** only when a **variation subfolder** is selected (scenes inside that folder). **Type-level mixed** under **`path_subType`** (dirs + loose files at subtype root) stays in **Sets**; guards stop **`path_set`** resolving to the subtype root (stale/empty selection) and skip auto-cascade into child columns until the artist picks a Sets row.
+
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — **`_path_is_subtype_root`**; **`path_set`** empty-token + subtype-root rejection; **`hasVariant`** false at subtype root; **`LoadSubTypeList`** uses **`_dir_children_dirs`** / **`_dir_maya_files`**, deselect + no cascade when type mixed; **`LoadVariationList`** appends loose Maya files when **`_dir_is_mixed(path_set)`**, skips version load at mixed set root; **`LoadVersionList`** / **`_version_column_should_show`** — version only for variation **subdir** paths, not set-root loose files
+
+**Features**:
+- **Sets** (`template` → **`+ arm/`** / base / tail): unchanged — child folders of **`path_subType`**
+- **Variation** ( **`arm/`** selected): **`+ bezierSimple/`** + **`Mickey_arm_template_01.mb`** in one scroll ( **`meta/`** still subject to **`dirMask`** )
+- **Version**: populated only after selecting a variation **directory** (versions under that folder), not for loose files beside variation folders at set root
+
+**Decisions**:
+- Align **set-level mixed** UX with **type-level mixed** (siblings at one depth in one column), not “folders in Variation / files in Version”
+- **`path_set == path_subType`** is never a valid set selection when **`hasSub`** — prevents subtype children being promoted to variation tier
+
+**Verify in Maya**: Scene → **`template`** asset → Sets **`+ arm/`** → Variation shows **`bezierSimple`** + arm template `.mb`; Version empty until **`bezierSimple`** (or other var folder) selected; **Reload Dependencies** or relaunch Scene after sync.
+
+**Status**: Code in tree — Maya verify on AnimShare/export template paths
+
+---
+
 ### October 9, 2026 — Limb roll segment mid IK (`segmentMidIKSetup`)
 
 **What**: Per-roll **Limb** mid IK controls (`controlSegMidIK_{i}`) get the same follow vocabulary as Segment/Head spine mids, but wired **per roll segment** (not full-chain). Artists split **create** vs **follow** with **`segmentMidIKControl`** vs **`segmentMidIKSetup`**. Roll segment **`IK.ribbon` / `IK.curve`** gain **`squashSkipAim`** + **`setupAimScale`** parity with segment/head.  
@@ -121,7 +143,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 **Features**:
 - **asset / type / file** — type menu (panel 2) + file scroll; version panel hidden
 - **asset / type / set / …** — sets column when type folder has subdirs; version and optional variation from selection
-- **Mixed** — loose `.ma` and subfolders at type or set level: dirs in sets/variation scrolls; loose files in sets row or version column per rules above
+- **Mixed** — loose `.ma` and subfolders at **type** level: dirs + files in **Sets**; at **set** level (Oct 13): dirs + files in **Variation**; **Version** only inside selected variation subfolder *(Oct 9 had set-root loose files in Version — revised)*
 - **Export Selection** — starting directory aligned with save-here (`path_set` when applicable)
 
 **Decisions**:
@@ -726,7 +748,10 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] `resolve_build_output_path` in batch utils
 - [x] `SendToBuild` P4 prepare on existing BUILD output path
 - [x] MRS Build `uiFunc_process`: skip interactive prechecks / dirty gate when queued path ≠ open scene (match path → unchanged)
+- [x] Scene browser mixed **set** folder — variation subdirs + loose `.mb` in **Variation** column (Oct 13)
+- [x] Scene browser **`path_set`** / type-root guards + type-level mixed Sets reload (Oct 13)
 - [ ] Maya-verify Send To Build mismatch / match / empty-queue shelf (see Oct 13 timeline)
+- [ ] Maya-verify template **`arm/`** Variation lists **`bezierSimple`** + arm template scene; Version after var folder pick
 
 ### MRS form — sub shaper track curves (Oct 7)
 - [x] **`{p_nameBase}_seg_{i}_trackCrv`** rename in **`limb.py`** form sub-shaper loop
@@ -857,6 +882,7 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 - `batch_utils.resolve_build_output_path` — version file → `*_BUILD.mb` sibling
 - `Scene.SendToBuild` — `PATHUTIL.prepare_maya_scene_for_save` on existing BUILD output before MRS Build
 - `Builder.ui_toStandAlone.uiFunc_process` — when queued build path ≠ open scene, skip interactive rig prechecks and dirty-save prompt; same path as open scene keeps prior behavior
+- Scene browser **mixed set** navigation — loose scenes at set root in **Variation** with variation folders; **`path_set`** cannot alias subtype root (Oct 13)
 
 **Files**: `batch_utils.py`, `Scene.py`, `Builder.py`
 
@@ -978,8 +1004,9 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **Limb roll seg mid IK**: **`segmentMidIKControl`** = create + influences; **`segmentMidIKSetup`** = follow only; **`limb_segment_mid`** per roll (not **`segment_mid`**); **`squashSkipAim`** on roll ribbons — **`Feature_MRSWiring.md`**
 - **TD rig flags**: **`RIGGING.dag_lock`** / **`standard_attrs_*`** → **`cgmObject`**; toolbox + **Rigging Utils → Flags**
 - **Query distance UX**: **`func_process(..., resultWarning=True)`** → **`log.warning`** for **Query → Distance** (not **Surface Nodes**)
+- **Scene browser mixed set**: under selected set folder (**`arm/`**), variation subdirs + loose `.mb` share **Variation** scroll; **Version** = files inside selected variation **subdir** only — see Oct 13 timeline; type-level mixed stays in **Sets**
 
 ---
 
-*Last Updated: October 9, 2026 (Limb segmentMidIKSetup + squashSkipAim; Handle proxySetColorAdded; Segment followParentBank; cgmMeta hierarchy)*
+*Last Updated: October 13, 2026 (Scene mixed set/variation navigation; Send To Build precheck skip)*
 *Branch Status: Active*

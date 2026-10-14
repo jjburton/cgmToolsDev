@@ -455,6 +455,8 @@ Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_
 
 **Precheck**: `ikSetup=bezier` requires `segmentType=parent` until non-parent segment bezier is implemented.
 
+**Controller graph**: `segment.controller_getDat` builds `md['ik']` from segment rigNull plugs + `_bezier_ik_pickwalk_controls` when `bezierIKSubControls` exists — used by puppet `controller_verify` (not limb foot IK message names).
+
 ---
 
 ## Revision History

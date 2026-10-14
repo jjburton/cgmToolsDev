@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 13, 2026 (Step Build rig prechecks in UI; segment parent bezier squash/stretch **Maya-verified**; sine/wave tabled)  
+**Last Updated**: October 14, 2026 (bezier stretch **inflate** layer + limb segment squash-stretch wiring; sine/wave tabled)  
 **PR**: Pending
 
 ## Goals
@@ -28,7 +28,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 
 **Active path for now:** `bezier_spline` → `bezier_controls_add` → optional `bezier_spline_stretch` with `driver_curve=_res['mDriverCurve']` (hidden POCI driver; IK stays on driver until sine stack returns).
 
-**MRS phase (current):** Segment **`ikSetup=bezier`** + **`segmentType=parent`** — `rigFrame_utils.bezier` → `IK.bezier_spline`; main/sub CV rig; spline-style end follow (`followIK` default **0**); **`scaleSetup` + squash `simple`** → `IK.bezier_spline_stretch` (`segmentStretchBy` **translate** / **scale**). FK/IK → blend scale via **`blendChainsScaleByAttr`**. **`segmentScaleCompensate`** on ik/fk/blend at **`rig_skeleton`** when squash on. **Next:** non-parent segment types, limb, sine/wave (tabled).
+**MRS phase (current):** Segment **`ikSetup=bezier`** + **`segmentType=parent`** — shipped / Maya-verified (stretch, squash, scale blend). **Limb `segmentType=bezier`** — per-roll **`rig_segments`** + **`bezier_spline_stretch`** (incl. **`squashExtraControl`** volume factors + **inflate** ramp); shapes/controls pass still in progress with user. **`scaleSetup` + squash `simple`** → stretch on driver; FK/IK scale via **`blendChainsScaleByAttr`** where applicable. **Next:** non-parent **segment** `segmentType=bezier`, limb bezier polish / Maya sign-off, sine/wave (tabled).
 
 ## Related Documentation
 
@@ -37,7 +37,8 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — canonical `spline`, `curve`, `bezier_spline`
 - **[bezier_utils.py](../../cgmToolsPy3/cgm/core/rig/bezier_utils.py)** — Bezier CV control rigs (`bezier_controls_add`)
 - **[rigFrame_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py)** — MRS orchestration (`RIGFRAME.spline`, segment mid IK, etc.)
-- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — `rig_frame` `ikSetup` branches (`spline`, `curve`, ribbon, rp, …); `rig_prechecks` (bezier + parent `segmentType`, …)
+- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — `rig_frame` `ikSetup` branches (`spline`, `curve`, ribbon, rp, …); `rig_prechecks` (bezier + parent `segmentType`, …); bezier stretch + inflate kwargs
+- **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — `segmentType=bezier` roll sections, `_limb_bezier_inflate_slide_global_spec`, `bezier_spline_stretch` per section
 - **[Builder.py](../../cgmToolsPy3/cgm/core/mrs/Builder.py)** — `ui_stepBuild` runs `asRigFactory(mode='prechecks')` before stepped rig layout
 - **[shared_dat.py](../../cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py)** — `ikSetup` enum vocabulary
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — timeline and PR maintenance
@@ -52,7 +53,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 | **`rigFrame_utils.bezier`** orchestration | Done |
 | **Extend `spline` path** instead of separate enum | Rejected for CV Bezier rig clarity |
 
-**Not yet**: limb/head blocks; **`segmentType` bezier** (non-parent); sine/wave on driver.
+**Not yet**: limb bezier **full** build sign-off (shapes/controls); head blocks; **Segment** `segmentType` **bezier** (non-parent); sine/wave on driver.
 
 ### MRS build matrix (target vs status)
 
@@ -275,6 +276,26 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 
 ---
 
+### October 14, 2026 - Bezier stretch inflate + limb segment squash-stretch
+
+**What**: Extended **`IK.bezier_spline_stretch`** with optional **inflate** layer on top of volume squash (does not change volume `outFactor` math). Settings: **`squashInflate`**, **`squashInflateOffset`**, per-index **`{part}_inflateFactor_i`** (`inflateFactorMin/Max/Mode` on Segment + Limb blocks). Offset sampling: shift along chain, lerp adjacent factors (ribbon_seal / `split_blends` style). **Limb** bezier roll sections call stretch with global inflate indices across sections. DG: **`_bezier_stretch_dg_named_node`** (`mc.createNode` + `cgmNode` rename); floor index via **`floorUtil`** + expression (avoid `cgmNode(nodeType='floatMath')`).
+
+**Files**:
+
+- EXTENDED: `cgm/core/rig/ik_utils.py` — inflate factor attrs, offset sample network, `inflateAdd_*`, `extraInflateControl` kwargs
+- EXTENDED: `cgm/core/mrs/blocks/organic/segment.py` — `inflateFactor*` block attrs, stretch caller kwargs
+- EXTENDED: `cgm/core/mrs/blocks/organic/limb.py` — bezier segment stretch, `_limb_bezier_inflate_slide_global_spec`
+- EXTENDED: `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Artist / TA notes**:
+
+- Inflate strength is **`squashInflate`** (default **0**); factor attrs alone do not bulge until it is raised.
+- Rebuild segment/limb **rig_segments** (or full module build) after py3 sync — stale inflate expression/DG from prior builds should be replaced, not patched in place.
+
+**Status**: In py3 — limb bezier segment stretch building; Maya verify inflate + offset on arm template ongoing.
+
+---
+
 ### October 13, 2026 - Segment parent bezier + squash/stretch (Maya-verified)
 
 **What**: MRS Segment build for **`ikSetup=bezier`**, **`segmentType=parent`**: CV main/sub controls, `RIGFRAME.bezier`, end follow, **`scaleSetup` + squash `simple`** → `IK.bezier_spline_stretch` with **`segmentStretchBy`** translate and scale. Squash skeleton **`segmentScaleCompensate`** on ik/fk/blend at **`rig_skeleton`**. Scale setup FK/IK → blend uses **`RIGCONSTRAINT.blendChainsScaleByAttr`** (per-axis `blendTwoAttr`) instead of scaleConstraint (fixes doubled / uneven blend scale). Translate-mode volume squash uses linear **1/clamped ratio** (`_bezier_stretch_volume_driver`).
@@ -351,7 +372,7 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 - [x] `ikSetup` **bezier** in block enum / precheck (parent `segmentType`)
 - [x] Step Build surfaces `rig_prechecks` failures in UI (no GuiFactory traceback)
 - [ ] `segmentType` **bezier** (+ squash/stretch parity with parent)
-- [ ] Other blocks (limb, …)
+- [ ] Limb `segmentType=bezier` — [x] `rig_segments` squash/stretch + inflate kwargs; [ ] shapes/controls / puppet regression
 
 ### Phase 4 — Design contract
 
@@ -424,4 +445,4 @@ None expected until block enum changes; document if existing `spline` behavior s
 ---
 
 *Last Updated: October 13, 2026*  
-*Branch Status: Active — Segment parent bezier + squash/stretch verified; Step Build precheck UX; sine/wave tabled*
+*Branch Status: Active — Segment parent bezier verified; limb bezier segment stretch + inflate in py3; Step Build precheck UX; sine/wave tabled*

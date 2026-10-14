@@ -3,11 +3,11 @@
 ## Status and Overview
 
 - **Status**: In progress — **Maya-verified** for Segment `ikSetup=bezier`, `segmentType=parent`, `scaleSetup` + squash **simple**, `segmentStretchBy` **translate** and **scale**
-- **Last Updated**: October 13, 2026 (Step Build precheck panel)
+- **Last Updated**: October 14, 2026 (bezier stretch inflate / `squashExtraControl`)
 - **Audience**: Dev / TA — design contract for Bezier spline IK on MRS Segment (not artist manual prose)
 - **Branch timeline**: [`Branches/Branch_BezierIK.md`](../Branches/Branch_BezierIK.md)
 
-**Maintenance rule**: Update when changing `IK.bezier_spline`, `IK.bezier_spline_stretch`, `bezier_utils`, `rigFrame_utils.bezier`, or Segment `rig_frame` / `rig_skeleton` / `rig_shapes` bezier paths.
+**Maintenance rule**: Update when changing `IK.bezier_spline`, `IK.bezier_spline_stretch`, `bezier_utils`, `rigFrame_utils.bezier`, or Segment / Limb `rig_segments` bezier squash-stretch paths (`segment.py`, `limb.py`).
 
 **Related**
 
@@ -35,7 +35,8 @@
 - Sine / wave driver stack on hidden POCI curve (**tabled** on [`Branch_BezierIK.md`](../Branches/Branch_BezierIK.md))
 - `segmentType` **bezier** (non-parent) — not built yet
 - `segmentType` ribbon / spline / curve with `ikSetup` bezier (precheck blocks non-parent today)
-- Limb / head / other blocks (grep before extending)
+- Head / other blocks (grep before extending)
+- **Limb** `segmentType=bezier` — roll-section stretch in progress (see § Limb bezier segments); shapes/controls parity still paired with user
 
 ### Roadmap — Segment build combinations
 
@@ -58,7 +59,10 @@
 | `squash` = simple | With `scaleSetup`, runs `bezier_spline_stretch` after IK + end follow blend |
 | `segmentStretchBy` | `translate` — segment length via joint **translate**; volume squash = linear **1/ratio** on clamped arc ratio. `scale` — aim-axis **scale**; volume = **ratio^-0.5** |
 | Settings `stretch` / `squash` | Created by `bezier_spline_stretch` on settings (or driver fallback) |
-| `squashExtraControl` | Per-joint `{part}_bezier_outFactor_i` on settings; initial values from `squashFactorMin` / `Max` / `Mode` (`MATH.get_blendList`); scales squash via `1 + (volBase - 1) * factor * squash` |
+| `squashExtraControl` | Enables per-joint volume **`{base}_outFactor_i`** on settings (`extraSquashControl` in lib). Requires volume squash active on the block path (limb: `_limb_bezier_volume_squash_active`). |
+| `inflateFactorMin` / `Max` / `Mode` | Ramp for **`{partName}_inflateFactor_i`** (defaults mirror squash factor enums). Independent of volume `outFactor` values. |
+| Settings **`squashInflate`** | Additive inflate strength (default **0** — artists must raise above 0 to see inflate). |
+| Settings **`squashInflateOffset`** | ±2 slides the inflate ramp along the chain (`shift = offset × maxIdx/2`; sample index `s = g − shift` with lerp between adjacent factor indices). Limb: **`g`** is global across roll sections (`inflateSlideGlobalCount` / `Start`). |
 | End IK `followIK` | Default **0** on bezier (orient blend end only; unlike spline default 1) |
 
 ---
@@ -103,6 +107,19 @@ Arc-length stretch from **driver curve** (`bezierIKDriverCurve` on rigNull — P
 - Volume driver: see `_bezier_stretch_volume_driver` in `ik_utils` (translate vs scale paths differ)
 - **`globalScalePlug`**: Segment passes **`get_blockScale` / `segMeasure`** master scale (`mPlug_masterScale`) — drives arc-length normalize and **pointDist** segment ratios (same cancel as ribbon/spline IK)
 
+#### Volume squash vs inflate (`squashExtraControl`)
+
+| Layer | Settings attrs | Math (per squash joint) |
+|-------|----------------|---------------------------|
+| Volume | `{base}_outFactor_i` | `1 + (volBase − 1) × outFactor × squash` — unchanged when inflate is added |
+| Inflate | `{part}_inflateFactor_i`, `squashInflate`, `squashInflateOffset` | `volScale + factorSample × squashInflate` (`inflateAdd_*` mult + PMA) |
+
+**Lib kwargs** (Segment + Limb callers): `extraSquashControl`, `extraInflateControl` (inflate attrs can build when `squashExtraControl` is on even if volume squash is off on a given code path — **wiring** still requires the volume per-joint squash network today: `ml_inflate_pending` is populated only inside `extraSquashControl` stretch branches). `inflateFactorBaseName`, `inflateSlideGlobalCount`, `inflateSlideGlobalStart`, `inflateFactorMin/Max/Mode`.
+
+**Inflate factor sampling** (`_bezier_stretch_inflate_offset_sample_network`): clamped `s` → floor index + fractional lerp via **choice** + **blendTwoAttr**; floor from a hidden **`floorUtil`** transform + expression (`floor(sampleS)`). DG nodes are created with **`_bezier_stretch_dg_named_node`** (`cgmMeta.cgmNode(mc.createNode(type))` then `rename`) — do not use `cgmNode(nodeType='floatMath')` (invalid / wrong node type in scene). All `{part}_inflateFactor_0..maxIdx` attrs are ensured on settings before sampling (`_bezier_stretch_inflate_factor_plugs_ensure`).
+
+**Rebuild**: Changing inflate DAG requires re-running **`bezier_spline_stretch`** (module segment/limb build), not attr-only refresh. Reload **`ik_utils`** after py3 edits.
+
 ### `RIGBEZIER.bezier_controls_wire_from_handles`
 
 Index-aligned main IK cubes + tangent sub spheres; subs parent to main handle (not main `masterGroup`).
@@ -137,6 +154,8 @@ flowchart TD
 
 Session build buffers on block instance: `md_bezierIKSubsBySlot`, `ml_bezierIKSubControls`, `ml_bezierIKTrackCurves` — reinit after `MODULECONTROL.register` (`_bezier_ik_reinit_session_meta`).
 
+**Puppet / module controllers:** `segment.controller_getDat` must list bezier mains + subs in pickwalk order for `controller_verify` (reset, cycle, etc.). `rig_controls` writes `controlsIK` msgList; `d_controlDat_links` includes `bezierIKSubControls` for `controls_getDat` repair paths.
+
 ### Squash skeleton invariant
 
 When `b_squashSetup` and IK on: **`rig_skeleton`** calls `_squash_ik_fk_blend_segment_scale_compensate` — **`segmentScaleCompensate = True`** on **ik**, **fk**, and **blend** chains (not segment measure joints).
@@ -144,6 +163,10 @@ When `b_squashSetup` and IK on: **`rig_skeleton`** calls `_squash_ik_fk_blend_se
 ### Aim axis for stretch
 
 `_bezier_ik_stretch_aim_axis` uses `d_orientation['stringAim']`, not rotate-order string alone.
+
+### Limb bezier segments
+
+**`limb.py`**: `segmentType=bezier` per roll section — `_limb_rig_segments_bezier_squash_stretch` → `IK.bezier_spline_stretch` on section IK chain with shared settings, `inflateFactorBaseName='{partName}_inflate'`, and `_limb_bezier_inflate_slide_global_spec` for cross-section inflate indices. Same stretch/squash/inflate contract as Segment; volume squash gated by `_limb_bezier_volume_squash_active`.
 
 ---
 
@@ -160,6 +183,7 @@ When `b_squashSetup` and IK on: **`rig_skeleton`** calls `_squash_ik_fk_blend_se
 
 | Date | Summary |
 |------|---------|
+| 2026-10-14 | `bezier_spline_stretch` additive inflate (`squashInflate`, separate inflate factor ramp, offset slide); limb + segment block attrs; DG named-node + floor util sampling (no `floatMath`) |
 | 2026-10-13 | Docs: MRS build matrix (parent vs bezier `segmentType`); roadmap table in feature + branch |
 | 2026-10-13 | Step Build: `ui_stepBuild` runs `mode='prechecks'` first; failures listed in window |
 | 2026-10-13 | Segment parent bezier: stretch translate/scale, SSC at skeleton, `blendChainsScaleByAttr`, volume driver split for translate vs scale |
