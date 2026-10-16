@@ -40,8 +40,8 @@ In **`tools/`**, **`rig/`**, **`mrs/`**, and their **`lib/`** call chains for sc
 
 Many **`cgmMeta`** query methods take **`asMeta`** (default varies by method):
 
-- **`asMeta=True`** → meta instance(s) for the next rig step.
-- **`asMeta=False`** → DAG **`str`** when the **next** step is **`mc.*`** or MEL only.
+- **`asMeta=True`** → meta instance(s) for the next rig step. **`cgmObject`** / **`cgmNode`** hierarchy getters (**`getParent`**, **`getParents`**, **`getSiblings`**, **`getChildren`**, **`getDescendents` / `getAllChildren`**, **`getShapes`**, **`getListPathTo`**) always query Maya with **`fullPath=True`** via **`_hierarchyQueryFullPath`** — do not pass **`fullPath=True`** only for meta resolve.
+- **`asMeta=False`** → DAG **`str`**; **`fullPath`** kw controls short vs long names (defaults vary per method — e.g. **`getAllChildren`** defaults short, **`getChildren`** defaults long).
 
 **Iron rule at the boundary**: meta in the middle; **`str`** only at **`mc.*`** / MEL — **`.mNode`**, **`p_nameLong`**, or **`getParent(asMeta=False)`**. Never pass **`m*`** into **`mc.*`**.
 

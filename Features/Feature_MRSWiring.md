@@ -12,7 +12,9 @@
 **Related docs**
 
 - [`Feature_SceneExportFlow.md`](Feature_SceneExportFlow.md) — export uses puppet/module sets (orthogonal)
-- [`Feature_SimChain.md`](Feature_SimChain.md) — dyn drivers collected to puppet space groups
+- [`Feature_DynSimTool.md`](Feature_DynSimTool.md) — dyn drivers collected to puppet space groups
+- [`Feature_BezierIK.md`](Feature_BezierIK.md) — Segment `ikSetup=bezier` rigNull messages (`bezierIKDriverCurve`, sub CV msgLists)
+- [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — BlockCreate placement helpers on `mrsHelpers` (pre-block msgList; not module graph)
 
 ---
 
@@ -480,7 +482,7 @@ Run in Maya after wiring changes:
 ## Related Documentation
 
 - **[Feature_SceneExportFlow.md](Feature_SceneExportFlow.md)** — export bake/prep uses puppet/module qss sets (orthogonal)
-- **[Feature_SimChain.md](Feature_SimChain.md)** — dyn drivers collected to puppet `worldSpaceObjects` / `puppetSpaceObjects` groups
+- **[Feature_DynSimTool.md](Feature_DynSimTool.md)** — dyn drivers collected to puppet `worldSpaceObjects` / `puppetSpaceObjects` groups
 - **[Guides/NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature doc conventions
 
 ### Code references (py3)
@@ -494,9 +496,124 @@ Run in Maya after wiring changes:
 
 ---
 
+## Limb segment mid IK (`segmentMidIKSetup`)
+
+Limb **roll** segments (per `numRoll` / `md_roll` index) can expose a mid IK control **`controlSegMidIK_{rollIndex}`**. Spine/neck mids on **Segment** / **Head** still use **`ikMidSetup`** + prerig **`ikMidHelpers`** and **`RIGFRAME.segment_mid`** (full handle chain). **Limb only** uses **`segmentMidIKSetup`** and **`RIGFRAME.limb_segment_mid`** (localized to that roll’s segment handles).
+
+### Block attrs (Limb)
+
+| Attr | Role |
+|------|------|
+| **`segmentMidIKControl`** | When on (and roll joint count allows): create mid control + **`segmentMidHandles_*`**, shapes, aim on helpers; **always** insert mid into roll segment ribbon **`influences`** when the control exists. |
+| **`segmentMidIKSetup`** | How the mid **follows** along the segment span. **`none`** = no extra follow rig (mid still affects segment deformation via influences + aim on seg mid handles). |
+
+**`segmentMidIKSetup`** enum: `none` | `ribbon` | `ribbonLive` | `prntConstraint` | `linearTrack` | `cubicTrack`. Default **`ribbon`** (legacy per-segment mid `IK.ribbon`).
+
+### Follow modes (`limb_segment_mid`)
+
+| Mode | Behavior |
+|------|----------|
+| **`none`** | Skip **`limb_segment_mid`**; mid remains in **`ml_influences`** and aim constraints on **`segmentMidHandles_*`**. |
+| **`ribbon`** | Per-segment `IK.ribbon` on joint list start + mid + end; **`influences`** = **`ml_segHandles`** (seg duplicate handles). |
+| **`ribbonLive`** | Same as ribbon but **`liveSurface=True`**, **`extendEnds=True`**, **`sectionSpans`** from **`d_squashStretchIK`** (default **2**). Live loft drivers = **seg end handles only** (mid rides via **`jointList`**, not live influence rails). |
+| **`prntConstraint`** | **`mainDriver`** on mid + parentConstraint to **`ml_segHandles`**. |
+| **`linearTrack`** / **`cubicTrack`** | **`CORERIG.create_at`** track through ordered **`ml_handleJoints[i:i+2]`** (segment boundary handles, no mid controls); **`BLOCKSHAPES.attachToCurve`** on mid **`masterGroup`** with **`param`** (segment prerig pattern). |
+
+Parent mid **`masterGroup`** to **`mRoot`** only for **`ribbon`** / **`ribbonLive`**; track modes keep **`rig_controls`** parent (blend at roll index).
+
+### Roll segment squash / aim (Limb)
+
+Per-roll **`IK.curve`** / **`IK.ribbon`** in **`limb.rig_segments`** now matches Segment/Head:
+
+- **`skipAim`**: block bool **`squashSkipAim`** (default **True** on Limb, same as Segment).
+- **`setupAimScale`**: **True** when **`segmentStretchBy == 'scale'`**, else **False** on ribbon path; curve path sets **`setupAim = 1`** + **`setupAimScale`** when scale stretch.
+- **`liveSurface`**: **`segmentType == ribbonLive`** on main roll ribbon build.
+
+**Files**: [`limb.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py) (`rig_dataBuffer`, `rig_segments`); [`rigFrame_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py) (`limb_segment_mid`); [`block_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/block_utils.py) (`segmentMidIKSetup` in rig-state vis list); [`shared_dat.py`](../../cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py) (rig + squash UI lists).
+
+**Not in scope**: no **`ikMidDynParentMode`** / extra seg-mid dyn-parent rebuild in **`rig_cleanUp`** (unlike Segment spine mids); pole **`controlIKMid`** is separate from roll seg mids.
+
+---
+
+## Segment `followParentBank`
+
+Organic **Segment** blocks support the same parent-bank rig as **Limb** digits: block bool **`followParentBank`**, rigNull plugs **`followParentBankJoints`**, **`controlFollowParentBank`**, **`bankParentFKDriver`**, **`bankParentIKDriver`**, settings **`visParentBank`** on the bank control shape.
+
+### Defaults
+
+| Block | `followParentBank` default |
+|-------|----------------------------|
+| **Segment** (`segment.py`) | **`False`** — opt in per block (rig UI / attr). |
+| **Limb** (`limb.py`) | **`True`** on digit-style profiles (unchanged). |
+
+Existing Segment blocks keep whatever value is already stored on the node; only **new** blocks pick up the Segment default.
+
+### When it runs
+
+1. Block attr **`followParentBank`** is on.
+2. **Parent module** `rigNull` has a live **`pivotResultDriver`** message (typical foot/hand pivot from parent Limb pivot setup).
+
+If (2) fails, build sets **`b_followParentBank`** false and skips bank nodes (same as Limb).
+
+### Build (Segment)
+
+| Step | Role |
+|------|------|
+| `rig_dataBuffer` | Sets `b_followParentBank`; pushes parent **`pivotResultDriver`** into **`ml_dynParentsAbove`** for space lists. |
+| `rig_skeleton` | `followParentBankJoints` chain. |
+| `rig_shapes` / `rig_controls` | `controlFollowParentBank`, `visParentBank`. |
+| `rig_frame` | Local FK/IK groups (unchanged). |
+| **`rig_followParentBankSetup`** | SC IK bank, parent FK/IK blend dags, aim — bank root = **`rigRoot`** (not `limbRoot`). |
+| `rig_cleanUp` | Dyn parents: **`followParentBank`** on rig root, first FK, **`controlIK`**, **`controlIKBase`** when drivers exist. |
+
+Works with **FK-only or IK** Segment (`ikSetup` not required for the bank path).
+
+Parent FK/IK blending still reads **parent** `settings.result_FKon` / `result_IKon`; if those attrs are missing on the parent, blend drivers are not created (parent pivot may still appear in space lists via `ml_dynParentsAbove`).
+
+### Space / follow UI (artist-facing)
+
+Dyn-parent menus use each target’s **`cgmAlias`**, not rigNull plug names.
+
+| What you want | What appears in space / orient lists |
+|---------------|--------------------------------------|
+| Parent foot/hand pivot | Parent pivot’s alias (e.g. `*_PivotResult`) — from **`ml_dynParentsAbove`**. |
+| Parent-bank follow (FK/IK switch) | **`followParentBank`** — from **`bankParentFKDriver`** / **`bankParentIKDriver`**. |
+
+Implementation: [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py) (`rig_followParentBankSetup`, `rig_cleanUp`). Limb reference: [`limb.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py) (`rig_pivotSetup`).
+
+---
+
+## Segment Bezier IK (`ikSetup=bezier`)
+
+Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_BezierIK.md). Branch roadmap (parent vs `segmentType` bezier): [`Branches/Branch_BezierIK.md`](../Branches/Branch_BezierIK.md).
+
+**`rigNull` messages** (written in `rigFrame_utils.bezier` / segment `rig_shapes`):
+
+| Plug / msgList | Role |
+|----------------|------|
+| `bezierIKDriverCurve` | Hidden POCI **splineIKCurve** — IK `inCurve` + `bezier_spline_stretch` `curveInfo` |
+| `bezierIKCurve` | Visible Bezier settings curve from `IK.bezier_spline` (when connected) |
+| `ikSplineHandle` | ikSpline IK handle |
+| `bezierIKSubControls` | Tangent sub controls (msgList) |
+| `bezierIKTrackCurves` | Aux track curves between main IK and subs |
+| `bezierIKSubsBase`, `bezierIKSubsMid*`, `bezierIKSubsEnd` | Sub controls per main IK slot |
+
+**Unchanged from ribbon/spline IK**: `ribbonIKDrivers` (end influence locators), `ikJoints`, `blendJoints`, standard IK controls on `rigNull`.
+
+**Precheck**: `ikSetup=bezier` requires `segmentType=parent` until non-parent segment bezier is implemented.
+
+**Controller graph**: `segment.controller_getDat` builds `md['ik']` from segment rigNull plugs + `_bezier_ik_pickwalk_controls` when `bezierIKSubControls` exists — used by puppet `controller_verify` (not limb foot IK message names).
+
+---
+
 ## Revision History
 
 | Date | Summary |
 |------|---------|
+| 2026-10-12 | Cross-ref [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — `mrsHelpers` placement msgList (BlockCreate) |
+| 2026-10-13 | Segment Bezier IK section — rigNull message table + precheck note; cross-ref [`Feature_BezierIK.md`](Feature_BezierIK.md) |
+| 2026-10-09 | Limb roll seg mid IK: track modes via `attachToCurve`; `squashSkipAim` on roll ribbons; `segmentMidIKControl` vs setup enum contract |
+| 2026-10-09 | Segment `followParentBank`: docs (default off, space UI, build table); `rigRoot` bank; parent pivot in `ml_dynParentsAbove` |
+| 2026-10-08 | Limb roll seg mid IK: `segmentMidIKSetup` (segment/head keep `ikMidSetup`) |
 | 2026-07-21 | Initial feature doc — block/module/puppet message contract, build sync, control rewire, attach points, anti-patterns |
 | 2026-10-15 | Controller pickwalk (Maya tags): authoring vs rig pipelines, `controller_verify` / `get_controllerDat`, debugging checklist |

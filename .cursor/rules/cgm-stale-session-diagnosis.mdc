@@ -13,7 +13,7 @@ If Script Editor shows new **`log.info`** (or UI-only strings) from the **tool m
 
 1. Treat as **stale imported backend** and/or **cached meta instance** (`self._mDynFK` still bound to pre-reload `cgmDynFK` class).
 2. **Do not** add reload/rebind inside Create Chain, bake, export, or other one-shot callbacks — see **`cgm-reload-mod`**.
-3. Fix path for the artist: **Setup → Reload Dependencies**, shelf relaunch (`tool_calls.cgmSimChain()`), or restart Maya.
+3. Fix path for the artist: **Setup → Reload Dependencies**, shelf relaunch (`tool_calls.cgmDynSimTool()`), or restart Maya.
 
 ## Before another “feature fix” pass
 
@@ -30,4 +30,4 @@ After **one** code change that does not change Maya output, if backend entry log
 
 - **`cgm-reload-mod`** — `_reloadMod`, no mid-call reload, rebind + logging on reload path
 - **`cgm-debug-order`** — log at boundaries first
-- **`Feature_SimChain.md`** — hair counts, addEndJoint, debug log contract
+- **`Feature_DynSimTool.md`** — hair counts, addEndJoint, debug log contract

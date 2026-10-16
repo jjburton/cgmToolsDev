@@ -134,7 +134,7 @@ flowchart TD
 | [`cgm/core/tools/Project.py`](../../cgmToolsPy3/cgm/core/tools/Project.py) | UI, `data`, `cgmProjectDirList`, P4 row helpers, `project_dir_mask`, save/load/fill |
 | [`cgm/core/tools/lib/project_utils.py`](../../cgmToolsPy3/cgm/core/tools/lib/project_utils.py) | Schema defaults, `l_projectDat`, path keys, `project_uses_perforce`, subtype dir helpers |
 | [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | `walk_below_dir` (mask + prune), `prepare_output_for_write`, export/save prepare |
-| [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | Reads `mDat`; duplicate `l_dirMask` build for browser navigation |
+| [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | Reads `mDat`; `l_dirMask` for browser navigation; **column depth** from filesystem (`hasSub` / `hasVariant` on disk — not project `hasSub`; optional `hasVariant: false` on content). See [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) § Scene browser |
 | [`cgm/core/lib/perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) | P4 queries; fstat cache tree store respects `dir_mask` |
 
 ### Key APIs
@@ -262,6 +262,7 @@ Scroll-list RMB **Get Latest Revision** on a selected subdirectory uses the same
 
 | Date | Summary |
 |------|---------|
+| 2026-10-09 | Cross-ref: Scene browser column layout is filesystem-driven; project `hasSub` does not gate columns (`Feature_CgmToolUI`) |
 | 2026-08-19 | Empty `assetDat` persists on load; Fill Default Asset Types is opt-in (Project Setup + Scene File); Verify Asset Dirs unchanged |
 | 2026-08-18 | Initial feature doc; Content/Export scroll lists use merged `dirMask`; `project_dir_mask` API; `walk_below_dir` case-insensitive mask + prune |
 | 2026-08-13 | P4 status row, session cache-first refresh, Slice B save prepare (timeline in Branch_p4) |

@@ -23,7 +23,7 @@ import cgm.core.lib.perforce as P4UTIL
 cgmGEN._reloadMod(P4UTIL)
 ```
 
-Multi-module tools (e.g. cgmSimChain): reload **dependencies first**, **consumer last** (e.g. lib → `ik_utils` → **`dynamic_utils` last**), then reload the **tool module** so its imports see fresh libs.
+Multi-module tools (e.g. cgmDynSimTool): reload **dependencies first**, **consumer last** (e.g. lib → `ik_utils` → **`dynamic_utils` last**), then reload the **tool module** so its imports see fresh libs.
 
 ## Meta / `mClass` — do **not** partial-reload in tool `reload_dependencies()`
 
@@ -56,7 +56,7 @@ cgmGEN._reloadMod(RIGDYN)      # after its lib deps were reloaded
 cgmGEN._reloadMod(DYNFKTOOL)   # tool module last
 ```
 
-Match shelf / menu entry points: **`cgm/core/tools/lib/tool_calls.py`** (e.g. `cgmSimChain`: `reload_dependencies()` → `cgmGEN._reloadMod(dynFKTool)` → `dynFKTool.ui()`).
+Match shelf / menu entry points: **`cgm/core/tools/lib/tool_calls.py`** (e.g. `cgmDynSimTool`: `reload_dependencies()` → `cgmGEN._reloadMod(dynFKTool)` → `dynFKTool.ui()`; legacy `cgmSimChain()` alias).
 
 ## Reloading the tool module from inside that tool
 
@@ -87,7 +87,7 @@ On the **Reload Dependencies** path only (not Create Chain / bake):
 
 ## Multi-module `reload_dependencies()` logging
 
-When a tool reloads many modules (cgmSimChain, Scene reload stacks, MRS helpers), **log each module** before `cgmGEN._reloadMod` — start line, one line per `module.__name__`, done line + `cgmGEN._str_subLine`. Match **`cgm.core._reload`**, **`Scene.reloadSceneStuff`**, and **`dynFKTool.reload_dependencies`**.
+When a tool reloads many modules (cgmDynSimTool, Scene reload stacks, MRS helpers), **log each module** before `cgmGEN._reloadMod` — start line, one line per `module.__name__`, done line + `cgmGEN._str_subLine`. Match **`cgm.core._reload`**, **`Scene.reloadSceneStuff`**, and **`dynFKTool.reload_dependencies`**.
 
 Without per-module lines, artists and agents cannot tell whether Reload Dependencies ran or which file revision Maya loaded.
 

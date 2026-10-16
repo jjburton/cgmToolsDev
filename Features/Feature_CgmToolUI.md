@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: September 14, 2026
+- **Last Updated**: October 12, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -13,9 +13,17 @@
 
 - [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) — CCL + link-list UI; canonical example of `cgmListItem` + alias refresh
 - [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — MRS Builder block lists (`cgmScrollList`, `BlockScrollList`)
+- [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — BlockCreate Helpers registered readout + msgList persistence
 - [`Feature_AnimData.md`](Feature_AnimData.md) — cgmAnimClip / mrsAnimClip Dat UI; pinned-chrome hook
 - [`Feature_LibToCore.md`](Feature_LibToCore.md) — `test_UISMOKE` open/close shipped cgm windows (Maya GUI; not behavior). `Close(skipVerify=True)` for `VERIFY_CLOSE`.
 - Module placement — `.cursor/rules/cgm-module-placement.mdc` (UI in `tools/`, shared chunks in `tools/lib/`)
+- Long-running actions — `.cursor/rules/cgm-long-running-ui-progress.mdc` (bake, export, batch rebuild)
+
+---
+
+## Long-running actions (progress)
+
+Tool callbacks that bake, export, or loop over many scene objects must show **Maya main progress bar** feedback (and support **cancel** when abort is safe). Implement stepping in **`rig/` / `lib/`** backends; UI handlers stay thin. See **`cgm-long-running-ui-progress`** rule. **cgmDynSimTool Bake Input** (`chain_bake_input_from_targets`): one Maya bake per action — progress bar updates around that call only, not a Python loop per timeline frame (see **`Feature_DynSimTool.md`** connect/bake contract). **cgmDynSimTool load** — **`uiFunc_update_details(..., with_progress=True)`** on autoload and header load selected: stepped bar while syncing chains, reading **`get_dat()`**, and building per-chain Details UI (see **`Feature_DynSimTool.md`** UI Surface / load progress).
 
 ---
 
@@ -90,6 +98,8 @@ Used throughout MRS **Builder** and newer list-heavy tools.
 [`cgm/core/classes/GuiFactory.py`](../../cgmToolsPy3/cgm/core/classes/GuiFactory.py) — shared `cgmScrollList` adds `_syncHLCFromSelection(dim=0.7)` for row-model lists (`_ml_rows[].itc`); Scene browser passes `SCENE_LIST_HLC_DIM` from `scene_utils.py`.
 
 When adding a new block list in MRS-style tools, **subclass or mirror** this pattern rather than storing formatted strings as the only row identity.
+
+**Retained tools + scene load:** register `setSceneChangeCB` (Maya `SceneOpened` via [`baseMelUI`](../../cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)), log at the boundary, then `mc.evalDeferred(..., lp=True)` before `rebuild()` or other scene walks. References: [`setTools.py`](../../cgmToolsPy3/cgm/core/tools/setTools.py), [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py), Builder `uiFunc_on_scene_change` → `uiFunc_refresh_blocks_after_scene_open` (clear active block + `BlockScrollList.rebuild()`).
 
 ### Reference: `cgmListItem` (mocapBakeTools)
 
@@ -178,7 +188,24 @@ Maya **inverts the selection row background**. Light `itc` values (pastel blue, 
 - Sort: folders first, then files; case-insensitive name within group.
 - Dir tint: `SCENE_LIST_ITC_DIR`; file tint: `SCENE_LIST_ITC_FILE` (see table above).
 - Filter matches **both** `.item` and `.alias` (typing `rig` finds `+ rig/`).
-- **Show all files** toggles reload SubType + Variation + Version lists.
+- **Show all files** toggles reload SubType + Variation + Version lists (when `hasSub`, also variation/version columns; type-only file layouts reload panel 2 only).
+
+**Navigation depth (filesystem walk, October 2026)** — column count follows **immediate children** of the current browse path, not project `hasSub` / `hasVariant` flags on asset types (except explicit **`hasVariant: false`** in project content, which disables the variation tier).
+
+| On-disk layout under selected type (`path_subType`) | Visible columns (after asset) |
+|---------------------------------------------------|-------------------------------|
+| Only `.ma`/`.mb` (no child folders after `dirMask`) | **Type** menu + **panel 2 scroll** (files). **Version column off** — do not duplicate files into column 4. |
+| Child folders (± loose files at type root) | **Type** + **Sets** (dirs and files in one scroll). **Version** when a **folder** row is selected or when versions live under set/variation paths. |
+| Set folder with only scenes | **Sets** + **Version** (no variation column). |
+| Set folder with child folders (± loose scenes at set root) | **Sets** + **Variation** (subfolders only) + **Version** (scenes in selected variation dir, or at set root when nothing selected / mixed set). |
+
+**Properties** (runtime, per current selection):
+
+- **`hasSub`** — `True` when `path_subType` has filtered child **directories** (`_dir_children_dirs`). `False` → `LoadVersionList` fills **panel 2** (`subTypeSearchList`), not the version scroll.
+- **`hasVariant`** — `True` when selected **set** (`path_set`) has filtered child **directories**. Variation list lists **folders only**; loose scenes at set root appear in the **version** column. Project **`hasVariant: false`** forces variation off.
+- **`_version_column_should_show`** — hides version when the selected sets/variation row is a **file** (`b_subFile` / `b_varFile`), or when layout is type-only files (`not hasSub`).
+
+**Navigation API** (republish after disk/save): `_republish_navigation_lists`, `_navigate_to_scene_file`, `_navigate_to_scene_parts`, `_navigation_tokens_from_focus_path`. **Export Selection** uses `_export_selection_directory` (set path when `hasSub`, type root when not).
 
 **Folder marker (not icons)**: Maya **`iconTextScrollList` does not render per-row icons** from cmds (no `-image` on append; `numberOfIcons` only reserves empty gutter). Use **alias prefix** instead — dirs: `+ rig/` via `SCENE_LIST_DIR_ALIAS_PREFIX` + trailing `/`; files: plain basename. Pair with folder-first sort + dir `itc` tint.
 
@@ -362,6 +389,20 @@ _row.layout()
 
 **Avoid** relying on **`MelFormLayout`** alone for this case: attaching the label to all four edges centers text inside the form, but the form may still shrink to content width when the parent column does not stretch.
 
+### Icon buttons in horizontal tool rows
+
+Pinned status rows and map rows often mix **`MelLabel`** / **`MelButton`** at **`h=20`** with **`MelIconButton`** (`iconTextButton`). **Wrong icon art or size is a common cause of extra vertical space** under the row (gray band below widgets inside the form, or gap before the next frame).
+
+| Issue | What happens | Fix |
+|-------|----------------|-----|
+| **Non-25px icon images** (e.g. `select.png` beside `select_25.png` / `set_25.png`) | Maya enforces a **taller minimum control height** than adjacent 20px labels; **`MelHSingleStretchLayout`** grows vertically | Use **25×25** assets from the cgm image folder: **`set_25.png`**, **`select_25.png`**, etc. Set **`w=25`**, **`h=25`**, **`style='iconOnly'`**, **`ut='cgmUITemplate'`**, **`bgc=cgmUI.guiButtonColor`** |
+| **Icon row on `MelScrollLayout` without inner column** | Multiple direct scroll children stack with default spacing | Wrap scroll content in **`MelColumnLayout`** with **`rowSpacing=0`**, **`columnAttach=('both', 0)`** |
+| **Form still taller than widgets** | `iconTextButton` margin / template slack | After **`_row.layout(expand=False)`**, optionally set form **`height=20`** (or max child height) and **top/bottom**-attach children at **0** — see **`_ui_compact_hstretch_row`** in [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py) |
+
+**Shared helper (cgmDynSimTool):** **`_dynfk_icon_btn_kw(image_name)`** — same contract as animClip_dat / Scene icon rows.
+
+**Reference rows:** [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py) **`uiBuild_setup_status_row`** (setup name + **set_25** / refresh / **select_25** / clear); **`uiFunc_make_load_row`** (status label + **set_25** + optional **select_25**). Prefer **`cgmUI.add_Button`** (**`h=20`**) when there is no suitable **25×25** icon.
+
 ### Compact collapsible status block
 
 For header frames (`cgmUIHeaderTemplate`) with minimal vertical slack:
@@ -375,6 +416,20 @@ For header frames (`cgmUIHeaderTemplate`) with minimal vertical slack:
 | Dynamic text | Set `l=` and `h=` together in one `edit=True` — do not rely on word-wrap height alone |
 
 Reference: `uiFunc_set_status_panel()` + Status block in [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py).
+
+### Registered collection status row (BlockCreate helpers)
+
+When a tool owns a **fixed set of scene nodes** (not a scroll list you edit row-by-row), show count + short names in a **read-only status control** plus **Refresh** — same idea as animClip dat status rows.
+
+| Piece | BlockCreate Helpers (`Helpers.buildFrame_helpers`) |
+|-------|-----------------------------------------------------|
+| Canonical data | `self.ml_helpers` from `helpers_msglist_get(mDag)` on **`mrsHelpers`** |
+| Status control | `MelButton` `uiTF_helpersRegistered` — label from `_helpers_registered_summary` (count + comma-separated short names, truncated) |
+| Frame chrome | `Helpers (N)` on collapsible frame label |
+| Refresh | `helpers_ui_update_registered(self, syncFromDag=True)` — re-bind `mDag` after reload |
+| Actions | **Initialize** replaces helpers + msgList; **Build** enabled only when `N > 0` |
+
+Do not parse the status button label to recover helper nodes — always use **`ml_helpers`** / msgList. Domain behavior (baseline pivot, build snap): [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md).
 
 ### Collapsible section helper (optional)
 
@@ -441,7 +496,8 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
 | Reset Mel `_NEXT_KEY` on Reload Core (class-only counter) | Layout hangs ~80% probing leftover `MelButton0__`..N__ from Toolbox / retained windows | Persist ids on `sys._cgmMelWidgetNextKey`; catch up after exists loop |
 | `MelOptionMenu.clear()` then `append` (especially on an empty menu) | `itemListShort` + `deleteUI` can empty or kill the control; new items never show | Replace via `optionMenu -q -itemListLong` + `deleteUI` + `menuItem(parent=)` (cgmAnimClip Layer menu) |
-| `MelTextField` with `enable=False` on `cgmUISubTemplate` rows | Disabled Maya field = dark text on dark row; unreadable | Keep `enable=True`; toggle `editable=False` + `bgc=SHARED._d_gui_state_colors['help']` when inactive, `editable=True` + `['normal']` when active (Scene.py / cgmSimChain follicle segment length) |
+| `MelTextField` with `enable=False` on `cgmUISubTemplate` rows | Disabled Maya field = dark text on dark row; unreadable | Keep `enable=True`; toggle `editable=False` + `bgc=SHARED._d_gui_state_colors['help']` when inactive, `editable=True` + `['normal']` when active (Scene.py / cgmDynSimTool follicle segment length) |
+| `MelIconButton` with large/default icon art (not **25×25** `*_25.png`) next to **h=20** labels | Row/form grows taller than labels; visible slack under status/map rows | **`w=25` `h=25`**, `iconOnly`, `*_25.png` icons; inner scroll column **`rowSpacing=0`**; pin form height if needed — see **Icon buttons in horizontal tool rows** |
 | Store command items (`New`) in the optionVar | Next open lands on a prompt, not a real target | Run the command, then persist the created/selected value (cgmAnimClip Layer) |
 
 ---
@@ -455,6 +511,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) | LastLoaded optionVar + pathList recent | `post_init` autoload; status row with clear/explore |
 | [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_defer_ui` for popup/column reload; `_defer_list_reload_after_delete` after file delete |
 | [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | Collapsible header frames, status buffer, changelist batch UI | Status stretch row; animFilter-style CL header (checkbox + **collapsible frame** + **R**/**S**/**Sh** or **D**/**Mv**/**Sub**); Shelved Files blue headers; section empty rows; standard Setup → Reload |
+| [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py) | Pinned status row + map rows with **25×25** icons | **`_dynfk_icon_btn_kw`**, **`uiBuild_setup_status_row`**, **`uiFunc_make_load_row`**; avoid non-`_25` select icons inflating row height |
 | [`animClip_dat.py`](../../cgmToolsPy3/cgm/core/lib/animClip_dat.py) | Dat file bar + optional pinned chrome + scroll | `uiBuild_pinned_chrome`; CLIP CONTENTS zebra |
 | [`mrsAnimClip.py`](../../cgmToolsPy3/cgm/core/mrs/mrsAnimClip.py) | Subclass pins PoseManager context | Override hook only; inherit Capture/Clip/Apply |
 
@@ -500,12 +557,14 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
 | 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
 | 2026-08-31 | cgmAnimClip Layer optionMenu: rebuild with `itemListLong`, not `MelOptionMenu.clear` |
 | 2026-08-31 | cgmAnimClip Layer: `New` is a command item — do not store it in the optionVar |
 | 2026-08-28 | CLIP CONTENTS: full-width object frames (`adj=True`, no stretch-row wrap); zebra `guiButtonColor` / `guiBackgroundColor` under `guiHeaderColor` section |
 | 2026-08-28 | Even/odd collapsible-row gray (`MATH.is_even` + `bgc`); animFilter + cgmAnimClip CLIP CONTENTS |
 | 2026-08-26 | CGMDAT.ui Save disabled with no path; X clears dat filepath; Save/Save As commit LastLoaded + Recent |
+| 2026-10-12 | BlockCreate Helpers registered status row; cross-ref `Feature_BlockCreateHelpers.md` |
 | 2026-08-20 | Mel widget unique-id persist across Reload Core (`sys._cgmMelWidgetNextKey`); Layout hang at 80% from `exists` walk after `_NEXT_KEY` reset |
 | 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
 | 2026-09-22 | Scene category/subtype header popup crash: defer `SetCategory` / `SetSubType` (+ Create/Rename subtype) |
