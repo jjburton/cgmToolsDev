@@ -3,7 +3,7 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: September 21, 2026 (preset apply isolation + hair/Init Sim fixes)  
+**Last Updated**: September 22, 2026 (Scene category/subtype popup crash defer)  
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
@@ -13,6 +13,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 ## Related Documentation
 - **[Feature_MRSMeshCreation.md](../Features/Feature_MRSMeshCreation.md)** — MRS proxy/puppet/skinned mesh contract (`meshBuild`, `proxyBuild`, batch post, geoGroup invariants)
 - **[Feature_SimChain.md](../Features/Feature_SimChain.md)** — cgmSimChain dynFK / `.cgmSim*Dat` library, hair chain segment-length contract, connect/bake
+- **[Feature_CgmToolUI.md](../Features/Feature_CgmToolUI.md)** — tool UI patterns (Scene scroll lists, popup/`LoadProject` defer)
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** — MetaHuman facial retarget / SDK transfer (Perforce `MetahumanFacial.py`; reference for facial solve patterns)
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** — module/puppet message graphs, block parent wiring
 - **[Branch_Jan2026.md](Branch_Jan2026.md)** — prior muzzle handle / ribbon / face-handle work
@@ -32,8 +33,55 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[cgmDynFK_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmDynFK_presets.py)** — `base` seed + script API (artist hair presets → `cgmDat/sim/hair/`)
 - **[cgmNCloth_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** — `base` nc/n seed + script API (artist cloth/nucleus presets → `cgmDat/sim/`)
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** — `fortniteMetaHuman` pose-buffer schema
+- **[Scene.py](../../cgmToolsPy3/cgm/core/mrs/Scene.py)** — Scene UI; `LoadProject` / Projects menu (Qt defer)
 
 ## Timeline
+
+### September 22, 2026 - Preset dats drop ``name``
+**What**: `.cgmSimHairDat` / HairShape / Cloth / Nucleus no longer store `name` — library identity is the filename. Capture/write omit it; read strips legacy `name`. **Setup** `.cgmSimChainSetup` still uses `name` / `baseName`. Stripped from shipped library files under `cgm/cgmDat/sim/`.
+
+**Files**:
+- EXTENDED: `cgm/core/lib/simChain_dat.py` — `_empty_dat` / capture / read/write; `_preset_log_label` for logs
+- EXTENDED: `cgm/cgmDat/sim/**` — removed `name` from preset JSONs
+- EXTENDED: `cgm/core/tests/test_coreLib/test_SIMCHAIN.py`
+- DOCS: `Features/Feature_SimChain.md`
+
+**Status**: Code complete
+
+### September 22, 2026 - Hair systems basename rename
+**What**: Details **Hair systems** rows get an editable basename field (Enter applies). Renames the hairSystem transform to `{name}_hairSys` via module helper; rejects empty / duplicate names among registered systems; refreshes Create → Hair system labels.
+
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `hair_system_name_token`, `hair_system_set_name`
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — per-row MelTextField + `uiFunc_apply_hair_system_name`
+- DOCS: `Features/Feature_SimChain.md`
+
+**Features**:
+- Basename token (strips `_hairSys`); Enter → `{token}_hairSys`
+- Default label still marks which row is setup default
+
+**Status**: Maya-verified
+
+### September 21, 2026 - Library SaveDir / SearchDir split
+**What**: Library UIs (cgmSimChain **Presets**, MRS **Library**) split directory mode into **SaveDir** (single radio for write target) and **SearchDir** (per-root checkboxes for load scan). Both SearchDir roots on → collective presets; duplicate keys show both with ` [dev]` / ` [workspace]` labels. Shared helpers in `cgm_Dat`; sim scan via `get_library_rows` / multi-mode options. Generic File → StartDir unchanged.
+
+**Files**:
+- EXTENDED: `cgm/core/cgm_Dat.py` — `library_options_merge`, `get_ext_options_multi`, `uiMenu_addLibrarySaveSearchDirs`
+- EXTENDED: `cgm/core/lib/simChain_dat.py` — multi-mode `get_library_options` / `get_library_rows`
+- EXTENDED: `cgm/core/tools/dynFKTool.py` — Presets SaveDir/SearchDir; saves use SaveDir OV (`cgmDynSimTool_libraryDirMode`); Search OVs `cgmDynSimTool_librarySearch_dev` / `_workspace`
+- EXTENDED: `cgm/core/mrs/MRSDat.py` — Library menu same split + collective Found list
+- DOCS: `Features/Feature_SimChain.md`
+
+**Features**:
+- **SaveDir** — where Save / Capture dat dialogs open (`dev` | `workspace`)
+- **SearchDir** — bools per root; collective Load menus; collision labels `name [mode]`; cannot disable both
+- Apply-by-filepath so duplicate names from different roots stay distinct
+
+**Decisions**:
+- Library UIs only this pass — File → StartDir unchanged
+- Default SearchDir both on; SaveDir migrates prior single-mode OV
+
+**Status**: Maya-verified — SaveDir=workspace save dialog; SearchDir both on with labeled duplicates; cannot disable both SearchDirs
 
 ### September 1, 2026 - Eye prerig fix + muzzle constraint weights
 **What**: First Face26 commit — eye prerig uses the shared `mParent` handle contract; muzzle drops stale nostril influence target and normalizes pointConstraint weights by distance before corner bias.  
@@ -257,6 +305,58 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 
 ---
 
+### September 22, 2026 - Scene category / subtype popup hard crash fix
+**What**: Maya hard crash when swapping **asset category** or **subtype** via the Scene browser header popup buttons (Character / Environment / … and animation / rig / …). Same Qt reentrancy class as Projects switch and list Refresh/Delete: popup called `SetCategory` / `SetSubType` synchronously, which clears/rebuilds asset + sets/variation/version columns (`ra=True`) and runs `buildAssetForm` while the menu was still active.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — category + subtype popup items use `_defer_ui(SetCategory|SetSubType, …)`; subtype Create/Rename utils deferred
+- EXTENDED: `Features/Feature_CgmToolUI.md` — category/subtype popup pitfall
+
+**Status**: Code complete — Maya verify: swap category and subtype headers repeatedly; Create/Rename subtype from header menu
+
+**See also**: Sept 21 project-switch entry; [`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md)
+
+---
+
+### September 21, 2026 - Scene project switch hard crash fix
+**What**: Maya hard crash when switching projects from Scene **Projects** menu (or File → **Recent**). Same Qt reentrancy class as browser popup Refresh/Delete: menu callback ran `LoadProject` synchronously, which cleared all four browser columns (`clear()` → `ra=True`) and ran `uiProject_refreshDisplay` (list rebuilds, `setProject`/`openWorkspace`, scriptUI menu clear) while the menu was still active. Crash stack typically Qt → ExtensionLayer → CommandEngine → python.  
+**Files**:
+- EXTENDED: `cgm/core/mrs/Scene.py` — Projects + Recent menu items use `_defer_ui(LoadProject, path)`; `LoadProject` guards `b_selCommandOn` + `deselectAll` before column clear
+- EXTENDED: `Features/Feature_CgmToolUI.md` — project-switch pitfall (defer + clear guard)
+
+**Fix**:
+- Defer project load so the menu closes before list/UI mutation
+- Defense in depth on initial column clear (match `_refresh_searchable_display`)
+
+**Status**: Code complete — Maya verify: Projects + Recent switch (incl. scriptUI / different content roots)
+
+**See also**: [`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md) (popup + `ra=True` pitfall)
+
+---
+
+### September 21, 2026 - Sim preset dats drop meta block
+**What**: `.cgmSim*Dat` / `.cgmSimChainSetup` no longer store `meta` (user / date / scene / sourceNode). Capture and write omit it; read strips legacy `meta`. Stripped from 25 library files under `cgm/cgmDat/sim/` (19 already clean).  
+**Files**:
+- EXTENDED: `cgm/core/lib/simChain_dat.py` — `_empty_dat` / `_build_dat` / setup capture; read/write `pop('meta')`
+- EXTENDED: `cgm/cgmDat/sim/**` — removed `meta` from hair / HairShape / cloth / nucleus / setups
+- EXTENDED: `cgm/core/tests/test_coreLib/test_SIMCHAIN.py` — assert no meta on empty schema
+- EXTENDED: `Features/Feature_SimChain.md` — JSON schema
+
+**Status**: Code complete — library files have no `meta`; new Save Dat… writes without it
+
+---
+
+### September 21, 2026 - Hair feel allowlist + apply attr-change logs
+**What**: Hair dat clean-seed / capture was treating **all non-shape** hs groups as feel — including **collisions**, turbulence, iterations/noise. Differential loads reset those to base and could apply structural keys (`bendModel`, …). Feel is now **`dynamicProperties` + `forces` only**; skip `bendModel` / `restLengthScale` / `bendAnisotropy` / `dynamicsWeight`; apply filters legacy dats; compound ramp keys normalized from JSON. Preset apply logs each change as **`attr: old >> new`** (hair / HairShape / cloth / nucleus) with set/changed counts.  
+**Files**:
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — `d_attrMap_hs_feel_groups`, `l_skipHairFeelAttrs`, `hair_profile_filter_feel`, `_apply_profile_attr_dict`
+- EXTENDED: `cgm/core/lib/nCloth_utils.py` — `_apply_attr_dict` old>>new lines
+- EXTENDED: `cgm/core/lib/simChain_dat.py` — `SimHairDat.apply` uses feel filter
+- EXTENDED: `Features/Feature_SimChain.md` — feel allowlist
+
+**Status**: Code complete — Maya verify: load differential hair dat → collide/iterations unchanged; Script Editor shows `mass: 1 >> 8.5` style lines + dropped-key warnings
+
+---
+
 ### September 21, 2026 - cgmSimChain Init Sim + preset apply isolation
 **What**: Three related cgmSimChain fixes so setup create and preset loads stay section-isolated.
 
@@ -378,6 +478,10 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 ### Build / Scene (Face26)
 - [x] `resolve_build_output_path` in batch utils
 - [x] `SendToBuild` P4 prepare on existing BUILD output path
+- [x] Scene **Projects** / File → **Recent** project switch — deferred `LoadProject` (Qt reentrancy hard crash; Sep 21)
+- [x] Scene category / subtype header popups — deferred `SetCategory` / `SetSubType` (Sep 22)
+- [ ] Maya-verify Projects + Recent project switch (incl. scriptUI / different content roots)
+- [ ] Maya-verify category + subtype header swap (no hard crash)
 
 ### cgmSimChain / dynFK (Face26)
 - [x] **`polyline_length_fractions`** + linear inCurve + joint-length POC sampling
@@ -395,12 +499,16 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] **SimClothDat.capture** — resolves **`mCloth`** from loaded setup
 - [x] Maya-verify dat capture Save/Load round-trip
 - [x] **Init Sim / New** — setup + nucleus only (no auto chain from selection)
-- [x] **Hair dat apply** — dynamic feel only; does not reset HairShape attrs
+- [x] **Hair dat apply** — feel allowlist (`dynamicProperties`+`forces`); does not reset shape / collide / iterations
 - [x] **Preset apply isolation** — hair ↔ HairShape ↔ cloth ↔ nucleus do not quash each other
+- [x] **Preset apply logs** — `attr: old >> new` + set/changed counts
+- [x] **Preset dats** — no `meta` block (capture/write/library strip)
+- [x] **Library SaveDir / SearchDir** — SaveDir radio + SearchDir bools; collective load; collision labels (Maya-verified)
+- [x] **Hair systems basename** — Details row Enter rename → `{name}_hairSys` (Maya-verified)
 - [ ] Maya-verify **`bob`** vs **`bob_hold`** on Edna production hair sim
 - [ ] Maya-verify setup dat capture → reload scene → Apply Setup Dat on production rig
 - [ ] Maya-verify cloth attach + **`bangs_firm`** on production hair cage / fringe panels
-- [ ] Maya-verify Sept 21: selected joints → New (no chain); differential hair leaves `hairWidth`; cloth↔nucleus↔hair↔HairShape layering
+- [ ] Maya-verify Sept 21: selected joints → New (no chain); differential hair leaves shape/collide; cloth↔nucleus↔hair↔HairShape layering; Script Editor old>>new lines
 
 ### BlockDat / facial blocks (planned)
 - [ ] Non-destructive blockDat remap when adding prerig handles (e.g. cheek on muzzle) — ordered-list match today shifts indices
@@ -420,9 +528,13 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [ ] Regression: existing muzzle blockDat load + rig on shipped character
 - [x] cgmSimChain — **Presets → Hair → bob** / **bob_hold** on test hair rig; Save Dat round-trip
 - [x] cgmSimChain — add hair chain to **existing** hairSys; frame 0 inCrv/outCrv on joints (Edna verify)
+- [x] cgmSimChain — **Presets SaveDir / SearchDir** (workspace save; collective load; labeled duplicates)
+- [x] cgmSimChain — Details **Hair systems** basename Enter rename
 - [ ] cgmSimChain — cloth attach + nCloth **`bangs_firm`** on head-follow cage
 - [ ] cgmSimChain — setup dat capture + **Apply Setup Dat** on production cloth attach rig
-- [ ] cgmSimChain — Sept 21 Init Sim (joints selected → New, no chain) + preset isolation (hair / HairShape / cloth / nucleus)
+- [ ] cgmSimChain — Sept 21 Init Sim + feel allowlist + preset isolation + `old >> new` apply logs
+- [ ] Scene — Projects / Recent project switch (no hard crash)
+- [ ] Scene — category / subtype header popup swap (no hard crash)
 
 ---
 
@@ -431,7 +543,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 ### Face26 — MRS facial block improvements (muzzle, brow, eye)
 
 #### Overview
-Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-weighted corner influences), aligns eye prerig with the shared `mParent` face-handle contract, adds a configurable face proxy/puppet mesh pipeline for muzzle/brow/eye (normals, `color_mesh` shaders, skin-unify routing), and extends **cgmSimChain** with dynFK hair-chain segment matching, a shipped **`.cgmSim*Dat` preset library** (hair / HairShape / cloth / nucleus), Edna-tuned **`bob`** / **`bob_hold`** hair presets, Init Sim without auto-chain, and section-isolated preset apply (feel vs shape vs fabric vs solver). Branch includes merges from AnimData and SpringCleaning.
+Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-weighted corner influences), aligns eye prerig with the shared `mParent` face-handle contract, adds a configurable face proxy/puppet mesh pipeline for muzzle/brow/eye (normals, `color_mesh` shaders, skin-unify routing), and extends **cgmSimChain** with dynFK hair-chain segment matching, a shipped **`.cgmSim*Dat` preset library** (hair / HairShape / cloth / nucleus), Edna-tuned **`bob`** / **`bob_hold`** hair presets, Init Sim without auto-chain, section-isolated preset apply (feel allowlist vs shape vs fabric vs solver), Script Editor **`attr: old >> new`** apply logs, **Presets SaveDir / SearchDir** (write root vs collective load), and Details **Hair systems** basename rename. Also hardens Scene **Projects** / **Recent** project switch and category/subtype header popups against Maya Qt hard crashes (deferred `LoadProject` / `SetCategory` / `SetSubType`). Branch includes merges from AnimData and SpringCleaning.
 
 #### Major changes
 
@@ -506,11 +618,34 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 
 ##### 10. cgmSimChain — Init Sim + preset apply isolation (Sept 21)
 - **Init Sim / New**: `setup_sim_dynFK(objs=[])` — no auto `chain_create` from Maya selection
-- **Hair vs HairShape**: hair `clean` seeds dynamic `base.hs` only; HairShape apply drops dynamic keys
+- **Hair feel allowlist**: `dynamicProperties` + `forces` only; skip `bendModel` / `restLengthScale` / `bendAnisotropy` / `dynamicsWeight`; never seed collide / iterations / shape on hair dat apply
+- **Hair vs HairShape**: hair `clean` seeds feel keys only; HairShape apply drops non-shape keys
 - **Cloth / nucleus**: cloth forced `fabric`→`nc`; nucleus library apply solver/wind overlay only (never full `base.n`)
-- **`Feature_SimChain.md`**: cross-kind isolation table; `differential` = capture flag only
+- **Apply logs**: `_apply_profile_attr_dict` / nCloth `_apply_attr_dict` — `attr: old >> new` + set/changed counts
+- **`Feature_SimChain.md`**: cross-kind isolation table; feel allowlist; `differential` = capture flag only
 
 **Files**: `dynamic_utils.py`, `nCloth_utils.py`, `simChain_dat.py`, `Features/Feature_SimChain.md`
+
+##### 11. Scene — project switch + category/subtype popup hard crash (Sept 21–22)
+- **Projects** / File → **Recent** called `LoadProject` synchronously during menu exec → `ra=True` column clear + workspace switch → Maya hard crash (Qt / ExtensionLayer / CommandEngine)
+- Category / subtype header popups called `SetCategory` / `SetSubType` synchronously → list clears + `buildAssetForm` during `QMenu::exec`
+- Fix: `_defer_ui(LoadProject|SetCategory|SetSubType, …)` on those menu items; subtype Create/Rename deferred; `LoadProject` guards `b_selCommandOn` + `deselectAll` before clear
+
+**Files**: `cgm/core/mrs/Scene.py`, `Features/Feature_CgmToolUI.md`
+
+##### 12. Library SaveDir / SearchDir (Sept 21, Maya-verified)
+- **SaveDir** radio (`dev` | `workspace`) — Save / Capture dat dialogs
+- **SearchDir** checkboxes — collective Load menus; duplicate keys labeled `name [mode]`; ≥1 SearchDir required
+- Shared `cgm_Dat` helpers; sim `get_library_rows`; MRS **Library** same pattern
+- Generic File → StartDir unchanged
+
+**Files**: `cgm_Dat.py`, `simChain_dat.py`, `dynFKTool.py`, `MRSDat.py`, `Features/Feature_SimChain.md`
+
+##### 13. Hair systems basename rename (Sept 22, Maya-verified)
+- Details **Hair systems** row: editable basename + Enter → `{name}_hairSys`
+- `RIGDYN.hair_system_set_name` / `hair_system_name_token`; duplicate-name guard; Create menu refresh
+
+**Files**: `dynamic_utils.py`, `dynFKTool.py`, `Features/Feature_SimChain.md`
 
 #### Merged dependencies (separate PR notes)
 - **AnimData** — see [`Branch_AnimData.md`](Branch_AnimData.md)
@@ -524,9 +659,11 @@ None intended — new enum values and rig paths are opt-in via block attrs. Exis
 - Maya-verify eye lid mesh density via `numLidSplit_u` / `numLidSplit_v`
 - Maya-verify skin-unify puppet mesh normals + side-colored shaders on production face rigs
 - Design blockDat key-based remap for new prerig handles (cheek, etc.)
-- Maya-verify cgmSimChain **`bob`** vs **`bob_hold`** on Edna production hair sim
+- Maya-verify cgmSimChain Sept 21 Init Sim + feel allowlist + apply logs on production hair
+- Maya-verify Scene Projects / Recent project switch (no hard crash)
+- Maya-verify Scene category / subtype header popup swap (no hard crash)
 - Maya-verify cgmSimChain **`bangs_firm`** hair + nCloth on production fringe / hair-cage rigs
-- Maya-verify Sept 21: Init Sim with selection; differential hair leaves shape; cloth↔nucleus↔hair↔HairShape layering
+- Maya-verify Sept 21: Init Sim with selection; feel allowlist (collide unchanged); cloth↔nucleus↔hair↔HairShape layering; Script Editor `old >> new` lines
 - Phase 2: **`cgmSimChainSetup`** — shipped; production rig verify pending
 - Consider Feature doc for facial MRS blocks when blockDat / mesh contract is settled
 
@@ -551,15 +688,18 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **Follicle sampling default**: **`fixedSegmentLength=off`**, **`sampleDensity=1`** (CV-matched); optional Create **Options → Fixed segment length**
 - **Add-to-existing hairSys**: POC / up-aim on **outCurve**; full-chain **`skinCluster`** before MCD
 - **Last-joint aim default**: forward tangent offset at tip (**`+fwd`**) when **`extendEnd=False`**
-- **cgmSim*Dat library**: `.cgmSimHairDat` / `.cgmSimHairShapeDat` / `.cgmSimClothDat` / `.cgmSimNucleusDat` under **`cgm/cgmDat/sim/`**; **Presets → Hair / Cloth / Nucleus** + **File** Save/Load (Maya-verified)
+- **cgmSim*Dat library**: `.cgmSimHairDat` / `.cgmSimHairShapeDat` / `.cgmSimClothDat` / `.cgmSimNucleusDat` under **`cgm/cgmDat/sim/`**; **Presets → Hair / Cloth / Nucleus** + **File** Save/Load (Maya-verified); **no `meta`** (user/date/scene/sourceNode)
+- **Library dirs**: **SaveDir** (write root) + **SearchDir** bools (collective load; collision labels) — Presets + MRS Library (Maya-verified)
+- **Hair systems basename**: Details row Enter rename → `{name}_hairSys` (`hair_system_set_name`)
 - **cgmSimChainSetup Phase 2**: `.cgmSimChainSetup` under **`cgm/cgmDat/sim/setups/`**; **File → Capture Setup Dat**, **Presets → Setups**, **Tools → Apply Setup Dat**
 - **Init Sim / New**: setup + nucleus only — Maya selection does **not** auto-build a hair chain (**Make Dynamic Chain** does)
-- **Preset apply isolation**: hair = dynamic feel; HairShape = shape/follicle; cloth = `nc` fabric; nucleus = `n` solver/wind overlay; `differential` = capture only
+- **Preset apply isolation**: hair feel = `dynamicProperties`+`forces` only (not collide/iterations); HairShape = shape/follicle; cloth = `nc` fabric; nucleus = `n` solver/wind overlay; `differential` = capture only
+- **Preset apply logs**: `attr: old >> new` (unchanged at debug); summary `N set | M changed`
 - **dynFK hair feel**: **`bob`** (lively volume), **`bob_hold`** (rest-shape), **`bangs_firm`** (fringe) — **Presets → Hair**
 - **Nucleus solver tiers**: **`solver_balanced`** → **`solver_quality`** → **`solver_high`** — **Presets → Nucleus** (never bundled into hair/cloth dats)
 - **nCloth short panels**: fabric **`bangs_firm`** — high stretch/compression, low bend, moderate damp; **`inputMeshAttract` ≤ ~0.08** on head-follow cages (not **`inputAttract`** preset)
 
 ---
 
-*Last Updated: September 21, 2026 (Init Sim + preset apply isolation)*  
+*Last Updated: September 22, 2026 (Scene category/subtype popup crash defer)*  
 *Branch Status: Active*

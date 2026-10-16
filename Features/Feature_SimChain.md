@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, July 2026)
-- **Last Updated**: September 21, 2026 (Init Sim no auto-chain; hair/HairShape/cloth/nucleus apply isolation)
+- **Last Updated**: September 21, 2026 (no preset meta; hair feel allowlist; apply logs; Init Sim)
 - **Audience**: Dev / TA — design contract for dynamic follow chains (hair + cloth attach), presets, connect/bake behavior
 - **Purpose**: Canonical reference for what **cgmSimChain** (`dynFKTool` / `cgmDynFK`) does, how hair vs cloth attach chains differ, and what scene/setup invariants must hold. Use when debugging regressions, reviewing PRs, or adding nCloth / dynFK presets.
 
@@ -266,7 +266,7 @@ Shipped and user-authored preset files live under **`cgm/cgmDat/sim/`** as JSON 
 | `SimClothDat` | `.cgmSimClothDat` | `nc` | `nClothShape` | **Presets → Cloth** |
 | `SimNucleusDat` | `.cgmSimNucleusDat` | `n` | `nucleus` | **Presets → Nucleus** |
 
-Module: [`simChain_dat.py`](../../cgmToolsPy3/cgm/core/lib/simChain_dat.py) — `capture()`, `apply()`, `read_dat()`, `get_library_options()`.
+Module: [`simChain_dat.py`](../../cgmToolsPy3/cgm/core/lib/simChain_dat.py) — `capture()`, `apply()`, `read_dat()`, `get_library_options()` / `get_library_rows()` (SearchDir multi-mode).
 
 **On-disk layout** (BlockConfig-style dev library):
 
@@ -277,17 +277,17 @@ cgm/cgmDat/sim/
 └── nucleus/    (*.cgmSimNucleusDat — solver_balanced, solver_quality, solver_high, wind_calm)
 ```
 
-**JSON schema (v1):** `schemaVersion`, `name`, `datKind`, `section`, `profileKind`, `differential`, `profile` (attr dict), `meta` (user/date/scene/sourceNode).
+**JSON schema (v1):** `schemaVersion`, `datKind`, `section`, `profileKind`, `differential`, `profile` (attr dict). No `name` (library identity is the filename) and no `meta` (user/date/scene/sourceNode) — legacy files may still contain them; read/write strips both.
 
-**Apply contract:** dat apply calls `NCLOTH.profile_apply_section()` / `RIGDYN.profile_apply_section()` — same clean/seed, skip-list, and gravity remap rules as module `profile_load`. Layered combos (e.g. cotton + solver_high) remain **two dat applies** (cloth dat, then nucleus dat).
+**Apply contract:** dat apply calls `NCLOTH.profile_apply_section()` / `RIGDYN.profile_apply_section()` — same clean/seed, skip-list, and gravity remap rules as module `profile_load`. Layered combos (e.g. cotton + solver_high) remain **two dat applies** (cloth dat, then nucleus dat). Script Editor logs each change as **`attr: old >> new`** (unchanged at debug) plus **`N set | M changed`**.
 
-**Hair vs HairShape:** `.cgmSimHairDat` is **dynamic feel only**. With `clean=True` (default), it seeds **dynamic** `base.hs` keys then overlays the profile — it does **not** reset or write shape groups (`base` / `clumpAndHairShape`: `hairWidth`, `clumpWidth`, `subSegments`, …). Shape lives in **`.cgmSimHairShapeDat`**. `differential: true` only controls what was **captured** vs base; it must not change this apply boundary.
+**Hair vs HairShape:** `.cgmSimHairDat` is **dynamic feel only** (`dynamicProperties` + `forces`). With `clean=True` (default), it seeds those feel keys from `base.hs` then overlays the profile — it does **not** write shape groups, **collisions**, turbulence, iterations/noise (`others`), or structural feel skips (`bendModel`, `restLengthScale`, `bendAnisotropy`, `dynamicsWeight`). Shape lives in **`.cgmSimHairShapeDat`**. `differential: true` only controls what was **captured** vs base; apply still filters to the feel allowlist (legacy differentials that stored `hairWidth` / `collide` / `bendModel` drop those on load).
 
 **Cross-kind isolation (apply must not quash):**
 
 | Load | Target node | Clean seed | Must not write |
 |------|-------------|------------|----------------|
-| Hair | hairSystem | dynamic `base.hs` only | shape groups, follicle, nucleus, nCloth |
+| Hair | hairSystem | feel (`dynamicProperties`+`forces`) from `base.hs` | shape, collide/iterations/noise, structural skips, nucleus, nCloth |
 | HairShape | hairSystem (+ follicle if chain) | shape `base.hs` groups only | dynamic feel, nucleus, nCloth |
 | Cloth | nClothShape | `base.nc` (fabric) | nucleus (`n`), hairSystem |
 | Nucleus | nucleus | **none** (solver/wind overlay) | nCloth (`nc`), hairSystem; never dump full `base.n` |
@@ -297,12 +297,16 @@ Solver vs wind on the same nucleus are both overlay-only, so loading `solver_hig
 
 **UI:**
 
-- **Presets → Hair / Cloth / Nucleus** — scan `cgmDat/sim`, load + apply on pick; **Save * Dat…** captures from selection or loaded cgmDynFK
-- **Details → Hair systems** — one option menu per registered shape: **Load Dat** (library names, **SearchDir** dev/workspace) + **Save Hair Dat…** (`SimHairDat.capture(nodes=<shape>, mDynFK=…)` + save dialog — parity with **Presets → Save Hair Dat…**)
+- **Presets → SaveDir** — radio `dev` | `workspace`: where **Save * Dat…** / capture dialogs open (OV `cgmDynSimTool_libraryDirMode`)
+- **Presets → SearchDir** — checkboxes per root (default both on): which roots feed Load menus; both on → collective set. Duplicate keys show both entries labeled e.g. `bob [dev]` / `bob [workspace]`. Keep ≥1 SearchDir on. OVs `cgmDynSimTool_librarySearch_dev` / `_workspace`
+- **Presets → Hair / Cloth / Nucleus** — scan enabled SearchDir roots under `cgmDat/sim`, load + apply by filepath; **Save * Dat…** captures to **SaveDir**
+- **Details → Hair systems** — same SearchDir collective Load Dat lists + **Save Hair Dat…** (SaveDir)
 - **Presets → Reset → Base** — nucleus + hairSystem reset via module `base` profile (not a dat file)
-- **Presets → Setups** — `.cgmSimChainSetup` dev library
-- **File → Load/Save Dat** — in-memory dat I/O + **Apply Loaded Dat**
-- Menu rebuilds when **Presets** opens (`uiMenu_PresetsMenu.clear()`); Details hair row menus refresh on **Details** rebuild (library scan uses same **`cgmSimChain_libraryDirMode`** optionVar)
+- **Presets → Setups** — `.cgmSimChainSetup` library scan (SearchDir collective)
+- **File → Load/Save Dat** — Load dialog starts under first enabled SearchDir; Save uses SaveDir
+- Menu rebuilds when **Presets** opens (`uiMenu_PresetsMenu.clear()`); Details hair row menus refresh on **Details** rebuild
+
+Shared helpers: `CGMDAT.library_options_merge` / `get_ext_options_multi` / `uiMenu_addLibrarySaveSearchDirs` (also MRS **Library** menu). Generic File → StartDir unchanged.
 
 **Phase 2 (shipped):** `.cgmSimChainSetup` under `cgmDat/sim/setups/` — serializable `cgmDynFK` setup recipe for re-wire when scene nodes still exist. See **Setup dat** below.
 
@@ -323,6 +327,8 @@ Extension: **`.cgmSimChainSetup`**. Class: `SimChainSetup` in [`simChain_dat.py`
 | `chains[]` | Per chain: `index`, `name`, `chainMode`, `surfaceTrack`, `targets[]`, optional `hairSystem` (per-chain), optional `options` (hair: …), `presetRefs` |
 | `presetRefs` | Setup-level library keys (`hair/bob`, `cloth/bangs_firm`, `nucleus/solver_balanced`) |
 
+No `meta` block on setup or preset dats (user/date/scene/sourceNode removed).
+
 **Capture:** `SimChainSetup.capture(mDynFK)` — from loaded setup via `cgmDynFK.get_dat()`.
 
 **Apply / re-setup:** `SimChainSetup.apply()` — find or create setup → `map_nucleus` / `map_cloth_surface` / `map_hair_system` → rebuild chains (`attach_to_cloth_dynFK` or `chain_create_hair`) when targets resolve → optional `presetRefs` via dat library.
@@ -331,9 +337,9 @@ Extension: **`.cgmSimChainSetup`**. Class: `SimChainSetup` in [`simChain_dat.py`
 
 | Surface | Action |
 |---------|--------|
-| **File → Capture Setup Dat…** | Save loaded setup to `cgmDat/sim/setups/` |
+| **File → Capture Setup Dat…** | Save loaded setup to SaveDir `cgmDat/sim/setups/` |
 | **Tools → Apply Setup Dat** | Re-wire from loaded setup file |
-| **Presets → Setups** | Dev library scan; load + apply on pick |
+| **Presets → Setups** | SearchDir collective scan; load + apply on pick |
 | **File → Apply Loaded Dat** | Routes to setup apply when a setup file is loaded |
 
 **Contract:** All `mapped` nodes and chain `targets` must exist in the scene (resolved by long name, with short-name fallback). Existing chains at matching index are verified when `recreateChains=False`; default is recreate after delete. Layered presets still use separate preset dats referenced by `presetRefs`.
@@ -377,7 +383,8 @@ Apply rules (`dynamic_utils.profile_load`):
 | Create | **Hair** (collapsible) | **Hair system** (New / Default / registered), fixed segment, sample density, follow mode, in/out degrees, add end joint; **Make Dynamic Chain** |
 | Details | Per hair chain — **Sample density** | Live follicle attr + `follicleSampleDensity` on chain grp; **Rebuild Chain** honors stored value |
 | Create | **Cloth** (collapsible) | Cloth link status, mesh track (default **uvPin**); **Attach to Cloth** → `attach_to_cloth_dynFK` when nCloth mapped |
-| Details | **Hair systems** header — rows **Hair system 1**, **2**, … (DAG name in data column) + **Load Dat** / **Save Hair Dat…**; **Default** enum picks setup default; **Register** `<<` adds from selection | Library **`.cgmSimHairDat`** only (`uiFunc_library_apply_hair_to_target`, `uiFunc_sim_dat_capture_save_for_target`); no follicle-row preset menu |
+| Details | **Hair systems** header — rows **Hair system N** + basename field (Enter → `{name}_hairSys`) + **Load Dat** / **Save Hair Dat…**; **Default** enum; **Register** `<<` | **`hair_system_set_name`**; library dats; last loaded option marked ``(…)`` for the session (per menu / target) |
+| Details | Nucleus / Cloth / chain **Load Dat** menus | Same session last-loaded ``(…)`` mark; menu resets to Load Dat after apply |
 | Details | **Baking** | Collapsible frame (start time, bake range, bake/connect all) |
 | Details | **Chains** | Outer collapsible; per-chain frames **`[index] - name`** with alternating header `bgc` |
 | Details | Per hair chain — **Hair system** row (`<<` map / rewire) | **`chain_map_hair_system`** |
@@ -704,6 +711,8 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 
 | Date | Summary |
 |------|---------|
+| 2026-09-21 | **Preset dat — no meta** — drop `meta` (user/date/scene/sourceNode) from capture/write; strip from library hair/HairShape/cloth/nucleus/setup files; read/write pop legacy `meta` |
+| 2026-09-21 | **Hair feel allowlist** — feel = `dynamicProperties`+`forces` only (not collisions/others); skip `bendModel`/`restLengthScale`/`dynamicsWeight`; filter legacy differentials on apply; JSON compound ramp key coerce. **Apply logs** — `attr: old >> new` + set/changed counts (`_apply_profile_attr_dict` / nCloth `_apply_attr_dict`) |
 | 2026-09-21 | **Init Sim / New** — `setup_sim_dynFK(objs=[])`; selection does not auto `chain_create`. **Hair vs HairShape apply** — hair `clean` seeds dynamic `base.hs` only; HairShape drops dynamic keys. **Cloth/nucleus isolation** — fabric→`nc` only; nucleus solver/wind overlay only; cross-kind table in apply contract |
 | 2026-09-15 | **Multi hairSystem per chain** — `mHairSystems` registry + per-chain `mHairSysShape`; Create hair system menu; setup dat `hairSystems[]` / per-chain `hairSystem`; `chain_map_hair_system` rewire; Details hair rows **Load Dat** / **Save Hair Dat…** (library dats only; **`nodePreset`** removed from **`dynFKTool`**) |
 | 2026-09-15 | **Spline IK advanced twist** — **`advancedTwist`** (Create + Details + setup dat); **`_apply_hair_spline_ik_advanced_twist`** (`dWorldUpType` 4, separate **`dForwardAxis`** / **`dWorldUpAxis`** via **`listEnum`**, WU matrices from base sim joints); rebuild sim rename + stray driven cleanup; rebuild hang fix (teardown/skin before sim move) |
@@ -713,6 +722,9 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 | 2026-09-11 | **`chain_rebuild_follow`** + **Rebuild Locators** (rest sync order + POC/aim rebuild; no tool UI for **`follicle.degree`**) |
 | 2026-09-10 | **Presets menu** — Hair / Cloth / Nucleus load **`.cgmSim*Dat` library** only; **Reset → Base** for module baseline; Python preset menus removed from UI |
 | 2026-09-10 | Hair library tuning — **`bob`** / **`bob_hold`** (lively vs rest-shape); **`ponytail`**, **`ribbon`**, **`tail_firm`**; shipped full hair seed set |
+| 2026-09-22 | **Preset dats drop ``name``** — hair / HairShape / cloth / nucleus; identity is filename; setup dat still has `name` / `baseName`; read/write strips legacy `name` |
+| 2026-09-22 | **Hair systems basename** (Maya-verified) — Details row Enter rename → `{name}_hairSys` (`hair_system_set_name` / `hair_system_name_token`) |
+| 2026-09-21 | **Library SaveDir / SearchDir** (Maya-verified) — Presets SaveDir radio (write root) + SearchDir checkboxes (collective load; collision labels `name [mode]`); shared `cgm_Dat` helpers; MRS Library same pattern; saves use SaveDir (no longer hardcode `dev`) |
 | 2026-09-11 | **Last-joint forward tangent aim** — when **`extendEnd=False`**, tip **`+fwd`** aim null = tip POC + outCurve tangent × last segment length |
 | 2026-09-11 | **LastDynFK** optionVar — autoload last cgmDynFK setup on tool open when node exists |
 | 2026-09-11 | Hair **bind-before-dynamic** + post-MCD **`_consolidate_hair_incurve_after_mcd`** (rebuild inCurve, wire **`startPosition`**, rebind skin); **outCurve rest sync** + follicle **`restPose`**; default **CV-matched** follicle sampling; Create **Options → Fixed segment length**; add-to-existing hairSys POC on **outCurve**; inCrv stays on **chain grp** (no follicle snap / relative reparent) |

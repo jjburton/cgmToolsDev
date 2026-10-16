@@ -144,7 +144,7 @@ Index labels (e.g. `[0] spine_cog_anim`) belong in **`.alias`**, not in `.item` 
 4. `sl._syncHLCFromSelection(dim=SCENE_LIST_HLC_DIM)` — restore readable selected-row color after rebuild (see below).
 5. `process_search_filter` / clear filter → `_refresh_searchable_display` only (do not overwrite stored `rows`).
 
-**Popup / menu reload**: When a scroll-list action (P4 Revert, popup **Refresh**, popup **Delete**, column refresh icon) must rebuild the **same** list, defer the load via `mc.evalDeferred(cgmGEN.Callback(...), lp=True)` — Scene uses `_defer_ui()`. Synchronous `ra=True` during `QMenu::exec` can crash Maya (`QTreeWidget::clear` / `QItemSelectionModel::clear`).
+**Popup / menu reload**: When a scroll-list action (P4 Revert, popup **Refresh**, popup **Delete**, column refresh icon) must rebuild the **same** list, defer the load via `mc.evalDeferred(cgmGEN.Callback(...), lp=True)` — Scene uses `_defer_ui()`. Synchronous `ra=True` during `QMenu::exec` can crash Maya (`QTreeWidget::clear` / `QItemSelectionModel::clear`). Same rule for **Projects** / File → **Recent** project switch and browser **category / subtype** header popups (`SetCategory` / `SetSubType` → list clears + `buildAssetForm`): wire through `_defer_ui`, never call synchronously from the menu callback.
 
 **Selection**: `cgmScrollList.getSelectedItem()` / `getSelectedItems()` map selected index → `_ml_rows[i].item` (canonical). `selectByValue(canonical)` selects by alias internally.
 
@@ -224,6 +224,10 @@ Actions call [`perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) write A
 **Pitfall (blank lists)**: Widget-only `ra=True`, then `appendDisplayRow` (append + itc per display index). Do not wipe `_ml_rows` before populate.
 
 **Pitfall (Maya crash on popup refresh)**: Calling `ra=True` or `selectIndexedItem` on an `iconTextScrollList` **from its own right-click menu callback** (P4 actions, popup **Refresh**, popup **Delete**) runs list mutation while the menu event loop is still active → intermittent `ACCESS_VIOLATION` in `QItemSelectionModel`. **Fix**: defer the menu action and column reload (`_defer_ui` / `mc.evalDeferred`); centralize post-delete reload via `_defer_list_reload_after_delete(mode)`; in `_refresh_searchable_display`, disable `b_selCommandOn` and `deselectAll` before `ra=True` (Builder `rebuild` pattern).
+
+**Pitfall (Maya crash on project switch)**: **Projects** menu / File → **Recent** used to call `LoadProject` synchronously. That path clears all four browser columns (`clear()` → `ra=True`), runs `uiProject_refreshDisplay` (list rebuilds, `setProject` / `openWorkspace`, scriptUI menu clear), while the menu is still active → hard crash in Qt / ExtensionLayer / CommandEngine / python. **Fix**: `cgmGEN.Callback(self._defer_ui, self.LoadProject, path)` on those menu items; `LoadProject` also guards `b_selCommandOn` + `deselectAll` before clear.
+
+**Pitfall (Maya crash on category / subtype swap)**: Category and subtype header **popup** menus used to call `SetCategory` / `SetSubType` synchronously. Those clear/rebuild asset + sets/variation/version lists and call `buildAssetForm` during `QMenu::exec`. **Fix**: `_defer_ui` on category/subtype menu items (and subtype Create/Rename utils).
 
 **Future**: real icons need PySide — out of scope for Mel columns.
 
@@ -504,6 +508,8 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 | 2026-08-26 | CGMDAT.ui Save disabled with no path; X clears dat filepath; Save/Save As commit LastLoaded + Recent |
 | 2026-08-20 | Mel widget unique-id persist across Reload Core (`sys._cgmMelWidgetNextKey`); Layout hang at 80% from `exists` walk after `_NEXT_KEY` reset |
 | 2026-08-17 | cgmP4 Shelved Files UI + section empty-state centered rows; collapsible per-CL frame preserved (animFilter pattern) |
+| 2026-09-22 | Scene category/subtype header popup crash: defer `SetCategory` / `SetSubType` (+ Create/Rename subtype) |
+| 2026-09-21 | Scene project switch crash: defer `LoadProject` from Projects / Recent menus; guard column clear `b_selCommandOn` + `deselectAll` |
 | 2026-08-17 | Scene browser popup Delete crash fix: defer Delete menu + `_defer_list_reload_after_delete`; single version delete uses `LoadVersionList` |
 | 2026-08-13 | Scene log noise: removed `HasSub` debug warnings (asset popup loop); P4 cache status at debug in perforce.py |
 | 2026-08-13 | Scene browser scroll-list popup crash fix: defer column reload from P4/Refresh menus; `_refresh_searchable_display` `b_selCommandOn` + `deselectAll` before `ra=True` |
