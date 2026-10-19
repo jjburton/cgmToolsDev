@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: In progress — **Maya-verified** for Segment `ikSetup=bezier`, `segmentType=parent`, `scaleSetup` + squash **simple**, `segmentStretchBy` **translate** and **scale**
-- **Last Updated**: October 19, 2026 (Head neck bezier: head IK joint clean under **`headIK`**; no end **`followIK`** on split path)
+- **Last Updated**: October 19, 2026 (Segment **`ikBezierControlShape`** ball vs segmentHandle)
 - **Audience**: Dev / TA — design contract for Bezier spline IK on MRS Segment (not artist manual prose)
 - **Branch timeline**: [`Branches/Branch_BezierIK.md`](../Branches/Branch_BezierIK.md)
 
@@ -54,6 +54,7 @@
 | Attr | Effect |
 |------|--------|
 | `ikSetup` / Head `neckIK` = bezier | Bezier driver + ikSplineSolver chain |
+| **`ikBezierControlShape`** (Segment, `ikSetup=bezier`) | **`ball`** (default) — FK cross-section **cube** mains + **sphere** subs (neck bezier). **`segmentHandle`** — cast-thin **cube** mains (**`jointRadius`** on aim, cross from proxy cast — limb bezier) + **`limbSegmentHandle`** semiSphere subs. Head/Limb unchanged (no attr → **`ball`**). |
 | `segmentType` = parent | Required for bezier phase 1 |
 | `scaleSetup` | Enables scale blend to **blend** joints; bezier does **not** use ribbon IK scaleConstraints on IK (stretch owns IK channels) |
 | `squash` = simple | With `scaleSetup`, runs `bezier_spline_stretch` after IK + end follow blend |

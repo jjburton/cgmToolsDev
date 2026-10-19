@@ -124,6 +124,19 @@ For each prototype batch (chat or file path):
 
 ## Timeline
 
+### October 19, 2026 - Segment `ikBezierControlShape` (ball vs segmentHandle)
+
+**What**:
+
+- **Segment block** enum **`ikBezierControlShape`**: **`ball`** | **`segmentHandle`** (default **`ball`**). Rig UI + **`shared_dat`** vocabulary.
+- **`bezier_ik_block_utils`**: **`rig_shapes_bezier_main_cube_cast_sized`** (limb cast-thin mains); **`segmentHandle`** = cast cubes + **`limbSegmentHandle`** subs; **`ball`** = FK uniform cubes + sphere subs.
+
+**Files**: `segment.py`, `shared_dat.py`, `bezier_ik_block_utils.py`; `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
+
+**Status**: In py3 — reload lib; rebuild Segment **`rig_shapes`** with **`ikSetup=bezier`** for both enum values.
+
+---
+
 ### October 19, 2026 - Inflate ramp UI, limb seg parent, sub-handle scale
 
 **What**:
