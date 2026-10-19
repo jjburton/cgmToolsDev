@@ -61,7 +61,7 @@
 | Settings `stretch` / `squash` | Created by `bezier_spline_stretch` on settings (or driver fallback) |
 | `squashExtraControl` | Enables per-joint volume **`{base}_outFactor_i`** on settings (`extraSquashControl` in lib). Requires volume squash active on the block path (limb: `_limb_bezier_volume_squash_active`). |
 | `squashInflateControl` | Segment / Head / Limb. When **on**, `bezier_spline_stretch` gets **`extraInflateControl`** (settings **`squashInflate`** / **`squashInflateOffset`**, **`{part}_inflateFactor_i`**). Independent of **`squashExtraControl`**. Legacy blocks without the attr fall back to **`squashExtraControl`**. Default **on**. |
-| `inflateFactorMin` / `Max` / `Mode` | Ramp for **`{partName}_inflateFactor_i`** (defaults mirror squash factor enums). **`inflateFactorMin` may be negative** for contract/inflate contrast. Independent of volume `outFactor` values. |
+| **`squashInflateFactorMin` / `Max` / `Mode`** (block Squash/Stretch UI) | Ramp for **settings** `{partName}_inflate_inflateFactor_i` defaults — **not** **`squashFactorMin/Max`** (those drive volume **`outFactor_*`** only). **`squashInflateFactorMode`**: same enum set as **`squashFactorMode`** (`midPeak`, **`midBulge`**, …). **`squashInflateFactorMin` may be negative** for contract vs inflate. Legacy block attrs **`inflateFactorMin/Max/Mode`** still read via **`block_squash_inflate_factor_min_max`** / **`block_squash_inflate_factor_mode`**. |
 | Settings **`squashInflate`** | Additive strength on the inflate ramp (default **0**). Raise **> 0** to inflate; negative **`inflateFactor_*`** on a joint contracts when this is **> 0**. |
 | Settings **`squashInflateOffset`** | ±2 slides the inflate ramp along the chain (`shift = offset × maxIdx/2`; sample index `s = g − shift` with lerp between adjacent factor indices). Limb: **`g`** is global across roll sections (`inflateSlideGlobalCount` / `Start`). |
 | End IK `followIK` | Default **0** on **Segment** bezier (orient blend via **`_splineControl`** on end IK joint). **Head** split path (**`headIK` ≠ `controlIK`**): **no** end follow blend on **`ml_ikJoints[-1]`** — head joint follows **`headIK`** only. |
@@ -117,9 +117,19 @@ Arc-length stretch from **driver curve** (`bezierIKDriverCurve` on rigNull — P
 | Layer | Settings attrs | Math (per squash joint) |
 |-------|----------------|---------------------------|
 | Volume | `{base}_outFactor_i` | `1 + (volBase − 1) × outFactor × squash` — unchanged when inflate is added |
-| Inflate | `{part}_inflateFactor_i`, `squashInflate`, `squashInflateOffset` | `volScale + factorSample × squashInflate` (`inflateAdd_*` mult + PMA). **`inflateFactor_*` and block `inflateFactorMin` may be negative** so some joints contract while others inflate (e.g. `midPeak` with min **-1**, max **1**). |
+| Inflate | `{part}_inflateFactor_i`, `squashInflate`, `squashInflateOffset` | `volScale + factorSample × squashInflate` (`inflateAdd_*` mult + PMA). Settings factor attrs use block **`squashInflateFactorMin/Max`**; **`squashInflateFactorMin` may be negative** so some joints contract while others inflate. |
 
-**Lib kwargs** (Segment + Limb callers): `extraSquashControl`, `extraInflateControl` (inflate attrs can build when `squashExtraControl` is on even if volume squash is off on a given code path — **wiring** still requires the volume per-joint squash network today: `ml_inflate_pending` is populated only inside `extraSquashControl` stretch branches). `inflateFactorBaseName`, `inflateSlideGlobalCount`, `inflateSlideGlobalStart`, `inflateFactorMin/Max/Mode`.
+**Lib kwargs** (Segment + Head + Limb callers): `extraSquashControl`, `extraInflateControl` (inflate attrs can build when `squashExtraControl` is on even if volume squash is off on a given code path — **wiring** still requires the volume per-joint squash network today: `ml_inflate_pending` is populated only inside `extraSquashControl` stretch branches). `inflateFactorBaseName`, `inflateSlideGlobalCount`, `inflateSlideGlobalStart`, `inflateFactorMin/Max/Mode` (block **`squashInflateFactorMode`** → **`inflateFactorMode`** kwarg). **`inflateDriveDirectParents`**: IK joints get **volume squash only**; full inflate scale plugs are returned in **`l_inflateDirectPlugs`** for block wiring.
+
+**FK + direct controls** (`squashInflateControl` on): inflate must not ride **`blendChainsScaleByAttr`** alone (FKIK=0 drops IK inflate). Shared lib **`bezier_inflate_parent_direct_controls`** wires visible **`{rigJoint}_inflateScale`** nulls; **`masterGroup`** (or rig joint) parents under each null.
+
+| Block | When | Parent anchor |
+|-------|------|----------------|
+| **Segment** | `ikSetup=bezier`, `segmentType=parent` | **`blendJoints[i]`** — **`bezier_inflate_parent_segment_direct_controls`** after scale blend in **`rig_frame`** |
+| **Head** | `neckIK=bezier`, `segmentType=parent` | Same as Segment — **`head.py` `rig_frame`** |
+| **Limb** | `segmentType=bezier`, `scaleSetup` | Rig joints **`p_parent`** seg drivers (skeleton); **`_limb_bezier_rigjoint_scale_from_seg_drivers`** scale-constrains seg **`driverJoints`** → rig **`masterGroup`** (before inflate). Inflate: **`{rig}_inflateScale`** under **per-index seg IK** (`ml_segJoints[i]`), then **`masterGroup`** — wired at end of **`rig_segments`** after stretch. |
+
+Rebuild module after py3 edits.
 
 **Inflate factor sampling** (`_bezier_stretch_inflate_offset_sample_network`): clamped `s` → floor index + fractional lerp via **choice** + **blendTwoAttr**; floor from a hidden **`floorUtil`** transform + expression (`floor(sampleS)`). DG nodes are created with **`_bezier_stretch_dg_named_node`** (`cgmMeta.cgmNode(mc.createNode(type))` then `rename`) — do not use `cgmNode(nodeType='floatMath')` (invalid / wrong node type in scene). All `{part}_inflateFactor_0..maxIdx` attrs are ensured on settings before sampling (`_bezier_stretch_inflate_factor_plugs_ensure`).
 
@@ -221,6 +231,9 @@ Legacy neck modes (spline / ribbon / single **`controlIK`** on head) keep one tr
 | 2026-10-15 | **pointDist** stretch: fix `_bezier_stretch_seg_final_ratio_network` — `masterScale` on live distance only (bind rest static); Maya-verified vs arcLength under puppet scale |
 | 2026-10-19 | **Head** neck bezier (split): **`head_*_ik_sknJnt`** clean child of **`headIK`**; no end **`pointConstraint` / `followIK` / `_splineControl`** on head IK joint; **`ml_ikUse`** spline end under **`ml_ikJoints[-2]`**; skip **`scaleConstraint(headIK → last ik)`** when split |
 | 2026-10-19 | **Head** neck-end **`controlIK`**: space / switch target + dyn parent **`headIK`** (not blend joint) |
+| 2026-10-19 | Block **`squashInflateFactorMin/Max/Mode`** (Squash/Stretch UI; replaces **`inflateFactor*`** names) — ramp for settings **`{part}_inflate_inflateFactor_i`**, separate from **`squashFactorMin/Max`** |
+| 2026-10-19 | **Head** + **Limb** bezier inflate: same **`inflateDriveDirectParents`** / direct-parent contract as Segment |
+| 2026-10-19 | **Segment** bezier inflate: **`inflateDriveDirectParents`** + **`bezier_inflate_parent_segment_direct_controls`** so FK sees inflate on direct-control parents (not FK/IK scale blend) |
 | 2026-10-19 | **Head** neck bezier: drop **`headIK → controlIK`** parent constraint; ribbon end on neck-end **`controlIK`** |
 | 2026-10-15 | **Head** **`rig_cleanUp`**: dyn parent rebuild on separate **`headIK`** (was only on **`ml_ikControls`** / **`controlIK`**) |
 | 2026-10-15 | **Head** neck bezier: split **`headIK`** (anim) vs **`controlIK`** (neck-end ikBezier); ribbon end + constraint follow; stretch chain through neck + spline end |
