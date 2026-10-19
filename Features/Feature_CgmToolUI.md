@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: October 12, 2026
+- **Last Updated**: October 19, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -156,6 +156,26 @@ Index labels (e.g. `[0] spine_cog_anim`) belong in **`.alias`**, not in `.item` 
 
 **Popup / menu reload**: When a scroll-list action (P4 Revert, popup **Refresh**, popup **Delete**, column refresh icon) must rebuild the **same** list, defer the load via `mc.evalDeferred(cgmGEN.Callback(...), lp=True)` — Scene uses `_defer_ui()`. Synchronous `ra=True` during `QMenu::exec` can crash Maya (`QTreeWidget::clear` / `QItemSelectionModel::clear`). Same rule for **Projects** / File → **Recent** project switch and browser **category / subtype** header popups (`SetCategory` / `SetSubType` → list clears + `buildAssetForm`): wire through `_defer_ui`, never call synchronously from the menu callback.
 
+**File-list right-click popup (Sets / Variation / Version)** — [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) `_wireFileListScrollSelect` (Builder block-list pattern):
+
+| Phase | What runs | Safe? |
+|-------|-----------|-------|
+| **Scroll selection change** | `_fileListSelectCommand` → `_rebuildFileListPopup` (delete old `MelPopupMenu`, create new, `buildSubTypeListPopup` / `buildVariationListPopup` / `buildVersionListPopup`) | Yes — not inside `QMenu::exec` |
+| **Pre-menu (`pmc`)** before RMB menu paints | `_ensure_file_list_popup_selection`; optional `listSelectFunc()` when sole row was implied; **toggle** dynamic items (`Send To Build` `en`, P4 `en`, Send To Project submenu refresh) | Yes — **`menu_item(edit=True, en=…)` only** |
+| **Menu item command** | Reference / Import / Send To Build / P4 / Delete | Must target **current** menu items — see pitfalls below |
+
+**Rebuild contract**: Recreate the popup when the menu is **missing or empty**, or when **selection changes** (left-click / keyboard). **Do not** call `_rebuildFileListPopup` / `_fileListPopupDelete` from the popup’s own **`pmc`** on every right-click — that deletes the menu Maya is opening and commonly **hard-crashes Maya when the artist clicks any menu item**.
+
+**Send To Build** (file popups only, single selection):
+
+| Rule | Implementation |
+|------|----------------|
+| **Disabled** when selection is an MRS build output scene (`*_BUILD.ma` / `*.mb`, case-insensitive stem) | [`batch_utils.is_mrs_build_output_scene`](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py); resolve absolute path via `_scene_resolve_list_file_path(scrollList, list_key)` + `versionFile` fallback |
+| **Enable refresh** | `_refresh_send_to_build_menu_item` in `pmc` and after list select; set `en` at menu **create** and on **edit** |
+| **Do not** gate `edit` on `mc.objExists(MelMenuItem)` | False negatives skip `en` updates — menu stays wrongly enabled |
+| **Command guard** | `SendToBuild` still rejects BUILD paths if menu state drifts |
+| **Multi-select** | `_buildFileListPopupMulti` — no Send To Build row |
+
 **Selection**: `cgmScrollList.getSelectedItem()` / `getSelectedItems()` map selected index → `_ml_rows[i].item` (canonical). `selectByValue(canonical)` selects by alias internally.
 
 **Row text color (`itc`) and selection highlight (`hlc`)** — `iconTextScrollList` uses two colors:
@@ -255,6 +275,8 @@ Actions call [`perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) write A
 **Pitfall (Maya crash on project switch)**: **Projects** menu / File → **Recent** used to call `LoadProject` synchronously. That path clears all four browser columns (`clear()` → `ra=True`), runs `uiProject_refreshDisplay` (list rebuilds, `setProject` / `openWorkspace`, scriptUI menu clear), while the menu is still active → hard crash in Qt / ExtensionLayer / CommandEngine / python. **Fix**: `cgmGEN.Callback(self._defer_ui, self.LoadProject, path)` on those menu items; `LoadProject` also guards `b_selCommandOn` + `deselectAll` before clear.
 
 **Pitfall (Maya crash on category / subtype swap)**: Category and subtype header **popup** menus used to call `SetCategory` / `SetSubType` synchronously. Those clear/rebuild asset + sets/variation/version lists and call `buildAssetForm` during `QMenu::exec`. **Fix**: `_defer_ui` on category/subtype menu items (and subtype Create/Rename utils).
+
+**Pitfall (Maya crash on file-popup menu click)**: Calling `_rebuildFileListPopup` (delete + new `MelPopupMenu` on the scroll control) from the file list’s **`pmc`** while the menu is about to open invalidates the active popup → crash on **any** menu item click (not only Send To Build). **Fix**: in `pmc`, only update existing items (`en`, submenu refresh); rebuild on **selection change** or when `pum` is missing/empty. Defer heavy work (`LoadVersionList`, Delete, P4) via `_defer_ui` — same reentrancy family as scroll `ra=True` in menu callbacks.
 
 **Future**: real icons need PySide — out of scope for Mel columns.
 
@@ -492,6 +514,8 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | Select-by-matching display string | Breaks when alias changes | `getSelectedIdxs()` |
 | Light pastel / white `itc` copied to `hlc` on select | Maya inverts selection row; text washes out | Saturated `itc` + dimmed `hlc` (`itc × 0.7`); see Builder `setHLC` |
 | Rebuild scroll list (`ra=True`) or `selectIndexedItem` inside its popup menu callback | Qt reentrancy crash in `QItemSelectionModel` | `mc.evalDeferred(..., lp=True)`; defer Delete handler + `_defer_list_reload_after_delete`; disable `b_selCommandOn` + `deselectAll` before clear |
+| Rebuild `MelPopupMenu` (`delete` + recreate on scroll) inside that popup’s **`pmc`** | Hard crash when artist picks a menu item | Rebuild on selection change only; in `pmc` use `menu_item(edit=True, en=…)` for Send To Build / P4 gates |
+| `mc.objExists(MelMenuItem)` before `menu_item(edit=True, en=…)` | Skips enable updates; Send To Build stays enabled on `*_BUILD` rows | Call `edit` in try/except; no exists guard on Mel menu item handles |
 | `column_adj=False` to reduce vertical space | Shrinks row **width**; centered labels look wrong | `adj=True` + explicit label `h`, `row_spacing=0`, `expand=False` on stretch row |
 | `MelFormLayout` only for full-width centered status | Form may stay content-width | `MelHSingleStretchLayout` + `setStretchWidget(label)` |
 | Reset Mel `_NEXT_KEY` on Reload Core (class-only counter) | Layout hangs ~80% probing leftover `MelButton0__`..N__ from Toolbox / retained windows | Persist ids on `sys._cgmMelWidgetNextKey`; catch up after exists loop |
@@ -509,7 +533,8 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | [`Builder.py`](../../cgmToolsPy3/cgm/core/mrs/Builder.py) | `cgmScrollList`, `_ml_loaded` + `_l_strings` | Block browser, filter, select by meta |
 | [`mocapBakeTools.py`](../../cgmToolsPy3/cgm/core/tools/mocapBakeTools.py) | `cgmListItem`, dual lists + links, CCL | Align tab; target `itemAsStr` patch; last-CCL autoload + status bar |
 | [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool.py) | LastLoaded optionVar + pathList recent | `post_init` autoload; status row with clear/explore |
-| [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_defer_ui` for popup/column reload; `_defer_list_reload_after_delete` after file delete |
+| [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | `SceneListRow` + searchable `rows`/`items` | Browser columns: `+ name/` dir alias, P4 file `itc` + `(status)` suffix, canonical `getSelectedItem()`; `_wireFileListScrollSelect` popup rebuild on select (not in `pmc`); Send To Build `en` via `_scene_send_to_build_menu_enabled`; `_defer_ui` for popup/column reload; `_defer_list_reload_after_delete` after file delete |
+| [`batch_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/batch_utils.py) | `is_mrs_build_output_scene`, `resolve_build_output_path` | Shared BUILD output naming; Scene Send To Build menu + `SendToBuild` guard |
 | [`p4Tool.py`](../../cgmToolsPy3/cgm/core/tools/p4Tool.py) | Collapsible header frames, status buffer, changelist batch UI | Status stretch row; animFilter-style CL header (checkbox + **collapsible frame** + **R**/**S**/**Sh** or **D**/**Mv**/**Sub**); Shelved Files blue headers; section empty rows; standard Setup → Reload |
 | [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py) | Pinned status row + map rows with **25×25** icons | **`_dynfk_icon_btn_kw`**, **`uiBuild_setup_status_row`**, **`uiFunc_make_load_row`**; avoid non-`_25` select icons inflating row height |
 | [`animClip_dat.py`](../../cgmToolsPy3/cgm/core/lib/animClip_dat.py) | Dat file bar + optional pinned chrome + scroll | `uiBuild_pinned_chrome`; CLIP CONTENTS zebra |
@@ -544,7 +569,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 - [x] Filter field + scroll rebuild contract — Scene `_refresh_searchable_display` (Builder `BlockScrollList` pattern)
 - [ ] Multi-column or two-way list tools (source/target) — naming conventions for links + reorder menus
 - [ ] OptionVar naming convention table across tools
-- [ ] Popup menus on lists — index capture before modal dialogs
+- [x] Popup menus on file lists — Scene `_wireFileListScrollSelect`: rebuild on select, `pmc` = `en` only; defer destructive actions (`_defer_ui`)
 - [ ] Persisting selection across `refresh_aliases()` / rebuild
 - [x] Alternating row backgrounds + per-row action buttons — cgmP4 opened-files list (nested by changelist)
 - [ ] Changelist sub-section collapse persistence via optionVar (deferred — dynamic CL ids)
@@ -557,6 +582,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-10-19 | Scene file-list RMB popup: do not `_rebuildFileListPopup` in `pmc` (menu-click crash); Send To Build `en=False` for `*_BUILD` via `is_mrs_build_output_scene` + path resolve; anti-patterns |
 | 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
 | 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
 | 2026-08-31 | cgmAnimClip Layer optionMenu: rebuild with `itemListLong`, not `MelOptionMenu.clear` |

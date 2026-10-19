@@ -64,6 +64,19 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 
 ---
 
+### October 19, 2026 — Scene: Send To Build menu off for `*_BUILD` scenes + popup crash fix
+
+**What**: RMB **Send To Build** uses `en=False` when the selected row or `versionFile` is an MRS `*_BUILD` output (`is_mrs_build_output_scene`). **Do not** rebuild the file-list `MelPopupMenu` inside `pmc` — crashes Maya on menu item click; toggle `en` only in `pmc`, rebuild popup on selection change.
+
+**Files**:
+- EXTENDED: `cgm/core/mrs/lib/batch_utils.py` — `is_mrs_build_output_scene`
+- EXTENDED: `cgm/core/mrs/Scene.py` — `_wireFileListScrollSelect`, `_scene_send_to_build_menu_enabled`, `_scene_resolve_list_file_path`
+- DOC: [`Features/Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md) — file-list popup lifecycle, Send To Build, pitfalls
+
+**Status**: Maya-verified — reload Scene + `batch_utils`
+
+---
+
 ### October 13, 2026 — Scene browser: mixed set + type navigation
 
 **What**: Fixes template **`arm/`** (and similar) where a **set** folder has both variation **subdirectories** (e.g. **`bezierSimple/`**) and a **loose** rig `.mb` at the same level. Browser had been using **set-level mixed** rules from the Oct 9 pass: variation scroll **folders only**, loose scenes in **Version** — so **`Mickey_arm_template_01.mb`** appeared one column too deep while **`+ bezierSimple/`** sat alone in Variation. **Set-level mixed** now lists **dirs + Maya files together in Variation**; **Version** only when a **variation subfolder** is selected (scenes inside that folder). **Type-level mixed** under **`path_subType`** (dirs + loose files at subtype root) stays in **Sets**; guards stop **`path_set`** resolving to the subtype root (stale/empty selection) and skip auto-cascade into child columns until the artist picks a Sets row.
@@ -856,6 +869,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] Scene **Projects** / File → **Recent** project switch — deferred `LoadProject` (Qt reentrancy hard crash; Sep 21)
 - [x] Scene category / subtype header popups — deferred `SetCategory` / `SetSubType` (Sep 22)
 - [x] MRS Build `uiFunc_process`: skip interactive prechecks / dirty gate when queued path ≠ open scene (match path → unchanged)
+- [x] `is_mrs_build_output_scene` — Send To Build RMB `en=False` on `*_BUILD` selection (Oct 19)
 - [x] Scene browser mixed **set** folder — variation subdirs + loose `.mb` in **Variation** column (Oct 13)
 - [x] Scene browser **`path_set`** / type-root guards + type-level mixed Sets reload (Oct 13)
 - [ ] Maya-verify Projects + Recent project switch (incl. scriptUI / different content roots)

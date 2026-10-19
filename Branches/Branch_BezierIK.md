@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 14, 2026 (bezier stretch **inflate** layer + limb segment squash-stretch wiring; sine/wave tabled)  
+**Last Updated**: October 19, 2026 (`squashInflateControl`, stretch DAG under rigNull, Segment twist WU end default)  
 **PR**: Pending
 
 ## Goals
@@ -28,7 +28,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 
 **Active path for now:** `bezier_spline` → `bezier_controls_add` → optional `bezier_spline_stretch` with `driver_curve=_res['mDriverCurve']` (hidden POCI driver; IK stays on driver until sine stack returns).
 
-**MRS phase (current):** Segment **`ikSetup=bezier`** + **`segmentType=parent`** — shipped / Maya-verified (stretch, squash, scale blend). **Limb `segmentType=bezier`** — per-roll **`rig_segments`** + **`bezier_spline_stretch`** (incl. **`squashExtraControl`** volume factors + **inflate** ramp); shapes/controls pass still in progress with user. **`scaleSetup` + squash `simple`** → stretch on driver; FK/IK scale via **`blendChainsScaleByAttr`** where applicable. **Next:** non-parent **segment** `segmentType=bezier`, limb bezier polish / Maya sign-off, sine/wave (tabled).
+**MRS phase (current):** Segment **`ikSetup=bezier`** + **`segmentType=parent`** — shipped / Maya-verified (stretch, squash, scale blend; **arcLength** / **pointDist**; **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`** on block — Segment end default **y+**, Head end **z-**). **Head `neckIK=bezier`** — split **`headIK`** / neck-end **`controlIK`**, advanced spline twist WU, **`ikMidAimSetup`** + **`linearTrack`** root→end mid driver orient (Head-only attr). **Limb `segmentType=bezier`** — per-roll stretch + inflate; twist WU via section mains (no **`ikSplineTwistUp*`** attrs yet). **Inflate** gated by block **`squashInflateControl`** (independent of **`squashExtraControl`**); stretch inflate DAG parented under rigNull via **`parentGutsTo`**. **Next:** non-parent **segment** `segmentType=bezier`, limb polish, Segment **`ikMidAimSetup`** (if desired), sine/wave (tabled).
 
 ## Related Documentation
 
@@ -37,10 +37,12 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — canonical `spline`, `curve`, `bezier_spline`
 - **[bezier_utils.py](../../cgmToolsPy3/cgm/core/rig/bezier_utils.py)** — Bezier CV control rigs (`bezier_controls_add`)
 - **[rigFrame_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py)** — MRS orchestration (`RIGFRAME.spline`, segment mid IK, etc.)
+- **[bezier_ik_block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py)** — shared MRS bezier shapes, pickwalk, stretch aim, squash `segmentScaleCompensate`, **`block_squash_inflate_control`**
 - **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — `rig_frame` `ikSetup` branches (`spline`, `curve`, ribbon, rp, …); `rig_prechecks` (bezier + parent `segmentType`, …); bezier stretch + inflate kwargs
+- **[head.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)** — neck `neckIK=bezier` (parent segment type); mirrors Segment bezier `rig_shapes` / `rig_frame` / `rig_controls`
 - **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — `segmentType=bezier` roll sections, `_limb_bezier_inflate_slide_global_spec`, `bezier_spline_stretch` per section
 - **[Builder.py](../../cgmToolsPy3/cgm/core/mrs/Builder.py)** — `ui_stepBuild` runs `asRigFactory(mode='prechecks')` before stepped rig layout
-- **[shared_dat.py](../../cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py)** — `ikSetup` enum vocabulary
+- **[shared_dat.py](../../cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py)** — `ikSetup` enum vocabulary; **`squashInflateControl`** attr; **`squash_stretch_ik_share_kwargs`** (ribbon/curve IK share dict — strips bezier-only inflate keys)
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — timeline and PR maintenance
 - **[NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature contract in **`Feature_BezierIK.md`**
 
@@ -53,7 +55,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 | **`rigFrame_utils.bezier`** orchestration | Done |
 | **Extend `spline` path** instead of separate enum | Rejected for CV Bezier rig clarity |
 
-**Not yet**: limb bezier **full** build sign-off (shapes/controls); head blocks; **Segment** `segmentType` **bezier** (non-parent); sine/wave on driver.
+**Not yet**: limb bezier **full** build sign-off (shapes/controls); Head neck bezier **puppet / mirror** regression; **Segment** `segmentType` **bezier** (non-parent); sine/wave on driver.
 
 ### MRS build matrix (target vs status)
 
@@ -119,6 +121,108 @@ For each prototype batch (chat or file path):
 ---
 
 ## Timeline
+
+### October 19, 2026 - `squashInflateControl`, IK share filter, stretch DAG parenting
+
+**What**:
+
+- **Block `squashInflateControl`** (Segment, Head, Limb; default **on**): drives **`bezier_spline_stretch`** **`extraInflateControl`** only (`squashInflate`, `squashInflateOffset`, `{part}_inflateFactor_i` ramp). **`squashExtraControl`** still owns volume **`outFactor`** only. Legacy blocks without the attr fall back to **`squashExtraControl`** via **`bezier_ik_block_utils.block_squash_inflate_control`**.
+- **Do not put inflate flags on `d_squashStretch` for ribbon/curve:** **`shared_dat.squash_stretch_ik_share_kwargs`** filters **`extraInflateControl`** + **`inflateFactor*`** before **`_d_ribbonShare.update`** — fixes **`IK.curve()`** / **`IK.ribbon()`** `TypeError` on limb roll **`segmentType=curve`** builds.
+- **Twist WU default (Segment):** **`ikSplineTwistUpEnd`** default **y+** (Head unchanged **z-**).
+- **Stretch DAG under rigNull:** **`bezier_spline_stretch(parentGutsTo=mRigNull)`** creates **`{baseName}_bezierStretch_grp`** on rigNull and parents transform DAG (e.g. **`{base}_inflateSample_##_floorUtil`**) so rig cleanUp does not delete inflate sampling utils.
+
+**Files**:
+
+- EXTENDED: `cgm/core/rig/ik_utils.py` — `parentGutsTo`, `_bezier_stretch_guts_group`, `_bezier_stretch_parent_dag_under`
+- EXTENDED: `cgm/core/mrs/lib/shared_dat.py`, `bezier_ik_block_utils.py`
+- EXTENDED: `cgm/core/mrs/blocks/organic/segment.py`, `head.py`, `limb.py` — attr, callers, ribbon share filter
+- EXTENDED: `cgm/core/mrs/lib/block_utils.py` — limb squash UI lists
+- EXTENDED: `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: In py3 — reload **`ik_utils`**, block modules, **`shared_dat`** before limb **rig_segments** / bezier stretch rebuild.
+
+---
+
+### October 15, 2026 - Twist WU attrs, advanced twist, inflate contract, Head mid aim
+
+**What**:
+
+- **Spline bezier twist (Segment + Head):** Block attrs **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`** (`shapeDirection` enum; start **y+**; end **y+** on Segment, **z-** on Head — Oct 19 Segment default). **`bezier_ik_connect_spline_advanced_twist`** in **`bezier_ik_block_utils.py`** → **`RIGDYN._apply_hair_spline_ik_advanced_twist`** (`dWorldUpType` Object Rotation Up Start/End, fwd/up axes from orientation, WU matrices from base/end IK). Driver **`twistStart`/`twistEnd`** still from **`RIGFRAME.bezier`** + **`ikSplineTwistEndConnect`** (Head: **`twistEndAdd`** on **`headIK`** when split). **No** **`IK.handle_fixTwist`** on ikSpline bezier handles.
+- **Inflate:** **`inflateFactor_*`** attrs no longer clamped to ≥ 0; negative block **`inflateFactorMin`** + ramp modes allow **contract** on some joints while **`squashInflate` > 0** (`volScale + factorSample × squashInflate`).
+- **Head mid IK (Head-only):** Block **`ikMidAimSetup`** (default off). **`ikMidSetup=linearTrack`** + aim on: **`{part}_midRootEnd_aimRef`** under **`controlIKBase`**, **`aimConstraint`** to end IK; **`orientConstraint`** ref → each mid **`mainDriver`** (track attach target). Replaces driver-to-driver aim for that path. Segment has no **`ikMidAimSetup`** attr (legacy driver-chain aim when mid track aim runs).
+
+**Files**:
+
+- EXTENDED: `cgm/core/mrs/lib/bezier_ik_block_utils.py` — `bezier_ik_connect_spline_advanced_twist`, `bezier_ik_block_twist_world_up_vectors`
+- EXTENDED: `cgm/core/mrs/lib/rigFrame_utils.py` — `bezier` calls advanced twist; `segment_mid` Head linearTrack root→end aim
+- EXTENDED: `cgm/core/rig/dynamic_utils.py` — optional `v_worldUpStart` / `v_worldUpEnd` on `_apply_hair_spline_ik_advanced_twist`
+- EXTENDED: `cgm/core/rig/ik_utils.py` — negative inflate factor plugs
+- EXTENDED: `cgm/core/mrs/blocks/organic/segment.py`, `head.py` — `ikSplineTwistUp*` attrs; Head `ikMidAimSetup` (existing)
+- EXTENDED: `cgm/core/mrs/blocks/organic/limb.py` — limb section twist delegates to shared helper
+- EXTENDED: `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: In py3 — Head neck bezier + mid linearTrack aim user-verified; Segment twist attrs on block; reload **`rigFrame_utils`**, **`bezier_ik_block_utils`**, **`ik_utils`**, block module before rig frame rebuild.
+
+---
+
+### October 15, 2026 - Head bezier pickwalk + controller_getDat
+
+**What**:
+
+- **`rig_skeleton`**: **`msgList_connect('controlSegMidIK', ml_ikMidControls)`** (Segment parity — required for **`bezier_ik_pickwalk_controls`**).
+- **`rig_controls`**: neck bezier path registers end **`controlIK`** + reconnects **`controlIK`/`controlIKBase`**; subs + **`bezier_ik_pickwalk_controls`** → **`controlsIK`**; **`controlIKNeckRoot`** prepended when present; **`headIK`** excluded from pickwalk (still **`controlsAll`** + **`controller_getDat`**).
+- **`d_controlDat_links`** + **`controller_getDat`** bezier branch (match Segment dedupe + ordered pickwalk + **`headIK`**).
+
+**Files**: EXTENDED `head.py`; EXTENDED `Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: Rebuild **rig controls** + puppet **controller_verify** after reload **`head`**.
+
+---
+
+### October 19, 2026 - Head neck bezier head IK joint (Maya-verified)
+
+**What**:
+
+- **Head** **`neckIK=bezier`**, **`neckControls > 1`**: **`ml_ikJoints[-1]`** (`head_*_ik_sknJnt`) is a **clean** child of **`headIK`** — no **`pointConstraint`**, **`followIK`**, or **`_splineControl`** on that joint (differs from **Segment** end follow). Neck solve uses **`ml_ikUse`** with **`_splineEnd`** parented under **`ml_ikJoints[-2]`**; ribbon end stays on neck-end **`controlIK`**. **`mTwistEndControl=headIK`**. **`scaleSetup`**: no redundant **`scaleConstraint(headIK → last ik)`** when split.
+
+**Files**: EXTENDED `head.py`; EXTENDED `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: Maya-verified on user template.
+
+---
+
+### October 15, 2026 - pointDist masterScale + Head control split
+
+**What**:
+
+- **`IK.bezier_spline_stretch`** **`squashMeasure=pointDist`**: `_bezier_stretch_seg_final_ratio_network` no longer divides bind rest distance by `masterScale` (was canceling scale compensation and doubling volume squash under global scale). Now **`segRatio = (distance / masterScale) / bindSegDist`** — same contract as arcLength (normalize live measure only) and legacy ribbon pointDist (`distance / (aimBase * masterScale)`).
+- **Head** **`neckIK=bezier`**: **`headIK`** remains the main head anim control; **`controlIK`** is a separate neck-end **ikBezier** handle (`rig_shapes` from end **`ribbonIKDriver`**). **`rig_controls`**: register end **`controlIK`** before bezier subs/pickwalk; **`headIK`** not duplicated in primary **`controlsIK`** pickwalk. **`rig_frame`**: ribbon end on neck-end **`controlIK`**; head IK joint under **`headIK`**; stretch on **`ml_ikUse`** through neck + spline end (see Oct 19 for constraint-free head joint). **`int_handleEndIdx = -2`** for end-cube FK sizing.
+
+**Files**:
+
+- EXTENDED: `cgm/core/rig/ik_utils.py` — pointDist per-segment ratio + inflate floor util cleanup (prior)
+- EXTENDED: `cgm/core/mrs/blocks/organic/head.py` — shapes, controls, frame for split controls
+- EXTENDED: `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: **Maya-verified** — pointDist squash/stretch under puppet scale; Head neck bezier + head anim control on user template.
+
+---
+
+### October 14, 2026 - Head neck bezier + shared block utils
+
+**What**: **Head** block **`neckIK=bezier`** with **`segmentType=parent`** (phase 1): CV mains/subs, `RIGFRAME.bezier`, `bezier_spline_stretch` + inflate attrs, FK/IK scale via **`blendChainsScaleByAttr`**. Extracted Segment bezier helpers to **`bezier_ik_block_utils.py`** (Segment, Head, Limb import).
+
+**Files**:
+
+- NEW: `cgm/core/mrs/lib/bezier_ik_block_utils.py`
+- EXTENDED: `cgm/core/mrs/blocks/organic/head.py` — prechecks, attrs, `rig_dataBuffer`, `rig_shapes`, `rig_controls`, `rig_frame`, `rig_skeleton`
+- EXTENDED: `cgm/core/mrs/blocks/organic/segment.py` — call shared utils (removed duplicated helpers)
+- EXTENDED: `cgm/core/mrs/blocks/organic/limb.py` — import shared utils for squash / bezier shape helpers
+- EXTENDED: `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: Code complete — **Maya sign-off pending** (Head neck bezier + Segment regression after utils extract).
+
+---
 
 ### October 12, 2026 - Branch doc and IK map
 
@@ -278,7 +382,7 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 
 ### October 14, 2026 - Bezier stretch inflate + limb segment squash-stretch
 
-**What**: Extended **`IK.bezier_spline_stretch`** with optional **inflate** layer on top of volume squash (does not change volume `outFactor` math). Settings: **`squashInflate`**, **`squashInflateOffset`**, per-index **`{part}_inflateFactor_i`** (`inflateFactorMin/Max/Mode` on Segment + Limb blocks). Offset sampling: shift along chain, lerp adjacent factors (ribbon_seal / `split_blends` style). **Limb** bezier roll sections call stretch with global inflate indices across sections. DG: **`_bezier_stretch_dg_named_node`** (`mc.createNode` + `cgmNode` rename); floor index via **`floorUtil`** + expression (avoid `cgmNode(nodeType='floatMath')`).
+**What**: Extended **`IK.bezier_spline_stretch`** with optional **inflate** layer on top of volume squash (does not change volume `outFactor` math). Settings: **`squashInflate`**, **`squashInflateOffset`**, per-index **`{part}_inflateFactor_i`** (`inflateFactorMin/Max/Mode` on Segment + Limb blocks). Offset sampling: shift along chain, lerp adjacent factors (ribbon_seal / `split_blends` style). **Limb** bezier roll sections call stretch with global inflate indices across sections. DG: **`_bezier_stretch_dg_named_node`** (`mc.createNode` + `cgmNode` rename); floor index via **`floorUtil`** + expression (avoid `cgmNode(nodeType='floatMath')`). **Oct 19:** block **`squashInflateControl`** toggles inflate layer; **`floorUtil`** transforms parent under **`{base}_bezierStretch_grp`** on rigNull (**`parentGutsTo`**).
 
 **Files**:
 
@@ -371,6 +475,8 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 - [x] `segment` bezier path (`rig_shapes`, `rig_frame`, `rig_controls`, pickwalk)
 - [x] `ikSetup` **bezier** in block enum / precheck (parent `segmentType`)
 - [x] Step Build surfaces `rig_prechecks` failures in UI (no GuiFactory traceback)
+- [x] **Head** `neckIK=bezier` + parent `segmentType` (stretch/squash/inflate + **`headIK`** / **`controlIK`** split — template Maya-verified)
+- [x] `bezier_ik_block_utils.py` — shared shapes / pickwalk / squash compensate
 - [ ] `segmentType` **bezier** (+ squash/stretch parity with parent)
 - [ ] Limb `segmentType=bezier` — [x] `rig_segments` squash/stretch + inflate kwargs; [ ] shapes/controls / puppet regression
 
@@ -383,6 +489,13 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 
 - [x] Segment build smoke — bezier parent + scaleSetup + squash simple
 - [x] Stretch translate / scale; FKIK scale blend to blend chain
+- [x] **`squashMeasure` pointDist** + **`segMeasure`** master scale — no double global squash (Oct 15)
+- [x] Head neck bezier — **`headIK`** anim + neck-end **`controlIK`**; head IK joint clean under **`headIK`** (Oct 19)
+- [x] Head **`ikMidAimSetup`** + **`linearTrack`** — root→end **`midRootEnd_aimRef`**, orient on **`mainDriver`** (Oct 15)
+- [x] Segment + Head **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`** on bezier build (Oct 15)
+- [x] Negative **`inflateFactor_*`** for contract/inflate contrast (Oct 15)
+- [x] **`squashInflateControl`** off — no inflate settings attrs / floorUtil DAG; on — inflate layer + rigNull parenting (Oct 19)
+- [x] Limb roll **`segmentType=curve`** — no **`extraInflateControl`** leaked into **`IK.curve`** (Oct 19)
 - [x] Step Build — intentional precheck fail (bezier + non-parent `segmentType`) shows error list, window stays open
 - [ ] Mirror / full puppet regression with bezier subs on rigNull
 
@@ -416,6 +529,12 @@ None expected until block enum changes; document if existing `spline` behavior s
 - FKIK blend: blend joint scale matches IK/FK at extremes; no scaleConstraint doubling.
 - Step Build: with `ikSetup=bezier` + `segmentType` ribbon (or other fail), window lists precheck errors; after fix to **parent**, step buttons appear.
 - Reload `ik_utils` + `constraint_utils` after lib edits; rebuild module.
+- **`squashMeasure` pointDist** on Segment or Head bezier: scale puppet master; segment ratios stay ~1 at rest; volume squash matches arcLength feel.
+- Head **`neckIK=bezier`**, **`neckControls > 1`**: **`head_*_ik_anim`** + separate neck-end ikBezier **`controlIK`**; **`head_*_ik_sknJnt`** parented under **`headIK`** only (no spline-end constraints on that joint); neck-end cube space/switch targets **`headIK`**.
+- Head **`ikMidSetup=linearTrack`**, **`ikMidAimSetup` on**: mid drivers orient from **`midRootEnd_aimRef`** (child of base IK), not adjacent-driver aims.
+- Segment / Head bezier: tweak **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`**, rebuild rig frame; ikHandle **`dWorldUpVector`** / **`dWorldUpVectorEnd`** follow enums.
+- Inflate: **`squashInflateControl` on**, **`inflateFactorMin=-1`**, **`midPeak`**, **`squashInflate > 0`** — ends contract, mid inflates; **`head_bezier_inflateSample_*_floorUtil`** under **`head_bezier_bezierStretch_grp`** on rigNull after rebuild.
+- Segment bezier: **`ikSplineTwistUpEnd=y+`** default; Head neck bezier end WU still **z-** default.
 
 #### Next steps
 
@@ -444,5 +563,5 @@ None expected until block enum changes; document if existing `spline` behavior s
 
 ---
 
-*Last Updated: October 13, 2026*  
-*Branch Status: Active — Segment parent bezier verified; limb bezier segment stretch + inflate in py3; Step Build precheck UX; sine/wave tabled*
+*Last Updated: October 19, 2026*  
+*Branch Status: Active — Segment + Head parent bezier (twist WU attrs, **`squashInflateControl`**, inflate DAG on rigNull); Head `headIK` vs neck-end `controlIK` + mid linearTrack aim; limb bezier segment stretch + inflate + ribbon/curve IK share filter; sine/wave tabled*
