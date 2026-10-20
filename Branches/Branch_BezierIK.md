@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 19, 2026 (`squashInflateFactorMin/Max/Mode` UI; limb inflate on **seg** joints; bezier sub handle scale parity)  
+**Last Updated**: October 19, 2026 (`bezier_spline_stretch` settings **`lengthScale`**; curve blend vs uniform scale split)  
 **PR**: Pending
 
 ## Goals
@@ -28,7 +28,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 
 **Active path for now:** `bezier_spline` → `bezier_controls_add` → optional `bezier_spline_stretch` with `driver_curve=_res['mDriverCurve']` (hidden POCI driver; IK stays on driver until sine stack returns).
 
-**MRS phase (current):** Segment / **Head** / **Limb** bezier inflate in FK via **`inflateDriveDirectParents`** + visible **`{rigJoint}_inflateScale`** parents (**`bezier_inflate_parent_direct_controls`**). Segment + Head: null under **`blendJoints[i]`** after **`blendChainsScaleByAttr`**. Limb **`segmentType=bezier`**: per-section **`bezier_spline_stretch`** on **`md_limbBezierStretchBySection`**; inflate wire at end of **`rig_segments`** — **`masterGroup`** under **`segJoints_{section}[i]`** (not section **`scaleJoint`**), so direct controls follow seg/bezier deformation. Block ramp bounds: **`squashInflateFactorMin/Max/Mode`** (Squash/Stretch UI; legacy **`inflateFactor*`** read via **`block_squash_inflate_factor_min_max`**). Settings attrs **`{part}_inflate_inflateFactor_i`** created whenever **`extraInflateControl`** + ramp list (not only pending parent pass). **Bezier sub handles** (Segment/Head sphere, Limb **`limbSegmentHandle`** semiSphere): same FK scale as mains (removed 0.4× / 0.8× downsizing). **Head `neckIK=bezier`** — split **`headIK`** / neck-end **`controlIK`**, twist WU, **`ikMidAimSetup`** + **`linearTrack`**. **Inflate** gated by **`squashInflateControl`**; sampling DAG on rigNull via **`parentGutsTo`**. **Next:** non-parent Segment **`segmentType=bezier`**; puppet/mirror QC; sine/wave (tabled).
+**MRS phase (current):** Segment / **Head** / **Limb** bezier inflate in FK via **`inflateDriveDirectParents`** + visible **`{rigJoint}_inflateScale`** parents (**`bezier_inflate_parent_direct_controls`**). Segment + Head: null under **`blendJoints[i]`** after **`blendChainsScaleByAttr`**. Limb **`segmentType=bezier`**: per-section **`bezier_spline_stretch`** on **`md_limbBezierStretchBySection`** (settings **`stretch`** + **`lengthScale`**); inflate wire at end of **`rig_segments`** — **`masterGroup`** under **`segJoints_{section}[i]`** (not section **`scaleJoint`**), so direct controls follow seg/bezier deformation. Block ramp bounds: **`squashInflateFactorMin/Max/Mode`** (Squash/Stretch UI; legacy **`inflateFactor*`** read via **`block_squash_inflate_factor_min_max`**). Settings attrs **`{part}_inflate_inflateFactor_i`** created whenever **`extraInflateControl`** + ramp list (not only pending parent pass). **Bezier sub handles** (Segment/Head sphere, Limb **`limbSegmentHandle`** semiSphere): same FK scale as mains (removed 0.4× / 0.8× downsizing). **Head `neckIK=bezier`** — split **`headIK`** / neck-end **`controlIK`**, twist WU, **`ikMidAimSetup`** + **`linearTrack`**. **Inflate** gated by **`squashInflateControl`**; sampling DAG on rigNull via **`parentGutsTo`**. **Next:** non-parent Segment **`segmentType=bezier`**; puppet/mirror QC; sine/wave (tabled).
 
 ## Related Documentation
 
@@ -123,6 +123,22 @@ For each prototype batch (chat or file path):
 ---
 
 ## Timeline
+
+### October 19, 2026 - Bezier stretch `lengthScale` (settings)
+
+**What**:
+
+- **Problem**: **`stretch`** drives **`curveBlend = 1 + stretch × (r − 1)`** only. When arc ratio **`r = 1`**, **`stretch`** has no effect (correct for curve-follow, wrong for uniform bind scaling).
+- **Fix**: Second settings attr **`lengthScale`** (default **1**, keyable, min **0.0001**). **`finalRatio = curveBlend × lengthScale`**. **`stretch`** unchanged; use **`lengthScale`** when the curve length ratio stays at bind.
+- **`IK.bezier_spline_stretch`**: **arcLength** (global) and **pointDist** (per-segment) both multiply curve blend by **`lengthScale`**.
+- **Lib**: **`_bezier_stretch_curve_blend_network`**, **`_bezier_stretch_apply_length_scale`**; DG **`{base}_stretch_lengthScale_md`**, **`{base}_stretch_seg_##_lengthScale_md`**. Return **`mPlug_lengthScale`**, **`mLengthScaleMd`**.
+- **Callers**: Segment / Head / Limb unchanged — attr created on module **settings** at stretch build. No block **`lengthScale`** mirror in v1.
+
+**Files**: `cgm/core/rig/ik_utils.py`; `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
+
+**Status**: In py3 — reload **`ik_utils`**; rebuild stretch (**`rig_frame`** / limb **`rig_segments`**). Verify table in [`Feature_BezierIK.md`](../Features/Feature_BezierIK.md) § stretch verification.
+
+---
 
 ### October 19, 2026 - Segment `ikBezierControlShape` (ball vs segmentHandle)
 
@@ -526,7 +542,7 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 
 - [x] `bezier_spline` + curve sampling helper (`ik_utils`)
 - [x] `bezier_controls_add` (`bezier_utils`) + Create menu / toolbox **BzrCtl**
-- [x] `bezier_spline_stretch` (`ik_utils`) — `curveInfo`, `stretchBy`, volume driver split translate/scale
+- [x] `bezier_spline_stretch` (`ik_utils`) — `curveInfo`, `stretchBy`, volume driver split translate/scale; settings **`lengthScale`** × curve blend (Oct 19)
 - [ ] **TABLED** `spline_ik_curve_add_sine` + `spline_ik_sine_handle_fit_to_curve`
 - [ ] **TABLED** `spline_ik_curve_add_wave_blend` — local blendShape stack
 - [x] Maya sign-off — parent segment: twist, CV controls, stretch translate/scale, squash, scale blend (**no sine/wave**)
@@ -554,6 +570,7 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 
 - [x] Segment build smoke — bezier parent + scaleSetup + squash simple
 - [x] Stretch translate / scale; FKIK scale blend to blend chain
+- [ ] Bezier **`lengthScale`** — bind **`r=1`** keys length; **`stretch=1`**, **`lengthScale=1`** + deformed curve matches pre-**`lengthScale`** behavior (see feature doc verify table)
 - [x] **`squashMeasure` pointDist** + **`segMeasure`** master scale — no double global squash (Oct 15)
 - [x] Head neck bezier — **`headIK`** anim + neck-end **`controlIK`**; head IK joint clean under **`headIK`** (Oct 19)
 - [x] Head **`ikMidAimSetup`** + **`linearTrack`** — root→end **`midRootEnd_aimRef`**, orient on **`mainDriver`** (Oct 15)
@@ -581,7 +598,7 @@ Bezier IK for MRS segments (and related modules): Bezier driver curve + joint so
 
 #### Major changes
 
-- `cgm/core/rig/ik_utils.py` — `bezier_spline`, `bezier_spline_stretch`, `inflateDriveDirectParents` / `l_inflateDirectPlugs`
+- `cgm/core/rig/ik_utils.py` — `bezier_spline`, `bezier_spline_stretch` (**`lengthScale`**, curve-blend helpers), `inflateDriveDirectParents` / `l_inflateDirectPlugs`
 - `cgm/core/mrs/lib/bezier_ik_block_utils.py` — `bezier_inflate_parent_segment_direct_controls`
 - `cgm/core/rig/bezier_utils.py` — CV control wire
 - `cgm/core/rig/constraint_utils.py` — `blendChainsScaleByAttr`
@@ -596,7 +613,7 @@ None expected until block enum changes; document if existing `spline` behavior s
 
 #### Maya test plan
 
-- Segment: `ikSetup=bezier`, `segmentType=parent`, `scaleSetup`, squash `simple`; test `segmentStretchBy` translate and scale.
+- Segment: `ikSetup=bezier`, `segmentType=parent`, `scaleSetup`, squash `simple`; test `segmentStretchBy` translate and scale; settings **`lengthScale`** when arc ratio **1**; **`stretch=1`** + **`lengthScale=1`** curve deformation unchanged vs older builds.
 - FKIK blend: blend joint scale matches IK/FK at extremes; no scaleConstraint doubling.
 - Step Build: with `ikSetup=bezier` + `segmentType` ribbon (or other fail), window lists precheck errors; after fix to **parent**, step buttons appear.
 - Reload `ik_utils` + `constraint_utils` after lib edits; rebuild module.
