@@ -203,6 +203,20 @@ For each prototype batch (chat or file path):
 
 ---
 
+### October 20, 2026 - Segment non-bezier inflate (parent null only)
+
+**What**:
+
+- **Ribbon / curve / spline** (`segmentType=parent`, `scaleSetup`, squash on): no changes to **`IK.ribbon`** / **`IK.curve`** squash/stretch. After FK/IK scale blend, **`segment_inflate_stretch_result_from_ik_joints`** (`bezier_ik_block_utils`) reads volume scale drivers on **`ml_ikJoints`**, builds settings inflate + additive PMA, then **`bezier_inflate_parent_segment_direct_controls`** (same **`{rigJoint}_inflateScale`** above direct controls as bezier).
+- **`ikSetup=spline`** included in scale-blend list when **`scaleSetup`**.
+- **`ikSetup=rp`**: boundary log when **`squashInflateControl`** on — no IK volume network.
+
+**Files**: `bezier_ik_block_utils.py` — `segment_inflate_stretch_result_from_ik_joints`; `segment.py` `rig_frame` — `d_stretchInflate`, unified inflate parent pass.
+
+**Status**: In py3 — rebuild Segment module; reload **`ik_utils`** + block utils if needed.
+
+---
+
 ### October 19, 2026 - `squashInflateControl`, IK share filter, stretch DAG parenting
 
 **What**:

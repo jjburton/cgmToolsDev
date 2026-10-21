@@ -132,7 +132,7 @@ Arc-length stretch from **driver curve** (`bezierIKDriverCurve` on rigNull — P
 
 | Block | When | Parent anchor |
 |-------|------|----------------|
-| **Segment** | `ikSetup=bezier`, `segmentType=parent` | **`blendJoints[i]`** — **`bezier_inflate_parent_segment_direct_controls`** after scale blend in **`rig_frame`** |
+| **Segment** | `segmentType=parent`, `scaleSetup`, squash + **`squashInflateControl`** | **`blendJoints[i]`** — **`bezier_inflate_parent_segment_direct_controls`** after **`blendChainsScaleByAttr`** in **`rig_frame`**. **Bezier:** full **`bezier_spline_stretch`**. **Ribbon / curve:** **`segment_inflate_stretch_result_from_ik_joints`** from existing IK volume drivers (ribbon squash unchanged). **Spline IK:** **`bezier_spline_stretch`** with **`volumeSquashInflateOnly`** on spline driver curve (length stretch stays on spline IK); then same parent null wire. **`squashExtraControl`** required for spline volume path. **`ikSetup=rp`:** skipped. |
 | **Head** | `neckIK=bezier`, `segmentType=parent` | Same as Segment — **`head.py` `rig_frame`** |
 | **Limb** | `segmentType=bezier`, `scaleSetup` | Rig joints **`p_parent`** seg drivers (skeleton); **`_limb_bezier_rigjoint_scale_from_seg_drivers`** scale-constrains seg **`driverJoints`** → rig **`masterGroup`** (before inflate). Inflate: **`{rig}_inflateScale`** under **per-index seg IK** (`ml_segJoints[i]`), then **`masterGroup`** — wired at end of **`rig_segments`** after stretch. |
 
@@ -206,6 +206,8 @@ When `b_squashSetup` and IK on: **`rig_skeleton`** calls `_squash_ik_fk_blend_se
 ### Limb bezier segments
 
 **`limb.py`**: `segmentType=bezier` per roll section — `_limb_rig_segments_bezier_squash_stretch` → `IK.bezier_spline_stretch` on section IK chain with shared settings, `inflateFactorBaseName='{partName}_inflate'`, and `_limb_bezier_inflate_slide_global_spec` for cross-section inflate indices. Same stretch/squash/inflate contract as Segment; volume squash gated by `_limb_bezier_volume_squash_active`.
+
+**Interior seg aim world-up (Limb only):** `_limb_bezier_seg_handle_reg_curve` / `_limb_rig_segments_bezier_section_seg_aims` set forward/back **aimConstraint** `worldUpObject` to the roll section **start main** (`ml_mains[0]` / `handleJoints[section_idx]` ikBezier anim). Wrist **`followRoot`** back aimer (`_limb_rig_segments_bezier_wrist_follow_root`) uses the same section-start main for aim world-up; **stableEnd** / **stable** follow blends and `curveSeg_{section}` networks are unchanged. Rebuild **`rig_segments`** to refresh constraints.
 
 ### Head neck bezier (not Segment parity for controls)
 
