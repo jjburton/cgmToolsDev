@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: In progress — **Maya-verified** for Segment `ikSetup=bezier`, `segmentType=parent`, `scaleSetup` + squash **simple**, `segmentStretchBy` **translate** and **scale**; Segment **`ikSetup=bezier`** + **`ikBase=hips`** spine-style (hip/chest IK + separate chain bezier mains — see § Hips parent bezier); Segment **`segmentType=bezier`** in py3 (bezier CV **handle** shapes + `controlsSegmentBezier`; segment ribbon + **`rig_frame`** like ribbon — **not** coupled to `ikSetup=bezier`)
-- **Last Updated**: October 22, 2026 — Segment **hips parent bezier** (`bezierIKChainStart`/`End`, visSub chain controls, **`rig_frame`** masterGroup parenting); **`rig_inflate`** / spline **`volumeSquashInflateOnly`**
+- **Last Updated**: October 23, 2026 — Segment **`rig_frame`** hips/base **`followIK`** + **`*_ikOrientFrame`** + **`ml_ikBlendUse`** (Maya-verified); **`ikSetup=bezier`** × **`segmentType=bezier`** precheck **blocked**
 - **Audience**: Dev / TA — design contract for Bezier spline IK on MRS Segment (not artist manual prose)
 - **Branch timeline**: [`Branches/Branch_BezierIK.md`](../Branches/Branch_BezierIK.md)
 
@@ -24,12 +24,12 @@
 | Block config | Behavior |
 |--------------|----------|
 | `ikSetup` **bezier** | `RIGFRAME.bezier` → `IK.bezier_spline` + CV control wire + **`bezier_ik_connect_spline_advanced_twist`** (Object Rotation Up Start/End; optional **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`** on Segment + Head) |
-| `ikSetup` **bezier** + **`ikBase=hips`** (any **`segmentType`**) | **Maya-verified** on parent spine — dual IK handles (hip/chest) + chain bezier CVs; **`bezier_ik_resolve_main_ik_list`** for wire/subs; no legacy spine **`handleJoints[1]`** handle |
+| `ikSetup` **bezier** or **spline** + **`ikBase=hips`** (any **`segmentType`**) | **Maya-verified** on parent spine — dual IK handles (hip/chest) + chain bezier CVs when bezier; **`bezier_ik_resolve_main_ik_list`** for wire/subs; no legacy spine **`handleJoints[1]`** handle. **Hips base orient follow** on **`*_ikOrientFrame`**; FK/IK blend IK chain index **0** = orient frame via **`ml_ikBlendUse`** (§ Segment IK orient follow). **`ml_ikUse[0]`** unchanged for spline solve. |
 | `segmentType` **parent** | Precheck enforces; ribbon-style segment joints optional per parent path |
 | `scaleSetup` on | FK/IK → blend: **parent** `blendChainsBy` + **`blendChainsScaleByAttr`** (not scaleConstraint) |
 | `squash` **simple** + `scaleSetup` | `IK.bezier_spline_stretch` on IK chain (`ml_ikUse` with spline end joint) |
 | `segmentStretchBy` | **translate** or **scale** — passed to `bezier_spline_stretch` |
-| `squashMeasure` (block / `d_squashStretch`) | **arcLength** (default, production) — global driver `curveInfo` ratio. **pointDist** — *(experimental)* per-segment `distanceDim` on driver **POCI** positions (bind U; scale stretch). Translate stretch may track joint U via **nearestPointOnCurve** → POCI `parameter`. **Maya-verified:** `globalScalePlug` → driver `masterScale` normalizes **live** segment distance only (`distance / masterScale / bindSegDist`); bind rest is **not** divided by `masterScale` (matches arcLength + ribbon pointDist). |
+| `squashMeasure` (block / `d_squashStretch`) | **arcLength** (default, production) — global driver `curveInfo` ratio. **pointDist** — *(experimental)* per-segment `distanceDim` on driver **POCI** positions at **bind-time U only** (no **nearestPointOnCurve** tracking on bezier stretch — avoids translate feedback). Bind rest from evaluated `distanceDim` or joint span; per-segment ratio clamped before stretch blend. **Maya-verified (Oct 15):** `globalScalePlug` → driver `masterScale` normalizes **live** segment distance only (`distance / masterScale / bindSegDist`); bind rest is **not** divided by `masterScale` (matches arcLength + ribbon pointDist). |
 | Head **`neckIK`** **bezier** + **`segmentType`** **parent** + **`neckControls` > 1** (split **`headIK`** / neck-end **`controlIK`**) | **`ml_ikUse`**: neck chain + **`_splineEnd`** dup (parent **`ml_ikJoints[-2]`**). **`ml_ikJoints[-1]`** (`head_*_ik_sknJnt`) **only** **`p_parent = headIK`** — no **`pointConstraint`**, **`_splineControl`**, or **`followIK`** on the head IK joint. Ribbon end **`ribbonIKDrivers[-1]`** → neck-end **`controlIK`**. Twist end: **`mTwistEndControl=headIK`** in **`RIGFRAME.bezier`** (`twistEndAdd` on **`headIK`**). Advanced twist WU: **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`**. Stretch/squash/inflate on **`ml_ikUse`**. **`int_handleEndIdx = -2`**. With **`scaleSetup`**, no **`scaleConstraint(headIK → ml_ikJoints[-1])`** when split (scale from parenting). |
 
 ### Out of scope (this feature doc)
@@ -45,7 +45,7 @@
 | `ikSetup=bezier`, `segmentType=parent`, no `scaleSetup` | Shipped |
 | Same + `scaleSetup` + `squash=simple` + `segmentStretchBy` translate or scale | Maya-verified |
 | `segmentType=bezier`, any supported `ikSetup` except **bezier** | Shipped (py3) — **`segment_rig_segments_bezier`** on **segmentJoints** (rig guts: `bezierIKCurve` / `bezierIKDriverCurve`); bezier CV **handleJoints**; `RIGFRAME.segment_handles` + module **`ikSetup`** on IK chain |
-| `segmentType=bezier` + `ikSetup=bezier` | **Experimental** — precheck allows; dual solve not fully signed off |
+| `segmentType=bezier` + `ikSetup=bezier` | **Blocked** — precheck fail; use **`ikSetup=bezier`** + **`segmentType=parent`** or **`ribbon`** / **`ribbonLive`** |
 | Sine / wave on driver | Tabled (lib only in `ik_utils`) |
 
 ---
@@ -59,7 +59,7 @@
 | **`ikBezierControlShape`** (Segment, `ikSetup=bezier`) | **`ball`** (default) — FK cross-section **cube** mains + **sphere** subs (neck bezier). **`segmentHandle`** — cast-thin **cube** mains (**`jointRadius`** on aim, cross from proxy cast — limb bezier) + **`limbSegmentHandle`** semiSphere subs. Head/Limb unchanged (no attr → **`ball`**). **SemiSphere size** (all segment **`limbSegmentHandle`** casts, incl. **`RIGSHAPES.segment_handles`**) — **`builder_utils.segment_handle_cast_semisphere_size`**: mean **`moduleJoints`** adjacent span **÷ 4**, capped by **`jointRadius`**. |
 | `segmentType` = **parent** | Bezier solve on **ik** chain; mains = `controlIKBase` / mids / `controlIK` (default **`ikBase`**). **`ikBase=hips`**: hip/chest **`controlIKBase`** / **`controlIK`** keep **`ik_base`** / **`ik_end`** shapes; bezier CV mains on **`bezierIKChainStart`** / mids / **`bezierIKChainEnd`** (see § Hips parent bezier). |
 | **`ikBase`** = **hips** (Segment, `ikSetup=bezier`) | Spine-style hips chain path (any **`segmentType`**): no extra **`handleJoints[1]`** mid spine handle; chain bezier **visSub**; pickwalk **`controlsIK`** = hip IK + chest IK + bezier chain. |
-| `segmentType` = **bezier** | Bezier CV mains/subs on **handleJoints** (`controlsSegmentBezier`); segment deformation follows ribbon path; handles ride **`rig_frame`** like ribbon. **`ikSetup=bezier`** on same module is allowed (experimental combo with module IK bezier solve). |
+| `segmentType` = **bezier** | Bezier CV mains/subs on **handleJoints** (`controlsSegmentBezier`); segment deformation via **`segment_rig_segments_bezier`** on **`segmentJoints`**. **`ikSetup=bezier`**: **`rig_segments`** reuses module **`bezierIKCurve`** (no second CV wire on handle joints); **`segmentBezierIKSplineHandle`** holds the segment ikSpline handle. |
 | `scaleSetup` | Enables scale blend to **blend** joints; bezier does **not** use ribbon IK scaleConstraints on IK (stretch owns IK channels) |
 | `squash` = simple | With `scaleSetup`, runs `bezier_spline_stretch` after IK + end follow blend |
 | `segmentStretchBy` | `translate` — segment length via joint **translate**; volume squash = linear **1/ratio** on clamped arc ratio. `scale` — aim-axis **scale**; volume = **ratio^-0.5** |
@@ -71,7 +71,8 @@
 | **`squashInflateFactorMin` / `Max` / `Mode`** (block Squash/Stretch UI) | Ramp for **settings** `{partName}_inflate_inflateFactor_i` defaults — **not** **`squashFactorMin/Max`** (those drive volume **`outFactor_*`** only). **`squashInflateFactorMode`**: same enum set as **`squashFactorMode`** (`midPeak`, **`midBulge`**, …). **`squashInflateFactorMin` may be negative** for contract vs inflate. Legacy block attrs **`inflateFactorMin/Max/Mode`** still read via **`block_squash_inflate_factor_min_max`** / **`block_squash_inflate_factor_mode`**. |
 | Settings **`squashInflate`** | Additive strength on the inflate ramp (default **0**). Raise **> 0** to inflate; negative **`inflateFactor_*`** on a joint contracts when this is **> 0**. |
 | Settings **`squashInflateOffset`** | ±2 slides the inflate ramp along the chain (`shift = offset × maxIdx/2`; sample index `s = g − shift` with lerp between adjacent factor indices). Limb: **`g`** is global across roll sections (`inflateSlideGlobalCount` / `Start`). |
-| End IK `followIK` | Default **0** on **Segment** bezier (orient blend via **`_splineControl`** on end IK joint). **Head** split path (**`headIK` ≠ `controlIK`**): **no** end follow blend on **`ml_ikJoints[-1]`** — head joint follows **`headIK`** only. |
+| End IK **`followIK`** | On **`rigNull.controlIK`** (not bezier CV mains). **`segment_ik_spline_orient_follow_setup`**: orient blend on end **skin** IK joint; **`pointConstraint`** from **`_splineEnd`**; **`_splineControl`** dup under **`controlIK`**. Driver **0** = spline span orient (**`_splineEnd`**), **1** = follow control hierarchy. **Defaults:** **`ikSetup=bezier`** end **`followIK`** default **1.0**; **`ikSetup=spline`** end default **0.0**. **Head** split path (**`headIK` ≠ `controlIK`**): **no** end follow on **`ml_ikJoints[-1]`**. |
+| Hips base **`followIK`** | **`ikBase=hips`** only. On **`controlIKBase`**. **`segment_ik_base_orient_follow_setup(self, …)`**: **`*_ikOrientFrame`** under **`ml_ikJoints[0]`**; **`_splineControlStart`** under **`controlIKBase`**. Orient blend on **`*_ikOrientFrame`** only (not pelvis IK joint). Driver **0** = **`_splineControlStart`**, **1** = ik pelvis. Sets **`self.ml_ikBlendUse[0]`** = orient frame for FK/IK **`blendChainsBy`**. **Defaults:** bezier **`followIK`** **1.0**; spline **0.0**. |
 | **`ikSplineTwistUpStart`** / **`ikSplineTwistUpEnd`** | Segment + Head only (`BLOCKSHARE._d_attrsTo_make['shapeDirection']`). **`dWorldUpVector`** / **`dWorldUpVectorEnd`** on bezier ikSpline handle (defaults **y+** start; end **y+** on Segment, **z-** on Head). **`bezier_ik_block_twist_world_up_vectors`** → **`RIGDYN._apply_hair_spline_ik_advanced_twist`**. Limb roll bezier unchanged (orientation up vector only). |
 | Head **`ikMidAimSetup`** | **Head block only** (default **off**). With **`ikMidSetup=linearTrack`** and aim **on**: **`{part}_midRootEnd_aimRef`** parented under **`controlIKBase`**; **`aimConstraint`** base → end IK; each mid **`mainDriver`** **`orientConstraint`** to ref (not driver-to-driver aim). **`cubicTrack`** / Segment (no attr) keep legacy driver-chain aim when aim is on. |
 
@@ -84,6 +85,7 @@ Rig validation lives in block **`rig_prechecks`** (via `rigFactory.prechecks`). 
 | Check | Message (typical) |
 |-------|-------------------|
 | `segmentType` bezier + `numControls` < 2 | `segmentType bezier requires at least 2 controls` |
+| `ikSetup` bezier + `segmentType` bezier | `Bezier/bezier is not a viable path. Bezier/Ribbon or Bezier/Parent is recommended` |
 | Head `neckIK` bezier + `segmentType` ≠ parent | `neckIK bezier (phase 1) requires segmentType parent` |
 | `segmentType` parent + `numControls` ≠ `numJoints` | `segmentType parent requires same number of controls as joints` |
 | Head parent + `neckControls` ≠ `neckJoints` | `segmentType parent requires same number of controls as joints` |
@@ -121,7 +123,9 @@ Arc-length stretch from **driver curve** (`bezierIKDriverCurve` on rigNull — P
 - **translate**: per-segment `translate` on aim axis × `finalRatio`; secondary scales via squash blend
 - **scale**: aim-axis scale × `finalRatio`
 - Volume driver: see `_bezier_stretch_volume_driver` in `ik_utils` (uses **`finalRatio`**, not curve blend alone)
-- **DG helpers** (`ik_utils`): **`_bezier_stretch_curve_blend_network`**, **`_bezier_stretch_apply_length_scale`**; global multiply node **`{base}_stretch_lengthScale_md`**; pointDist per segment **`{base}_stretch_seg_##_lengthScale_md`**. Return dict adds **`mPlug_lengthScale`**, **`mLengthScaleMd`** (arc path).
+- **DG helpers** (`ik_utils`): **`_bezier_stretch_curve_blend_network`**, **`_bezier_stretch_apply_length_scale`**; global multiply node **`{base}_stretch_lengthScale_md`**; pointDist per segment **`{base}_stretch_seg_##_lengthScale_md`**, **`_bezier_stretch_point_dist_bind_rest`**, **`_ratioClamp`**, **`_msClamp`** on master scale divisor. Return dict adds **`mPlug_lengthScale`**, **`mLengthScaleMd`** (arc path).
+- **Ribbon / curve segment + `squashSkipAim`**: **`IK.ribbon`** / **`IK.curve`** get **`setupAimScale=False`** when **`segmentStretchBy=scale`** and **`squashSkipAim`** is on (Segment, Head neck ribbon, Limb roll ribbon/curve) — no aim-length **`scaleZ`** stack fighting surface/constraints.
+- **Module IK `bezier_spline_stretch` vs `segmentType`**: **`segmentType=parent`** — full stretch + volume squash on **`ml_ikUse`** (block **`squashMeasure`** / **`squashExtraControl`**). **Any other segment type** (ribbon, bezier segment, …) — module IK gets **arcLength stretch only** (`applyVolumeSquash=False`, no pointDist POCI on IK); segment **`rig_segments`** / ribbon owns squash and **`pointDist`** when set.
 - **Rebuild**: existing rigs need **`rig_frame`** / limb **`rig_segments`** re-run to create **`lengthScale`** + multiply nodes (not attr-only).
 - **`globalScalePlug`**: Segment passes **`get_blockScale` / `segMeasure`** master scale (`mPlug_masterScale`) — wired to driver **`masterScale`**. **arcLength** and **pointDist** both use **live measure / masterScale** over **bind rest** (pointDist: per-segment `distance / masterScale / bindSegDist`; do not divide bind rest by masterScale or global scale double-applies on volume squash).
 - **`volumeSquashInflateOnly`**: When **True**, builds arc-length **volume squash** + optional **inflate** (`inflateDriveDirectParents`) on joint **secondary scales only** — does **not** connect translate / aim-axis stretch (spline IK keeps length channels). Segment parent **`ikSetup=spline`** uses this in **`rig_inflate`** with the skinned spline driver curve from **`RIGFRAME.spline`** (`mSplineDriverCurve` on the block instance).
@@ -143,7 +147,7 @@ Segment **`__l_rigBuildOrder__`** runs **`rig_inflate`** **after** **`rig_segmen
 
 | Step | Inflate responsibility |
 |------|-------------------------|
-| **`rig_segments`** | **`IK.ribbon`** / curve / spline segment deform only — **no** inflate parent wire on ribbon segment types. **`segmentType=bezier`**: full **`bezier_spline_stretch`** on seg chain → store **`self.d_segmentBezierStretch`**. |
+| **`rig_segments`** | **`IK.ribbon`** / curve / spline segment deform only — **no** inflate parent wire on ribbon segment types. **`segmentType=bezier`**: **`bezier_spline_stretch`** on seg chain → **`self.d_segmentBezierStretch`**. Combo **`ikSetup=bezier`**: **`segment_rig_segments_bezier_shared_module_curve`** — shared author curve, module driver for stretch. |
 | **`rig_frame`** | **`ikSetup=bezier`**: **`bezier_spline_stretch`** on IK use chain → **`self.d_stretchInflateRes`**. **`segmentType=parent`**: length + volume squash on **`ikJoints`**. **`segmentType` ≠ parent** (ribbon, seg bezier, …): **length only** on IK (`extraSquashControl=False`); volume squash stays on **`segmentJoints`** in **`rig_segments`**. Spline IK: stash **`self.mSplineDriverCurve`** for **`rig_inflate`**. **Do not** parent **`inflateScale`** nulls here. |
 | **`rig_inflate`** | **`squashInflateControl`** + overlay **`segmentType`**: build stretch result (if needed), then **one** **`segment_inflate_parent_rig_direct_controls`** pass. |
 
@@ -235,8 +239,10 @@ flowchart TD
   frame --> bez[RIGFRAME.bezier]
   bez --> stretch{scaleSetup and squash simple?}
   stretch -->|yes| bstr[IK.bezier_spline_stretch]
-  frame --> endFollow[splineEnd + followIK orient blend]
-  frame --> fkik[blendChainsBy parent + blendChainsScaleByAttr if scaleSetup]
+  frame --> endFollow[segment_ik_spline_orient_follow_setup tip]
+  frame --> hipsFollow[segment_ik_base_orient_follow_setup when ikBase hips]
+  hipsFollow --> ikBlendUse[ml_ikBlendUse index 0 ikOrientFrame]
+  frame --> fkik[blendChainsBy parent + blendChainsScaleByAttr on ml_ikBlendUse if scaleSetup]
 ```
 
 ### rigNull messages (bezier)
@@ -248,8 +254,9 @@ flowchart TD
 | `bezierIKTrackCurves` | Linear track curves (aux); `overrideVisibility` → settings `result_IKon` (FK/IK vis) |
 | `bezierIKSubsBase`, `bezierIKSubsMidN`, `bezierIKSubsEnd` | Subs per main IK slot |
 | **`bezierIKChainStart`**, **`bezierIKChainEnd`** | Hips parent bezier only — chain-end CV mains (not hip/chest **`controlIK*`**); wire/switch targets on **`ikJoints`** |
+| **`segmentBezierIKCurve`**, **`segmentBezierIKDriverCurve`**, **`segmentBezierIKSplineHandle`**, **`segmentBezierIKControlsGrp`** | **`ikSetup=bezier`** + **`segmentType=bezier`** — separate segment bezier + driver (not shared **`bezierIKCurve`** shape); CVs driven from same module IK mains/subs as **`rig_frame`** |
 
-Session build buffers on block instance: `md_bezierIKSubsBySlot`, `ml_bezierIKSubControls`, `ml_bezierIKTrackCurves` — reinit after `MODULECONTROL.register` (`bezier_ik_reinit_session_meta`).
+Session build buffers on block instance: `md_bezierIKSubsBySlot`, `ml_bezierIKSubControls`, `ml_bezierIKTrackCurves` — reinit after `MODULECONTROL.register` (`bezier_ik_reinit_session_meta`). **`rig_dataBuffer`**: `ml_ikBlendUse = None`. **`rig_frame`** (when IK on): `ml_ikBlendUse = copy(ikJoints)`; hips base follow replaces **`ml_ikBlendUse[0]`** with **`*_ikOrientFrame`** inside **`segment_ik_base_orient_follow_setup`** (pass block build **`self`**). FK/IK parent + scale blend uses **`self.ml_ikBlendUse`**, not raw **`ml_ikJoints`**, so chain2 index **0** is the orient frame while **`ml_ikUse[0]`** stays the solver pelvis.
 
 **Pickwalk / ordered IK DAG lists:** At **`rig_controls`**, each main IK DAG gets a **`bezierIKSubs`** msgList (ordered sub **transforms** only). **Segment (`ikSetup=bezier`, `segmentType=parent`, default `ikBase`):** **`controlsIK`** = full bezier chain on **`controlIKBase`** / mids / **`controlIK`**. **Segment hips parent bezier (`ikBase=hips`):** register hip/chest **`controlIKBase`** / **`controlIK`** as main IK; chain CVs via **`rig_controls_bezier_segment_parent_hips_chain`** (**`mPlug_visSub`** → main **`masterGroup.visibility`**, same step as **`segmentType=bezier`** handle registration); **`controlsIK`** = **`controller_getDat_ik_merge_bezier_msglist`**(hip + chest + built chain). **Segment (`segmentType=bezier`):** **`controlsSegmentBezier`** = handle CV pickwalk; **`controlsIK`** = module base/end IK. **Head (`neckIK=bezier`):** primary **`controlsIK`** = neck root + **`headIK`**; neck CV chain on **`controlsNeckBezier`**. **Limb (`segmentType=bezier`):** foot/hand IK plugs first in **`d_controlDat_links['ik']`**, then **`controlsSegmentBezier`**. Flat **`bezierIKSubControls`** is auxiliary. **`bezier_ik_ensure_aggregate_ik_msglist`** repairs aggregate lists at verify. Registered anim controls use **`controlAnim`** + **`ikBezier`** / **`ikBezierSub`** modifiers. Track curves stay on **`bezierIKTrackCurves`** only.
 
@@ -262,11 +269,24 @@ Spine-style layout: animators keep familiar **hip** and **chest** IK (`controlIK
 | **`rig_skeleton`** | Skip duplicate **`handleJoints`** at FK index **1** (no extra **`spine_*_handle`**). |
 | **`rig_shapes`** | Skip **`RIGSHAPES.segment_handles`** on handle joints. **`rig_shapes_bezier_segment_hips_chain_mains`**: create **`bezierIKChainStart`** / **`bezierIKChainEnd`**, snap to **`ikJoints[0]`** and **`ikJoints[int_handleEndIdx]`**; **`rig_shapes_bezier_ik_apply_from_fk`** with **`skip_base_end=True`** (mids only; hip/chest cubes stay on **`controlIK*`**). |
 | **`rig_controls`** | Generic mid IK loop skipped for hips chain; **`rig_controls_bezier_segment_parent_hips_chain`** registers chain mains/subs + **`controlSegMidIK`**; hip/chest IK registered above as usual. |
-| **`rig_frame`** | **`rig_frame_bezier_segment_hips_chain_master_groups`**: **`bezierIKChainStart.masterGroup`** → **`controlIKBase`**, **`bezierIKChainEnd.masterGroup`** → **`controlIK`** (after hip/chest **`masterGroup`** → **`mIKGroup`**). **`bezier_ik_resolve_main_ik_list`** drives **`RIGFRAME.bezier`** wire and slot subs (not raw **`controlIK*`** as CV mains). Skip legacy **`RIGFRAME.segment_handles`** on handle joints. |
+| **`rig_frame`** | **`rig_frame_bezier_segment_hips_chain_master_groups`**: **`bezierIKChainStart.masterGroup`** → **`controlIKBase`**, **`bezierIKChainEnd.masterGroup`** → **`controlIK`** (after hip/chest **`masterGroup`** → **`mIKGroup`**). **`bezier_ik_resolve_main_ik_list`** drives **`RIGFRAME.bezier`** wire and slot subs (not raw **`controlIK*`** as CV mains). Skip legacy **`RIGFRAME.segment_handles`** on handle joints. **Orient follow:** end via **`segment_ik_module_follow_end_control`** + **`segment_ik_spline_orient_follow_setup`**; hips base via **`segment_ik_module_follow_base_control`** + **`segment_ik_base_orient_follow_setup(self, ml_ikJoints[0], …)`** (see § Segment IK orient follow). |
 
 **Detection:** **`segment_bezier_ik_uses_hips_chain_mains(mBlock)`** — `ikSetup=bezier` and `ikBase=hips` only (not gated on **`segmentType`**). No new block enum (do not overload **`ikBezierSub`** modifier naming).
 
 **Reload:** **`BEZIERIKBLOCK`** / **`bezier_ik_block_utils`** with segment stack (`Builder` Step Build reload, **`general_utils.reloadMRSStuff`**).
+
+### Segment IK orient follow (`bezier_ik_block_utils`)
+
+**`rig_frame`** (module IK: **`ikSetup`** **bezier** or **spline**). Follow attrs live on module IK anim controls only — **`segment_ik_module_follow_end_control`** → **`rigNull.controlIK`**; **`segment_ik_module_follow_base_control`** → **`rigNull.controlIKBase`** (not **`bezierIKChain*`** CV mains).
+
+| Helper | When | Nodes |
+|--------|------|--------|
+| **`segment_ik_spline_orient_follow_setup`** | End (tip) follow | **Skin** = end **`ml_ikJoints[-1]`**; span = **`_splineEnd`** dup on **`ml_ikUse`**; follow dup parented to **`controlIK`** (or caller influence). |
+| **`segment_ik_base_orient_follow_setup`** | **`ikBase=hips`** base follow | Pass **`self`** (segment build instance). Creates **`{pelvis}_ikOrientFrame`** under **`ml_ikJoints[0]`**; **`{pelvis}_splineControlStart`** under **`controlIKBase`**. Writes **`self.ml_ikBlendUse[0] = m_ik_orient_frame`**. **`ml_ikJoints[0]`** / **`ml_ikUse[0]`** stay the solver pelvis — no orient constraint on pelvis. |
+
+**`rig_segments`** (segment deform ribbon/bezier): **`followEnd`** on last **`segmentJoints`** entry may use **`ml_handleJoints[-1]`** as follow influence — separate from module **`rig_frame`** **`controlIK`** contract.
+
+**Rejected (do not restore):** orient FK/IK or **`followIK`** blend directly on **`ml_ikUse[0]`** pelvis; **`_ikSplineRoot`** reparent of solve chain; pelvis sibling **`*_ikOrientBlend`**.
 
 ### Squash skeleton invariant
 
@@ -317,8 +337,11 @@ Legacy neck modes (spline / ribbon / single **`controlIK`** on head) keep one tr
 
 | Date | Summary |
 |------|---------|
+| 2026-10-23 | **Segment `rig_frame` orient follow (Maya-verified):** **`segment_ik_*_orient_follow_setup`**; hips **`*_ikOrientFrame`** + **`ml_ikBlendUse[0]`** for FK/IK; **`followIK`** on **`controlIK`/`controlIKBase`**; end defaults bezier **1.0** / spline **0.0** |
+| 2026-10-23 | **`ikSetup=bezier`** + **`segmentType=bezier`**: **`rig_prechecks`** fail — *Bezier/bezier is not a viable path. Bezier/Ribbon or Bezier/Parent is recommended* |
 | 2026-10-22 | **`ikSetup=bezier`** + separate segment deform (**`segmentType` ≠ parent**): module IK **`bezier_spline_stretch`** length only (**`segment_bezier_ik_module_chain_volume_squash`**); ribbon/seg-bezier squash unchanged on **`segmentJoints`** |
 | 2026-10-22 | Segment **`rig_prechecks`**: removed **`ikSetup=bezier`** ↔ **`segmentType`** locks (allow experimental combos; **parent** remains signed-off path) |
+| 2026-10-23 | **pointDist** translate stretch stability: bind-time POCI U only; **`_bezier_stretch_point_dist_bind_rest`**; clamp seg ratio + master scale divisor. **Ribbon `squashSkipAim`**: gate **`setupAimScale`** off when skip aim + scale stretch (segment/head/limb). |
 | 2026-10-22 | Segment **`ikSetup=bezier`** + **`ikBase=hips`** + **`segmentType=parent`**: **`bezierIKChainStart`/`End`**, skip spine handle joint; shapes/controls/visSub chain; **`rig_frame`** masterGroup under hip/chest IK; **`bezier_ik_resolve_main_ik_list`** for wire |
 | 2026-10-22 | Block attr **`ikSplineBezierMode`** (was **`splineBezierMode`**) on Segment / Head / Limb + **`shared_dat`**; **`block_bezier_anchor_mode`** legacy read. Settings **`squash`** default **1.0** on volume squash (**`bezier_spline_stretch`** + segment/limb post-build); **0** when volume squash off |
 | 2026-10-22 | **`IK.ribbon`** py3: integer **`blendLength`** for skin **`surface_tightenEnds`** (`// 2` in **`ik_utils`**, **`int()`** guard in **`skin_utils`**) — fixes ribbon **`rig_frame`** / segment ribbon build when **`extendEnds`** + two influences |

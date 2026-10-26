@@ -4,8 +4,40 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 22, 2026 — **Head `rig_inflate`**; **`ikSetup=bezier`** + separate segment deform → IK **length-only** stretch; hips parent bezier; spline **`rig_inflate`** / ribbon overlay  
-**PR**: Pending
+**Last Updated**: October 23, 2026 — hips **`followIK`** / **`*_ikOrientFrame`** / **`ml_ikBlendUse`** Maya-verified; PR hygiene items remain  
+**PR**: Pending — see [fix list](#before-merge--pr-fix-list) (cleanup only)
+
+## Before merge / PR (fix list)
+
+**Source:** Code review during hips **`followIK`** / **`*_ikOrientFrame`** / **`ml_ikBlendUse`** work (Oct 23, 2026). Chat: [Hips followIK orient frame](4c850023-6bda-4061-bc6a-28754cf9a842). Resolve before opening or merging the PR.
+
+**Rules touched:** `cgm-meta-and-existing-patterns` (search-first, MRS **`self`** + **`self.ml_*`**), clear explicit wiring (no opaque return-dict assignment at call sites).
+
+### Code — follow IK and FK/IK blend
+
+- [ ] **Commit py3 follow/FK–IK changes** — `ml_ikBlendUse` in **`rig_dataBuffer`**, copy in **`rig_frame`**, **`segment_ik_base_orient_follow_setup(self, …)`** sets **`ml_ikBlendUse[0]`** to **`*_ikOrientFrame`**, FK/IK **`blendChainsBy`** uses **`self.ml_ikBlendUse`** (may be local-only until committed).
+- [ ] **`head.py` (legacy neck path)** — Replace inline **`pointConstraint` + `followIK` + `blendChainsBy`** with **`segment_ik_module_follow_end_control`** + **`segment_ik_spline_orient_follow_setup`**; verify **`blendChainsBy`** chain order matches Segment **`rig_frame`** (head currently passes **`mIKSplineEnd`** as chain1 — opposite of helper).
+- [ ] **`segment.py` `rig_frame`** — Deduplicate bezier vs spline follow blocks (end + hips base) so defaults and wiring cannot drift.
+- [ ] **`followIK` defaults** — Bezier end uses **`f_default=1.0`**, spline end **`0.0`**; confirm intentional or align both paths + attrs.
+- [ ] **`rig_segments` ribbon follow** — Document or align **`followEnd`** influence (**`ml_handleJoints[-1]`** vs module **`controlIK`**) with **`rig_frame`** contract.
+- [ ] **Remove debug** — **`pprint.pprint(ml_segJoints)`** in **`segment.py` `rig_segments`** (bezier/spline segment path).
+
+### Docs / contracts
+
+- [x] **`Feature_BezierIK.md`** — hips **`ikOrientFrame`**, **`ml_ikBlendUse`**, end/base **`followIK`** drivers and defaults (Oct 23).
+- [x] **`Feature_MRSWiring.md`** — **`ml_ikBlendUse`** build buffer paragraph.
+- [x] **`Branch_BezierIK.md` timeline** — Oct 23 orient-follow entry (below).
+
+### Verified behavior (Oct 23 — keep when refactoring)
+
+- Hips **`ikBase`**: orient **`followIK`** on **`*_ikOrientFrame`**; FK/IK index **0** = orient frame via **`ml_ikBlendUse`**; **`ml_ikUse[0]`** pelvis unchanged for solve.
+- End **`followIK`** on **`controlIK`** via **`segment_ik_spline_orient_follow_setup`**; bezier default **1.0**, spline **0.0** at tip; hips base defaults match per **`ikSetup`** branch.
+
+### Already rejected — do not reintroduce
+
+- Orient **`blendChainsBy`** on **`ml_ikUse[0]`** pelvis (IK handle conflict).
+- **`ikSplineRoot`** / reparent **`ml_ikUse[0]`** for hips base follow (**`segment_ik_hips_base_spline_chain_split`** — removed).
+- Extra pelvis sibling **`*_ikOrientBlend`** for Maya three-node blend (use **`ml_ikBlendUse`** + **`*_ikOrientFrame`** instead).
 
 ## Goals
 
@@ -65,8 +97,8 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 | **bezier** + **`ikBase=hips`** | any **`segmentType`** | off | **Maya-verified** (parent spine) — hip/chest **`controlIK*`** + chain CVs; visSub; **`rig_frame`** masterGroups |
 | **bezier** + **`ikBase=hips`** | **ribbon** / **bezier** (non-parent seg) | on + squash **simple** | **In py3** — IK chain **length-only** stretch in **`rig_frame`**; volume squash on **`segmentJoints`** only (no duplicate **`outFactor_*`** on IK) |
 | **bezier** | **parent** | on (`segmentStretchBy` translate / scale) | **Maya-verified** — full **`bezier_spline_stretch`** on **`ikJoints`**, FKIK scale blend |
-| **bezier** | **bezier** | off | **In py3** — seg-joint bezier, handle CVs, `controlsSegmentBezier` |
-| **bezier** | **bezier** | on | **In py3** — `bezier_spline_stretch` on seg driver in `rig_segments` |
+| **bezier** | **bezier** | any | **Blocked** — precheck; use **bezier/parent** or **bezier/ribbon** |
+| **bezier** | **bezier** (seg only, other `ikSetup`) | off | **In py3** — seg-joint bezier, handle CVs, `controlsSegmentBezier` |
 
 Native Maya (no MRS): [`Feature_BezierIK.md`](../Features/Feature_BezierIK.md) § Lib API — `bezier_spline` + optional `bezier_spline_stretch` on hidden driver; sine/wave **tabled**.
 
@@ -94,7 +126,7 @@ flowchart TD
 ### Primary call sites
 
 - **`rigFrame_utils.bezier`**: `IK.bezier_spline` on `ml_ikUse`, `masterScale` on driver, twist to controls/settings; links **`bezierIKDriverCurve`** on rigNull.
-- **`segment.py` `rig_frame` (`ikSetup == 'bezier'`)**: Hips chain: **`rig_frame_bezier_segment_hips_chain_master_groups`** before ribbon/bezier wire. `RIGFRAME.bezier` → end duplicate + `followIK` → optional **`bezier_spline_stretch`** → **`self.d_stretchInflateRes`** (**`extraSquashControl`** only when **`segment_bezier_ik_module_chain_volume_squash`** — i.e. **`segmentType=parent`**); FKIK **`blendChainsScaleByAttr`** when `scaleSetup`. **Inflate parent wire → `rig_inflate`** (not here).
+- **`segment.py` `rig_frame` (`ikSetup == 'bezier'`)**: Hips chain: **`rig_frame_bezier_segment_hips_chain_master_groups`** before ribbon/bezier wire. `RIGFRAME.bezier` → **`segment_ik_*_orient_follow_setup`** (end + hips base; **`ml_ikBlendUse`**) → optional **`bezier_spline_stretch`** → **`self.d_stretchInflateRes`** (**`extraSquashControl`** only when **`segment_bezier_ik_module_chain_volume_squash`** — i.e. **`segmentType=parent`**); FKIK **`blendChainsBy` / `blendChainsScaleByAttr`** on **`self.ml_ikBlendUse`** when `scaleSetup`. **Inflate parent wire → `rig_inflate`** (not here).
 - **`segment.py` `rig_inflate`**: After **`rig_segments`**. Ribbon/ribbonLive **`segmentType`**: **`segment_inflate_stretch_result_from_volume_joints`** on **`segmentJoints`** (**`leave_joint_volume_wiring=True`**). Parent bezier inflate from **`ikJoints`** only when **`segmentType=parent`**. Seg bezier / spline-curve paths: stored stretch dict or volume overlay, then **`segment_inflate_parent_rig_direct_controls`**.
 - **`segment.py` `rig_skeleton`**: `_squash_ik_fk_blend_segment_scale_compensate` when squash + IK.
 - **`rigFrame_utils.spline`** / **`IK.curve`**: unchanged legacy paths (see prior branch entries).
@@ -129,6 +161,30 @@ For each prototype batch (chat or file path):
 
 ## Timeline
 
+### October 23, 2026 - Precheck block: `ikSetup=bezier` × `segmentType=bezier`
+
+**What**: **`rig_prechecks`** fails with *Bezier/bezier is not a viable path. Bezier/Ribbon or Bezier/Parent is recommended*. Combo treated as dead end after cycle/DG experiments.
+
+**Files**: `segment.py`; `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
+
+---
+
+### October 23, 2026 - Shared module bezier (`ikSetup=bezier` × `segmentType=bezier`) — superseded
+
+**What**:
+
+- **`segment_bezier_uses_module_ik_curve`**: combo detection.
+- **`segment_rig_segments_bezier_shared_module_curve`**: after **`rig_frame`**, segment **`segmentJoints`** get a second **`IK.bezier_spline`** with **`useBezierCurve`** = rigNull **`bezierIKCurve`** (CV wire unchanged — module **`controlIK*`** / hips chain mains).
+- No overwrite of **`bezierIKCurve`** / **`bezierIKDriverCurve`** / **`ikSplineHandle`**; segment handle → **`segmentBezierIKSplineHandle`**.
+- **`bezier_spline_stretch`** on segment span uses module **`bezierIKDriverCurve`**; volume squash stays on **`segmentJoints`** (unchanged **`rig_frame`** length-only IK stretch).
+- Missing module curve on rigNull → warning + legacy handle-joint **`segment_rig_segments_bezier`** path.
+
+**Files**: `bezier_ik_block_utils.py`; `Features/Feature_BezierIK.md`, `Features/Feature_MRSWiring.md`, `Branches/Branch_BezierIK.md`.
+
+**Maya verify**: Rebuild module; log **`segment_rig_segments_bezier_shared_module_curve | sharedModuleCurve:True`**; move module bezier CVs — **ik** + **segment** chains follow; optional **`scaleSetup`** + squash **simple**.
+
+---
+
 ### October 22, 2026 - Bezier IK + separate segment: length-only on module IK chain
 
 **What**:
@@ -158,9 +214,9 @@ For each prototype batch (chat or file path):
 
 ---
 
-### October 22, 2026 - Segment precheck: allow `ikSetup=bezier` × any `segmentType`
+### October 22, 2026 - Segment precheck: allow `ikSetup=bezier` × non-parent `segmentType` (partial)
 
-**What**: Removed **`rig_prechecks`** errors **`ikSetup bezier requires segmentType parent`** and **`segmentType bezier with ikSetup bezier is not supported yet`**. Artists/TAs can Step Build and experiment with ribbon/spline/curve/linear/**bezier** segment types while **`ikSetup=bezier`**; **parent** (+ hips) remains the verified path. Still enforced: **`segmentType=bezier`** requires **`numControls` ≥ 2**.
+**What**: Removed blanket **`ikSetup bezier requires segmentType parent`** lock so **bezier/ribbon** (etc.) could be experimented with; **parent** (+ hips) remains the verified path. **Superseded Oct 23:** **`ikSetup=bezier`** + **`segmentType=bezier`** blocked again.
 
 **Files**: `segment.py`; `Features/Feature_BezierIK.md`.
 
@@ -436,6 +492,38 @@ For each prototype batch (chat or file path):
 **Files**: EXTENDED `head.py`; EXTENDED `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`
 
 **Status**: Maya-verified on user template.
+
+---
+
+### October 23, 2026 - pointDist translate stability + ribbon skipAim scale
+
+**What**:
+
+- **`IK.bezier_spline_stretch`** **`squashMeasure=pointDist`**: bind-time POCI **U** only (**`b_track_joint_parameter=False`**) so **`segmentStretchBy=translate`** does not NPOT-feedback through **`distanceDim`**. **`_bezier_stretch_point_dist_bind_rest`** for bind rest; clamp per-segment ratio and master-scale divisor before stretch blend.
+- **Segment / Head / Limb** ribbon (and segment/head/limb curve scale path): **`setupAimScale`** only when **`segmentStretchBy=scale`** and **not** **`squashSkipAim`**.
+- **Module IK stretch split**: **`segment_bezier_ik_module_chain_stretch_squash_measure`** + **`applyVolumeSquash`** — non-**parent** **`segmentType`** → arc-length stretch on **`ml_ikUse`** only; **parent** keeps full squash/stretch on module IK.
+
+**Files**:
+
+- EXTENDED: `cgm/core/rig/ik_utils.py`
+- EXTENDED: `cgm/core/mrs/blocks/organic/segment.py`, `head.py`, `limb.py`
+- EXTENDED: `Features/Feature_BezierIK.md`, `Features/Feature_MRSWiring.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: Code complete — **Maya verify** ribbon skip aim + spine bezier **`pointDist`** translate stretch (no runaway translate / **`ratio_md`** divide-by-zero).
+
+---
+
+### October 23, 2026 - Segment hips/base orient follow + `ml_ikBlendUse`
+
+**What**:
+
+- **`segment_ik_spline_orient_follow_setup`** / **`segment_ik_base_orient_follow_setup`** in **`bezier_ik_block_utils`** — **`followIK`** on **`controlIK`** / **`controlIKBase`** only (not **`bezierIKChain*`** mains).
+- **Hips `ikBase`**: **`*_ikOrientFrame`** under pelvis receives orient **`followIK`** blend; **`segment_ik_base_orient_follow_setup(self, …)`** sets **`self.ml_ikBlendUse[0]`** to orient frame for FK/IK **`blendChainsBy`**; **`ml_ikUse[0]`** solver pelvis unchanged.
+- **`rig_dataBuffer`**: **`ml_ikBlendUse`**; **`rig_frame`** FK/IK uses **`self.ml_ikBlendUse`** as IK chain2.
+
+**Files**: EXTENDED `segment.py`, `bezier_ik_block_utils.py`; EXTENDED `Features/Feature_BezierIK.md`, `Features/Feature_MRSWiring.md`, `Branches/Branch_BezierIK.md`
+
+**Status**: **Maya-verified** (parent spine hips bezier/spline). PR cleanup: head inline follow, dedupe **`rig_frame`** blocks, remove **`pprint`** — see [fix list](#before-merge--pr-fix-list).
 
 ---
 
@@ -816,7 +904,7 @@ None expected until block enum changes; document if existing `spline` behavior s
 
 ---
 
-**Ready for Review** — Segment parent bezier + stretch path ready for PR review; sine/wave out of scope.
+**Merge-ready for orient follow behavior** (Oct 23 Maya-verified). Clear remaining **[Before merge / PR (fix list)](#before-merge--pr-fix-list)** hygiene (head helper parity, dedupe, debug print, commit py3) before PR; sine/wave out of scope.
 
 ---
 
@@ -835,5 +923,4 @@ None expected until block enum changes; document if existing `spline` behavior s
 
 ---
 
-*Last Updated: October 22, 2026*  
-*Branch Status: Active — Head **`rig_inflate`**; hips spine + separate segment (IK length-only); **`ikSplineBezierMode`**; inflate ramp **N** joints + tip **`inflateScale`**; sine/wave tabled*
+*Footer sync: see **Quick Info** at top of this file.*

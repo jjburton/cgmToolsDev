@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (core MRS; ongoing maintenance)
-- **Last Updated**: October 15, 2026
+- **Last Updated**: October 23, 2026
 - **Audience**: Dev / TA — design contract for block/module/puppet message graphs and build sync (not artist manual prose)
 - **Purpose**: Canonical reference for how `cgmRigBlock`, `cgmRigModule`, and `cgmRigPuppet` stay linked via message attributes, DAG parenting, and cached lists. Use when debugging build regressions, mirror/controller passes, **controller pickwalk** wiring, module hierarchy bugs, or attach-point failures.
 
@@ -13,7 +13,7 @@
 
 - [`Feature_SceneExportFlow.md`](Feature_SceneExportFlow.md) — export uses puppet/module sets (orthogonal)
 - [`Feature_DynSimTool.md`](Feature_DynSimTool.md) — dyn drivers collected to puppet space groups
-- [`Feature_BezierIK.md`](Feature_BezierIK.md) — Segment `ikSetup=bezier` rigNull messages (`bezierIKDriverCurve`, sub CV msgLists)
+- [`Feature_BezierIK.md`](Feature_BezierIK.md) — Segment `ikSetup=bezier` rigNull messages (`bezierIKDriverCurve`, sub CV msgLists); **`ml_ikBlendUse`** build buffer (FK/IK IK chain vs **`ml_ikJoints`**)
 - [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — BlockCreate placement helpers on `mrsHelpers` (pre-block msgList; not module graph)
 
 ---
@@ -526,7 +526,7 @@ Parent mid **`masterGroup`** to **`mRoot`** only for **`ribbon`** / **`ribbonLiv
 Per-roll **`IK.curve`** / **`IK.ribbon`** in **`limb.rig_segments`** now matches Segment/Head:
 
 - **`skipAim`**: block bool **`squashSkipAim`** (default **True** on Limb, same as Segment).
-- **`setupAimScale`**: **True** when **`segmentStretchBy == 'scale'`**, else **False** on ribbon path; curve path sets **`setupAim = 1`** + **`setupAimScale`** when scale stretch.
+- **`setupAimScale`**: **True** when **`segmentStretchBy == 'scale'`** and **not** **`squashSkipAim`**, else **False** on ribbon path; curve path sets **`setupAim = 1`** + same **`setupAimScale`** gate when scale stretch.
 - **`liveSurface`**: **`segmentType == ribbonLive`** on main roll ribbon build.
 
 **Files**: [`limb.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py) (`rig_dataBuffer`, `rig_segments`); [`rigFrame_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py) (`limb_segment_mid`); [`block_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/block_utils.py) (`segmentMidIKSetup` in rig-state vis list); [`shared_dat.py`](../../cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py) (rig + squash UI lists).
@@ -594,11 +594,14 @@ Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_
 | `bezierIKDriverCurve` | Hidden POCI **splineIKCurve** — IK `inCurve` + `bezier_spline_stretch` `curveInfo` |
 | `bezierIKCurve` | Visible Bezier settings curve from `IK.bezier_spline` (when connected) |
 | `ikSplineHandle` | ikSpline IK handle |
+| `segmentBezierIKCurve`, `segmentBezierIKDriverCurve`, `segmentBezierIKSplineHandle`, `segmentBezierIKControlsGrp` | Segment deform bezier (parallel to module **`bezierIKCurve`**); same IK CV controls, separate shape/driver to avoid DG cycles |
 | `bezierIKSubControls` | Tangent sub controls (msgList) |
 | `bezierIKTrackCurves` | Aux track curves between main IK and subs |
 | `bezierIKSubsBase`, `bezierIKSubsMid*`, `bezierIKSubsEnd` | Sub controls per main IK slot |
 
 **Unchanged from ribbon/spline IK**: `ribbonIKDrivers` (end influence locators), `ikJoints`, `blendJoints`, standard IK controls on `rigNull`.
+
+**Build instance buffers** (segment block factory **`self`**, not rigNull messages): **`rig_dataBuffer`** initializes **`ml_ikBlendUse = None`**. **`rig_frame`** with IK: **`ml_ikBlendUse = copy(ml_ikJoints)`** for FK/IK **`blendChainsBy`** / **`blendChainsScaleByAttr`** chain2. When **`ikBase=hips`**, **`segment_ik_base_orient_follow_setup(self, …)`** sets **`ml_ikBlendUse[0]`** to **`*_ikOrientFrame`** while **`ml_ikJoints[0]`** / **`ml_ikUse[0]`** remain the solver pelvis. Detail: [`Feature_BezierIK.md`](Feature_BezierIK.md) § Segment IK orient follow.
 
 **Precheck**: `ikSetup=bezier` requires `segmentType=parent` until non-parent segment bezier is implemented.
 
@@ -610,6 +613,7 @@ Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_
 
 | Date | Summary |
 |------|---------|
+| 2026-10-23 | Segment **`ml_ikBlendUse`** — FK/IK IK chain copy; hips **`*_ikOrientFrame`** at index **0**; cross-ref orient follow in [`Feature_BezierIK.md`](Feature_BezierIK.md) |
 | 2026-10-12 | Cross-ref [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — `mrsHelpers` placement msgList (BlockCreate) |
 | 2026-10-13 | Segment Bezier IK section — rigNull message table + precheck note; cross-ref [`Feature_BezierIK.md`](Feature_BezierIK.md) |
 | 2026-10-09 | Limb roll seg mid IK: track modes via `attachToCurve`; `squashSkipAim` on roll ribbons; `segmentMidIKControl` vs setup enum contract |

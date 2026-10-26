@@ -1,0 +1,39 @@
+---
+description: Prefer clear, explicit code; obscure patterns only when justified
+alwaysApply: true
+---
+
+# Clear code by default
+
+Write code so the next reader (artist, TD, or agent) sees **what** and **why** without decoding indirection.
+
+## Default
+
+- **Names** match scene nodes, attrs, and data-buffer fields (`m_ik_orient_frame`, `ml_ikBlendUse`, not `mSpan` / `d_buff`).
+- **Return values** are the thing callers need, not opaque dicts unless several distinct outputs are required.
+- **Buffer / `self` fields**: pass the build instance (`self`) into helpers; set `ml_*` / `self.*` **inside** the helper once a legible local exists (e.g. `m_ik_orient_frame`), not via return-value assignment at the call site.
+- **Avoid** vague aliases (`ml_ikForFkIkBlend = x or y`), mystery kwargs, and jargon borrowed from a different code path unless that path is the actual contract.
+
+## When unclear code is OK
+
+Use a less obvious pattern only with a **stated** reason:
+
+| Reason | Example |
+|--------|---------|
+| **Design** | Shared API (`blendChainsBy` chain order), framework hook, stable public surface |
+| **Engineering** | Maya constraint needs three distinct transforms; match existing cgm helper signature |
+| **Performance** | Hot loop, batch `mc.*`, avoid redundant meta wrap — comment the tradeoff |
+
+If you choose obscurity, add a **short comment or docstring** naming the constraint (one line, not an essay).
+
+## Agents
+
+- Refactors and new rig/tool code: prefer clarity over cleverness.
+- Prefer passing `self` (block build instance) into setup helpers over returning values only so the caller can assign buffer fields.
+
+## Related
+
+- **`cgm-meta-and-existing-patterns`** — search-first; MRS **`self`** / **`self.ml_*`** block build (canonical)
+- **`cgm-meta-naming-hierarchy`** — `m*` / `ml_*` naming
+- **`cgm-debug-order`** — explicit boundary logging
+- **`cgm-module-placement`** — where logic lives

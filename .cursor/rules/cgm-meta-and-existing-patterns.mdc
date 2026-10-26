@@ -36,6 +36,11 @@ Do not add a wrapper whose only job is that query. A new lib function is allowed
 - **Before** adding new helpers (extra `mc.ls`, string hacks, duplicate logic), **search the cgmToolsPy3 tree** for existing utilities, meta APIs, or the same problem already solved elsewhere.
 - Reuse or extend what is already there unless there is a clear gap and a deliberate reason to diverge.
 
+### MRS block build (`rig_*` + `lib/*_block_utils`)
+
+- **`rig_dataBuffer` / `rig_frame`** store build state on **`self`** (`self.ml_*`, `self.d_*`, …). **Grep sibling `rig_*` steps and `BEZIERIKBLOCK` / `RIGFRAME` callers** before new wiring.
+- Lib helpers called from blocks: **first arg is the block build instance (`self`)** when peers do (`squash_ik_fk_blend_segment_scale_compensate(self, …)`, `RIGFRAME.bezier(self, …)`). Set **`self.ml_*`** inside the helper once a legible meta local exists — not return-dict keys or call-site `self.ml_*[i] = helper(...)`.
+
 ## Module placement (non-meta code)
 
 - General new utilities belong under **`cgm/core/lib/`**, not vendored trees or unrelated large modules — see **`cgm-module-placement`** rule.
