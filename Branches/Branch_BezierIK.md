@@ -22,6 +22,12 @@
 - [ ] **`rig_segments` ribbon follow** — Document or align **`followEnd`** influence (**`ml_handleJoints[-1]`** vs module **`controlIK`**) with **`rig_frame`** contract.
 - [ ] **Remove debug** — **`pprint.pprint(ml_segJoints)`** in **`segment.py` `rig_segments`** (bezier/spline segment path).
 
+### Pickwalk (MRS controller lanes)
+
+- [x] **Limb FK** — **`fkJoints`** in **`d_controlDat_links['fk']`** (limb does not use **`controlsFK`**).
+- [x] **Read-only `controller_getDat`** — no **`_limb_bezier_ensure_*`** / **`bezier_ik_ensure_aggregate_ik_msglist`** in verify path; bezier msgLists from **`rig_controls`**; merge via **`bezier_ik_block_utils.controller_getDat_*`** helpers.
+- [x] **Subs / shared joints** — slot-first pickwalk; merge **`bezierIKSubs`** on connect (mid = back → main → forward). Contract: [`Feature_MRSWiring.md`](../Features/Feature_MRSWiring.md) § Bezier pickwalk guard rails.
+
 ### Docs / contracts
 
 - [x] **`Feature_BezierIK.md`** — hips **`ikOrientFrame`**, **`ml_ikBlendUse`**, end/base **`followIK`** drivers and defaults (Oct 23).

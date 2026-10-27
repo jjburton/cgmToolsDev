@@ -319,7 +319,54 @@ For each tag, controls are processed **in list order** — that order is the pic
 | `controller_getDat` | Per-block ordered dict per lane | **Authoritative pickwalk order** for `controller_verify` |
 | `d_controlDat_links` on block module | Overrides `d_controlLinks` message names (e.g. limb `fk` / `ik` lists) | Control discovery; should stay consistent with `controller_getDat` |
 
+**Limb FK lane:** `limb.controller_getDat` / `d_controlDat_links['fk']` must include **`fkJoints`** (rig registers FK on that msgList). Segment blocks use **`controlsFK`**; do not drop **`fkJoints`** when editing bezier pickwalk on limb.
+
 **Naming drift:** verify uses lane key **`segmentHandles`**; shared control order uses **`segmentHandle`**. Both should resolve the same `rigNull` plugs (`handleJoints`, `controlSegMidIK`, etc.) — do not rename one without checking the other.
+
+### Bezier pickwalk guard rails
+
+Bezier work must **not** bypass the FK/IK lane system. Use this split on every change:
+
+| Phase | May write `rigNull`? | Responsibility |
+|-------|----------------------|----------------|
+| **`rig_shapes` / `rig_controls` closeout** | **Yes** | Create subs, `MODULECONTROL.register`, connect per-main **`bezierIKSubs`**, build **aggregate** pickwalk msgLists |
+| **`controller_getDat`** | **No** | Read plugs + read-only merge helpers only; return lane dict for **`controller_verify`** |
+| **`bezier_ik_ensure_aggregate_ik_msglist`** | Yes (repair) | Tooling / Script Editor only — **never** call from **`controller_getDat`** or **`controller_verify`** |
+
+**Aggregate msgLists (build writes, verify reads)**
+
+| Block / mode | Build (typical) | Verify lane |
+|--------------|-----------------|-------------|
+| Limb `segmentType=bezier` (roll) | `controlsSegmentBezier` via `_limb_bezier_connect_control_msglists` | **`segmentHandles`** — `controller_getDat_limb_segment_handles_lane` |
+| Segment `ikSetup=bezier` (module IK) | `controlsIK` via `bezier_ik_rig_controls_build_controls_ik` | **`ik`** (`checkList` + `controlsIK`); **`segmentHandles`** merges `handleJoints` + `controlsIK` |
+| Segment `segmentType=bezier` (deform CVs) | `controlsSegmentBezier` via `bezier_ik_rig_controls_build_controls_segment_bezier` | **`segmentHandles`** — `controller_getDat_segment_handles_lane` (also merges `controlsIK` when present) |
+| Head `neckIK=bezier` | `controlsNeckBezier` via `bezier_ik_rig_controls_build_controls_ik` | **`ik`** — `d_controlDat_links` includes **`controlsNeckBezier`** |
+
+Do **not** duplicate the same bezier chain on both **`ik`** and **`segmentHandles`** unless that was true on **main**; do **not** drop legacy lane plugs when adding bezier (see limb FK below).
+
+**Limb FK (orthogonal to bezier)** — `d_controlDat_links['fk']` and **`controller_getDat`** must list **`fkJoints`**. Limb **`rig_controls`** registers FK on **`fkJoints`**, not **`controlsFK`** (segment pattern). Removing **`fkJoints`** breaks FK pickwalk while bezier lanes still look fine.
+
+**Per-anchor pickwalk order (normative)** — implemented in **`bezier_ik_pickwalk_append_main_index`** (`bezier_ik_block_utils.py`):
+
+- **Base:** main → forward subs  
+- **Mid:** back subs → main → forward subs  
+- **End:** back subs → main  
+
+**Subs source of truth when building lists**
+
+1. Prefer **`md_subs_by_slot`** / section **`bezierIKSubs_*_{section}`** from **`rig_shapes`** (full back+forward on mids).  
+2. **`bezier_ik_subs_for_main_pickwalk`** / limb **`_limb_bezier_section_pickwalk_one_section`** — slot first, then merge **`bezierIKSubs`** on the main if needed.  
+3. **Do not** prefer **`mMain.bezierIKSubs`** alone — it is **overwritten per roll section** on shared joints (`shared_end` / `shared_start`); slot data stays complete.  
+4. **`bezier_ik_connect_main_sub_msglists_for_mains`** must **merge** into existing **`bezierIKSubs`** on the main, not replace, so shared joints accumulate back + forward across sections.
+
+**Agents / PR checklist (bezier + pickwalk)**
+
+- [ ] No **`bezier_ik_ensure_*`** or **`_limb_bezier_connect_*`** inside **`controller_getDat`**  
+- [ ] Limb **`fkJoints`** still in **`d_controlDat_links['fk']`**  
+- [ ] New bezier controls wired at **build** to the correct aggregate plug (table above)  
+- [ ] Pickwalk list built with **`bezier_ik_pickwalk_append_main_index`** (or limb section helper that calls it)  
+- [ ] After merge, spot-check a **mid** main: **`controlsSegmentBezier`** / **`controlsIK`** contains back → main → forward  
+- [ ] Re-run **`controller_verify`** on a test puppet; FK and bezier **`segmentHandles`** / **`ik`** lanes
 
 ### `controller_verify` algorithm (normative)
 
@@ -460,6 +507,11 @@ Convenience wrappers on `cgmRigPuppet`: `connect_module`, `get_modules`, `gather
 | Ran `controller_verify` on referenced puppet | No-op purge/rewire | Edit source file or duplicate puppet |
 | Patched zoo pickwalk instead of Maya controllers | No change in MRS rig behavior | Use `controller_verify` / `controller_getDat` |
 | Edited `controls_getDat` / `d_controlDat_links` only | Controls discovered but walk order unchanged | Edit **`controller_getDat`** for pickwalk order |
+| Bezier repair / connect inside **`controller_getDat`** | FK OK, bezier or shared-joint walk wrong; scene msgLists mutate on verify | Build-time msgLists only; verify uses read-only merge helpers |
+| Dropped **`fkJoints`** from limb **`d_controlDat_links['fk']`** for “cleanup” | FK pickwalk dead (group/shape default); bezier seems fine | Keep **`fkJoints`**; segment uses **`controlsFK`**, limb does not |
+| Pickwalk uses **`bezierIKSubs` on main** before slot dict | Mid **forward** missing on limb roll | **`bezier_ik_subs_for_main_pickwalk`** / slot-first in limb section pickwalk |
+| **`bezierIKSubs` connect overwrites** on shared roll joint | Back or forward lost on elbow-style shared main | Merge in **`bezier_ik_connect_main_sub_msglists_for_mains`** |
+| Segment verify merges wrong aggregate (e.g. limb plug on segment block) | Deform bezier walk wrong | Segment **`segmentHandles`**: **`controlsIK`** + **`controlsSegmentBezier`** via **`controller_getDat_segment_handles_lane`** |
 
 ---
 
@@ -605,7 +657,7 @@ Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_
 
 **Precheck**: `ikSetup=bezier` requires `segmentType=parent` until non-parent segment bezier is implemented.
 
-**Controller graph**: `segment.controller_getDat` builds `md['ik']` from segment rigNull plugs + `_bezier_ik_pickwalk_controls` when `bezierIKSubControls` exists — used by puppet `controller_verify` (not limb foot IK message names).
+**Controller graph (pickwalk)**: Build writes aggregate msgLists (table in § Bezier pickwalk guard rails). **`segment.controller_getDat`** / **`limb.controller_getDat`** only **read** those lists via **`checkList`** and **`controller_getDat_*_handles_lane`** — see [`bezier_ik_block_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py).
 
 ---
 
@@ -613,6 +665,7 @@ Full build flow, stretch/squash, and prechecks: [`Feature_BezierIK.md`](Feature_
 
 | Date | Summary |
 |------|---------|
+| 2026-10-27 | Bezier pickwalk guard rails — build vs verify, aggregate msgList table, limb **`fkJoints`**, subs slot-first / merge on shared joints; anti-patterns |
 | 2026-10-23 | Segment **`ml_ikBlendUse`** — FK/IK IK chain copy; hips **`*_ikOrientFrame`** at index **0**; cross-ref orient follow in [`Feature_BezierIK.md`](Feature_BezierIK.md) |
 | 2026-10-12 | Cross-ref [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — `mrsHelpers` placement msgList (BlockCreate) |
 | 2026-10-13 | Segment Bezier IK section — rigNull message table + precheck note; cross-ref [`Feature_BezierIK.md`](Feature_BezierIK.md) |
