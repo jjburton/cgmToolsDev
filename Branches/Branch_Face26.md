@@ -300,23 +300,25 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 
 **Status**: Code in tree — Maya verify full puppet mesh (fingers + handle + limbs); limb **Block Mesh** end caps
 
-#### Form sub shaper track curves — per-block `seg_*_trackCrv` naming
-**What**: Fix sub shapers on a **second** block in form (e.g. second limb) riding the **first** block’s segment track curves — wrong `pointOnCurveInfo.inputCurve` / attach behavior.  
-**Files**: `limb.py` (inline form sub-shaper loop); `block_utils.py` — **`form_segment`** (used by **handle**, **head**, **segment**)
+#### Form sub shaper track curves — full-path POC wiring
+**What**: Fix sub shapers on a **second** block in form (duplicate/mirror or multiple blocks) riding the **first** block’s segment track curves — wrong `pointOnCurveInfo.inputCurve` / track loc behavior.  
+**Files**: [`curve_Utils.py`](../../cgmToolsPy3/cgm/core/lib/curve_Utils.py) (`nurbs_curve_shape_get`, **`create_pointOnInfoNode`**); [`blockShapes_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/blockShapes_utils.py) (**`attachToCurve`** / **`attachHandleToCurve`**); [`constraint_utils.py`](../../cgmToolsPy3/cgm/core/rig/constraint_utils.py) (**`attach_toCurveTrack`**); form call sites in **`block_utils.form_segment`** / **`limb.py`** (unchanged signatures)
 
 **Features**:
-- Segment linear track curves renamed **`{p_nameBase}_seg_{i}_trackCrv`** (was generic **`seg_{i}_trackCrv`** on every block)
-- Sub shaper attach unchanged at call site: **`BLOCKSHAPES.attachToCurve(mHandle, mLinearCurve, …)`** on the curve created for that segment
+- **`nurbs_curve_shape_get`**: single nurbsCurve shape **long DAG path** (transform or shape input; non-intermediate)
+- **`create_pointOnInfoNode`**: **`inputCurve`** connects via full-path **`worldSpace[0]`** only (no short shape plugs)
+- **`attachToCurve`**: POC created from resolved **`mShape`** (always set before POC); **`trackCurve`** message unchanged
 
 **Root cause** (debug / agent context):
-- **`create_pointOnInfoNode`** connects POC via **short** shape name from **`listRelatives(..., shapes=True)`** (no **`fullPath`**)
-- Duplicate short names across blocks → Maya resolves **`inputCurve`** to the first matching shape; **`getUParamOnCurve`** still used full DAG path (U could look sane while the wire was wrong)
-- Not a Maya 2023 vs 2026 issue; shows when **two+** form setups with sub shapers coexist
+- **`create_pointOnInfoNode`** previously connected POC via **short** shape names → ambiguous **`inputCurve`** when multiple blocks in form
+- **`getUParamOnCurve`** used full-path shapes (param could look sane while POC wire was wrong)
+- **`p_nameBase` / `seg_*_trackCrv` transform renames** were a mitigation only (shape short names can still collide)
 
 **Decisions**:
-- Ship **unique track curve names** per block (**`p_nameBase`** prefix); optional follow-up: full-path shape connect in **`curve_Utils.create_pointOnInfoNode`** or pass resolved **`mShape.mNode`** from **`attachToCurve`**
+- Correctness = full-path shape plugs at POC boundary; naming optional for Outliner clarity
+- **Existing scenes** built before this fix keep stale POC until **re-form** (or rebuild form null); no auto-repair on **`blockDat_load`**
 
-**Status**: Code in tree — Maya-verify dual limb (or limb + handle/segment) form with **`numSubShapers`**; existing scenes need **re-form** (or rebuild form null) to pick up new curve names
+**Status**: Code in tree — Maya-verify dual limb (or limb + handle/segment) form with **`numSubShapers`** + mid **`midHandlesTrack_crv`**; Reload Dependencies after **`curve_Utils`** / **`blockShapes_utils`** sync
 
 #### MRS Builder — scene-load block list refresh
 **What**: Retained **mrsBuilder** window now refreshes the left **Rigblocks** scroll list when Maya fires **SceneOpened** (File → Open / New) without closing Builder.  
@@ -824,8 +826,9 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] Remove nostril from lip-corner influence targets
 - [x] `prntConstraint` lip mid-follow rig path
 - [x] `pntConstraint` split (point + orient) for default mid-follow
+- [x] **`lipMidAim`** rig bool (default on) — mid side lip handle aim independent of `lipMidFollowSetup`; corner influence aim unchanged
 - [ ] Maya-verify prntConstraint vs ribbon vs parent on production muzzle profile
-- [ ] Remove debug `pprint` from prntConstraint loop
+- [x] Remove debug `pprint` from prntConstraint loop
 
 ### Eye block cleanup
 - [x] `mParent` kw on lid handle creation (matches blockShapes_utils)
@@ -878,10 +881,10 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [ ] Maya-verify template **`arm/`** Variation lists **`bezierSimple`** + arm template scene; Version after var folder pick
 
 ### MRS form — sub shaper track curves (Oct 7)
-- [x] **`{p_nameBase}_seg_{i}_trackCrv`** rename in **`limb.py`** form sub-shaper loop
+- [x] **`{p_nameBase}_seg_{i}_trackCrv`** rename in **`limb.py`** form sub-shaper loop (Outliner clarity; not required for POC correctness)
 - [x] Same rename in **`block_utils.form_segment`** (handle / head / segment)
-- [ ] Maya-verify two limbs in form with sub shapers (POC **`inputCurve`** on correct block curves)
-- [ ] Optional: harden **`create_pointOnInfoNode`** / **`attachToCurve`** with full-path shape plugs
+- [x] **`nurbs_curve_shape_get`** + full-path **`create_pointOnInfoNode`**; **`attachToCurve`** / **`attachHandleToCurve`** / **`attach_toCurveTrack`** pass **`mShape`** to POC
+- [ ] Maya-verify two limbs in form with sub shapers (POC **`inputCurve`** long path matches that block’s **`trackCurve`** shape)
 
 ### Head neck — form aim + ribbon segment (Oct 7)
 - [x] **`formAim`** / **`shapersAim`** / **`shapersAimUp`** on head block + neck **`form_segment`** wiring
@@ -983,6 +986,7 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 
 ##### 1. Muzzle lip mid-follow
 - New `lipMidFollowSetup` mode: **prntConstraint** (parentConstraint + aim along chain)
+- **`lipMidAim`** (rig bool, default **True**): mid side lip **handle** aim along chain when on; applies after any follow mode (`ribbon` / `parent` / `prntConstraint`). Corner `uprInfluence` / `lwrInfluence` aim is not gated by this attr.
 - Default fallback path uses **pointConstraint + orientConstraint** instead of parentConstraint
 - Lip-corner influences: distance-normalized weights via `distance_utils.get_normalizedWeightsByDistanceToObj`; `nostril` removed from target list
 
@@ -1158,7 +1162,7 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **Handle proxy shaders**: **`proxySetColorAdded`** (default **on**) — off = keep source materials on proxy/puppet geo; **`block_proxy_skip_shader_assignment`** in **`block_utils`**
 - **Proxy caps vs root**: **`proxyGeoCap`** `none` / `both` — close open tube ends (`polyCloseBorder` on handle cast); **`proxyGeoRoot`** `none` / `loft` / `ball` — segment/limb base piece via **`mesh_proxyCreate`** (segment default **`loft`**, not locked on)
 - **Puppet unify**: handle skinned + limb proxies via **`polyUniteSkinned`**; **`puppetMesh_normalCheck`** scoped on unified path to avoid double-flipping limb proxy geo
-- **Form sub shaper track curves**: rename **`{p_nameBase}_seg_{i}_trackCrv`** so POC **`inputCurve`** does not collide when multiple blocks are in form; shared path **`UTILS.form_segment`** + limb inline form
+- **Form sub shaper track curves**: full-path nurbs shape on POC **`inputCurve`** (`curve_Utils` + **`BLOCKSHAPES.attachToCurve`**); optional **`{p_nameBase}_seg_{i}_trackCrv`** rename for Outliner; shared **`UTILS.form_segment`** + limb inline form
 - **Head neck form aim**: same **`formAim`** / **`shapersAim`** / **`shapersAimUp`** contract as segment — wired through **`form_segment`** when **`neckBuild`**
 - **Head neck segment ribbon**: **`rig_segments`** **`IK.ribbon`** kwargs match segment; **`additiveScaleEnds`** not tied to **`scaleSetup`** on head squash dict (live surface + aim **`scaleZ`**)
 - **Limb roll seg mid IK**: **`segmentMidIKControl`** = create + influences; **`segmentMidIKSetup`** = follow only; **`limb_segment_mid`** per roll (not **`segment_mid`**); **`squashSkipAim`** on roll ribbons — **`Feature_MRSWiring.md`**
