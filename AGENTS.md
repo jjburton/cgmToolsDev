@@ -1,5 +1,8 @@
 # Agent / developer workflow (cgmTools)
 
+> **Claude Code:** start at [`CLAUDE.md`](CLAUDE.md) — condensed iron rules, rule index, and env notes.
+> **Cursor:** rules load from [`.cursor/rules/`](.cursor/rules/), which remain the source of truth for both.
+
 ## Keep `cgmToolsPy3` clean
 
 Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cursor config, workspace files, or bridge-only docs **inside `cgmToolsPy3`**. Those belong in **`cgmToolsDev`** only.

@@ -1,0 +1,18 @@
+﻿{
+  "permissions": {
+    "additionalDirectories": ["D:\\Repos\\cgmToolsPy3"],
+    "allow": [
+      "PowerShell(git status:*)", "PowerShell(git log:*)", "PowerShell(git diff:*)",
+      "PowerShell(git show:*)", "PowerShell(git branch:*)",
+      "PowerShell(Get-ChildItem:*)", "PowerShell(Test-Path:*)", "PowerShell(Select-String:*)"
+    ],
+    "deny": [
+      "Write(D:\\Repos\\cgmToolsPy3\\.cursor\\**)",
+      "Write(D:\\Repos\\cgmToolsPy3\\.claude\\**)",
+      "Write(D:\\Repos\\cgmToolsPy3\\CLAUDE.md)",
+      "Write(D:\\Repos\\cgmToolsPy3\\AGENTS.md)",
+      "Edit(D:\\Repos\\cgmToolsPy3\\cgm\\lib\\zoo\\**)",
+      "Edit(D:\\Repos\\cgmToolsPy3\\Red9\\**)"
+    ]
+  }
+}
