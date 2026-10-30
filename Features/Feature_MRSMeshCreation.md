@@ -238,6 +238,20 @@ When `neckBuild` is on (or multiple visible head proxy pieces), the block runs i
 | `meshBuild` | `True` | Turn off to skip all mesh for that block |
 | `proxyBuild` | `False` | Turn **on** only when you want colored module + puppet proxy dup (two skinned sets) |
 
+### Muzzle teeth proxy geo (form+)
+
+Separate **upper** and **lower** user mesh slots (not one combined teeth bucket). Builder RMB on muzzle block → **Teeth Proxy Geo** → **Upper** / **Lower** (Add / Replace / Remove / Report / Select). Enabled when `blockState` is **form** or later (`define` blocked).
+
+| Slot | Block message | msgList | Form parent |
+|------|---------------|---------|-------------|
+| Upper | `teethUprGeoGroup` | `teethUprMeshProxy` | `uprGum` form handle |
+| Lower | `teethLwrGeoGroup` | `teethLwrMeshProxy` | `lwrGum` form handle |
+
+- **Prerig:** when `teethUpr` / `teethLwr` DagHelpers exist, each geo group gets a **parentConstraint** (maintain offset) to its DagHelper.
+- **`build_proxyMesh` / `create_simpleMesh`:** duplicates visible entries per msgList; **single-influence** skin to `teethUpr` or `teethLwr` rig joint (slot-specific jaw fallback if that teeth joint is missing). Never unites upr+lwr; never uses lip loft joint lists for teeth geo.
+
+Implementation: `cgm/core/mrs/blocks/organic/muzzle.py` — `teethProxyGeo_*`, `_muzzle_build_teeth_proxy_pieces_for_slot`.
+
 ### Handle block (`simple/handle.py`)
 
 | Attr | UI group | Default | Artist workflow |
@@ -271,6 +285,7 @@ When `neckBuild` is on (or multiple visible head proxy pieces), the block runs i
 - [ ] Head with `neckBuild` on: no geoGroup loss after puppet mesh (regression for internal `polyUniteSkinned`)
 - [ ] Normals face outward on unified mesh (`puppetMesh_normalCheck`)
 - [ ] Muzzle/brow use side-appropriate `color_mesh`; center blocks use `'center'`
+- [ ] Muzzle **Teeth Proxy Geo** (form+): upper/lower Add selected; puppet/proxy mesh skins each piece to the correct teeth (or jaw fallback) joint
 - [ ] Eye keeps multi-shader parts when not skin-unifying per-block meshes
 
 **Face — `proxyBuild` on**
@@ -341,6 +356,7 @@ for m in (BLOCKUTILS, PUPPETUTIL, HEADBLOCK, MUZZLEBLOCK, BROWBLOCK, EYEBLOCK, H
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-10-27 | Face26 | Muzzle teeth proxy geo: separate upr/lwr msgLists, form+ Builder, per-slot skin in `build_proxyMesh` |
 | 2026-10-09 | Face26 / doc pass | Handle `proxySetColorAdded` + `proxyGeoCap`; `proxyGeoCap` vs `proxyGeoRoot`; segment root default notes; checklist + reload snippet |
 | 2026-09-04 | Face26 / doc pass | Initial feature doc: face `proxyBuild`/`meshBuild`, routing, helpers, geoGroup invariants, head neckBuild fix |
 | 2026-09-03 | Face26 | Normals, `puppetMesh_colorGeo`, skin-unify proxy skip |

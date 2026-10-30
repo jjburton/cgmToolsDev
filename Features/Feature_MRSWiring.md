@@ -558,8 +558,11 @@ Limb **roll** segments (per `numRoll` / `md_roll` index) can expose a mid IK con
 |------|------|
 | **`segmentMidIKControl`** | When on (and roll joint count allows): create mid control + **`segmentMidHandles_*`**, shapes, aim on helpers; **always** insert mid into roll segment ribbon **`influences`** when the control exists. |
 | **`segmentMidIKSetup`** | How the mid **follows** along the segment span. **`none`** = no extra follow rig (mid still affects segment deformation via influences + aim on seg mid handles). |
+| **`segmentEndHandleUp`** | Last roll-segment **`back_aimer`** aim **`worldUpObject`**: **`stableUp`** (default, **`stableEnd`** upObj) \| **`last`** (previous **`handleJoints`** main). Bezier end-main + legacy ribbon/curve last-handle paths. |
 
 **`segmentMidIKSetup`** enum: `none` | `ribbon` | `ribbonLive` | `prntConstraint` | `linearTrack` | `cubicTrack`. Default **`ribbon`** (legacy per-segment mid `IK.ribbon`).
+
+**`segmentEndHandleUp`** enum: `stableUp` | `last`. Default **`stableUp`**.
 
 ### Follow modes (`limb_segment_mid`)
 

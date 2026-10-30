@@ -3,7 +3,7 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: October 13, 2026 (Scene browser mixed set/variation; Send To Build precheck skip; September Scene Projects/category popup defer)
+**Last Updated**: October 30, 2026 (Scene tmp cleanup: every `*_MRSbatch.py`)
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
@@ -17,7 +17,8 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** — module/puppet message graphs, block parent wiring
 - **[Feature_CgmMetaAPI.md](../Features/Feature_CgmMetaAPI.md)** — **`cgmObject`** hierarchy getters, **`_hierarchyQueryFullPath`**
 - **[Feature_CgmToolUI.md](../Features/Feature_CgmToolUI.md)** — Scene browser columns, navigation depth (filesystem walk), scroll-list contracts
-- **[Scene.py](../../cgmToolsPy3/cgm/core/mrs/Scene.py)** — asset browser, `hasSub` / `hasVariant`, `_republish_navigation_lists`, Export Selection directory helpers; Projects/Recent **`LoadProject`** defer; category/subtype popup defer
+- **[Scene.py](../../cgmToolsPy3/cgm/core/mrs/Scene.py)** — asset browser, `hasSub` / `hasVariant`, `_republish_navigation_lists`, Export Selection directory helpers; Projects/Recent **`LoadProject`** defer; category/subtype popup defer; project-column Query/Clean → **`find_tmpFiles`**
+- **[os_Utils.py](../../cgmToolsPy3/cgm/core/cgmPy/os_Utils.py)** — **`find_tmpFiles`** (full-path hits for `*_batch.py` / `*_MRSbatch.py`)
 - **[cgm_Meta.py](../../cgmToolsPy3/cgm/core/cgm_Meta.py)** — **`getAllChildren`** / **`getDescendents`**, **`_hierarchyQueryFullPath`**
 - **[Branch_Jan2026.md](Branch_Jan2026.md)** — prior muzzle handle / ribbon / face-handle work
 - **[Branch_AnimData.md](Branch_AnimData.md)** — merged into Face26 (cgmAnimClip / mrsAnimClip; not Face26-native)
@@ -46,6 +47,64 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — **`IK.ribbon`** arcLength squash aim-scale hookup (shared with segment blocks)
 
 ## Timeline
+
+### October 30, 2026 — Scene tmp cleanup: every `*_MRSbatch.py`
+
+**What**: Query/Clean (`find_tmpFiles`) already matched `_MRSbatch.py` and `_batch.py`. Hits were stored by basename, so a second `rig_MRSbatch.py` in another folder replaced the first path. Query listed one file and Clean deleted one. Hits are keyed by full path (suffix matches and the long `.ma` / `.mb` junk in the same walk). A missing path token on a walked root no longer raises before the report or delete. Scene project-column Query called `self.self.directory` and raised before the walk; it now passes `self.directory`, same as Clean.
+
+**Files**:
+- EXTENDED: [`os_Utils.py`](../../cgmToolsPy3/cgm/core/cgmPy/os_Utils.py) — `find_tmpFiles` full-path keys; `break` on first suffix; skip the debug path slice when `_base` is not in the tokens
+- EXTENDED: [`Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) — project-column Query uses `self.directory`
+
+**Verify in Maya**: Reload `os_Utils`, then `scene_utils`, then relaunch Scene (Query is built with the project column). Content with the same scene name in several folders (`rig_MRSbatch.py`) → Query lists every path; Clean removes all of them.
+
+```python
+import cgm.core.cgm_General as cgmGEN
+import cgm.core.cgmPy.os_Utils as CGMOS
+import cgm.core.mrs.lib.scene_utils as SCENEUTILS
+cgmGEN._reloadMod(CGMOS)
+cgmGEN._reloadMod(SCENEUTILS)
+```
+
+**Status**: Code in tree — Maya verify
+
+---
+
+### October 28, 2026 — Segment / Head prerig POC (multi-shape + local attachToCurve)
+
+**What**: Segment **prerig** (`create_jointHelpers`) failed when **`drivenCrv_trackCurve`** or prerig **`drivenCurve`** (post-**`rebuildCurve(ch=1)`**) had **multiple** nurbs shapes on one transform — **`nurbs_curve_shape_get`** raised, **`create_pointOnInfoNode`** returned **`False`**, **`asMeta(False)`** crashed. Head uses the same prerig track stack.
+
+**Files**:
+- EXTENDED: [`curve_Utils.py`](../../cgmToolsPy3/cgm/core/lib/curve_Utils.py) — **`nurbs_curve_shape_get`**: skip **`intermediateObject`** shapes; warn + use first non-intermediate when more than one remain (full-path connect unchanged)
+- EXTENDED: [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py), [`head.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py) — local **`attachToCurve`**: POC from resolved **`mShape.mNode`**; fail loud if POC missing; segment IK track **`mShape`** via **`nurbs_curve_shape_get(mCrv)`**
+
+**Root cause** (prerig):
+- Form/prerig **`rebuildCurve(..., ch=1)`** on **`drivenCurve`** leaves intermediate + output nurbs on the same transform — old resolver counted both and hard-failed
+- **Segment/Head** duplicated **`attachToCurve`** (not **`BLOCKSHAPES`**) and previously called **`create_pointOnInfoNode(mCrv.mNode)`** even when callers passed explicit **`mShape`**
+
+**Remaining friction** (not changed this pass):
+- **Brow / muzzle / eye / hand** — inline **`create_pointOnInfoNode(mJointTrack.mNode)`** / **`mCrv.mNode`** (benefit from choke-point fix; no **`asMeta(False)`** guard)
+- **Head** prerig IK **`mShape`** still from **`getShapes()[0]`** at one call site — prefer **`nurbs_curve_shape_get`** for parity with segment
+
+**Verify in Maya**: Spine **segment** block → prerig after reload; duplicate/mirror + form sub shapers; **head** **`neckBuild`** prerig joint helpers + IK mid on **`drivenCrv_trackCurve`**.
+
+**Status**: Code in tree — Maya verify segment + head prerig; Reload **`curve_Utils`** + block module
+
+---
+
+### October 27, 2026 — Muzzle teeth proxy geo (form+, separate upr/lwr)
+
+**What**: Muzzle blocks support **user** upper and lower teeth proxy meshes via Builder **Teeth Proxy Geo** menus (form state and above). Separate `teethUprMeshProxy` / `teethLwrMeshProxy` msgLists and geo groups; prerig parentConstraints to teeth DagHelpers; `build_proxyMesh` skins each duplicate to the matching teeth joint only.
+
+**Files**:
+- EXTENDED: `cgm/core/mrs/blocks/organic/muzzle.py` — `teethProxyGeo_*`, `_muzzle_build_teeth_proxy_pieces_for_slot`, `uiBuilderMenu`
+- DOC: `Features/Feature_MRSMeshCreation.md` — muzzle teeth proxy subsection + checklist
+
+**Verify in Maya**: Form+ → Builder add geo per jaw; prerig with teeth simple → groups follow handles; rig + puppet mesh → upr/lwr skinned to correct joints.
+
+**Status**: Code in tree — Maya verify
+
+---
 
 ### October 13, 2026 — Send To Build: skip open-scene checks unless paths match
 
@@ -300,25 +359,28 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 
 **Status**: Code in tree — Maya verify full puppet mesh (fingers + handle + limbs); limb **Block Mesh** end caps
 
-#### Form sub shaper track curves — full-path POC wiring
-**What**: Fix sub shapers on a **second** block in form (duplicate/mirror or multiple blocks) riding the **first** block’s segment track curves — wrong `pointOnCurveInfo.inputCurve` / track loc behavior.  
-**Files**: [`curve_Utils.py`](../../cgmToolsPy3/cgm/core/lib/curve_Utils.py) (`nurbs_curve_shape_get`, **`create_pointOnInfoNode`**); [`blockShapes_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/blockShapes_utils.py) (**`attachToCurve`** / **`attachHandleToCurve`**); [`constraint_utils.py`](../../cgmToolsPy3/cgm/core/rig/constraint_utils.py) (**`attach_toCurveTrack`**); form call sites in **`block_utils.form_segment`** / **`limb.py`** (unchanged signatures)
+#### Form / prerig track curves — full-path POC wiring
+**What**: Fix track locators on the **wrong** curve when multiple blocks share form (duplicate/mirror) and fix prerig **POC** failures on curves with **rebuild history** (intermediate shapes).  
+**Files**: [`curve_Utils.py`](../../cgmToolsPy3/cgm/core/lib/curve_Utils.py) (`nurbs_curve_shape_get`, **`create_pointOnInfoNode`**); [`blockShapes_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/blockShapes_utils.py) (**`attachToCurve`** / **`attachHandleToCurve`**); [`constraint_utils.py`](../../cgmToolsPy3/cgm/core/rig/constraint_utils.py) (**`attach_toCurveTrack`**); [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py) / [`head.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py) (local **`attachToCurve`**); form via **`block_utils.form_segment`** / **`limb.py`**
 
 **Features**:
-- **`nurbs_curve_shape_get`**: single nurbsCurve shape **long DAG path** (transform or shape input; non-intermediate)
-- **`create_pointOnInfoNode`**: **`inputCurve`** connects via full-path **`worldSpace[0]`** only (no short shape plugs)
-- **`attachToCurve`**: POC created from resolved **`mShape`** (always set before POC); **`trackCurve`** message unchanged
+- **`nurbs_curve_shape_get`**: single **non-intermediate** nurbsCurve **long DAG path**; skips **`intermediateObject`** (post-**`rebuildCurve`** history)
+- **`create_pointOnInfoNode`**: **`inputCurve`** = full-path **`worldSpace[0]`** only
+- **`BLOCKSHAPES.attachToCurve`**: POC from resolved **`mShape`**; **`trackCurve`** message unchanged
+- **Segment/Head prerig**: joint helpers on **`drivenCurve`** + IK mids on **`{p_nameBase}_drivenCrv_trackCurve`**; explicit POC failure if node creation fails
 
 **Root cause** (debug / agent context):
-- **`create_pointOnInfoNode`** previously connected POC via **short** shape names → ambiguous **`inputCurve`** when multiple blocks in form
-- **`getUParamOnCurve`** used full-path shapes (param could look sane while POC wire was wrong)
-- **`p_nameBase` / `seg_*_trackCrv` transform renames** were a mitigation only (shape short names can still collide)
+- Short-plug **`inputCurve`** → wrong curve when **two+** form setups in scene (**`trackCurve`** message does not drive POC)
+- **`getUParamOnCurve`** used full-path shapes (param sane, wire wrong)
+- **Prerig**: **`rebuildCurve(ch=1)`** on **`drivenCurve`** → two nurbs shapes counted → hard error before intermediate filter (Oct 28)
+- **`p_nameBase` / `seg_*_trackCrv` transform renames** — Outliner clarity only
 
 **Decisions**:
-- Correctness = full-path shape plugs at POC boundary; naming optional for Outliner clarity
-- **Existing scenes** built before this fix keep stale POC until **re-form** (or rebuild form null); no auto-repair on **`blockDat_load`**
+- Correctness = full-path shape plugs at POC boundary
+- **Existing scenes** keep stale POC until **re-form** / rebuild form null (or re-prerig joint helpers); no auto-repair on **`blockDat_load`**
+- Long-term: route segment/head **`attachToCurve`** through **`BLOCKSHAPES`** to avoid drift
 
-**Status**: Code in tree — Maya-verify dual limb (or limb + handle/segment) form with **`numSubShapers`** + mid **`midHandlesTrack_crv`**; Reload Dependencies after **`curve_Utils`** / **`blockShapes_utils`** sync
+**Status**: Code in tree — Maya-verify form (dual block + sub shapers) + **segment/head prerig**; Reload Dependencies after **`curve_Utils`** / **`blockShapes_utils`** / block **`segment`** / **`head`**
 
 #### MRS Builder — scene-load block list refresh
 **What**: Retained **mrsBuilder** window now refreshes the left **Rigblocks** scroll list when Maya fires **SceneOpened** (File → Open / New) without closing Builder.  
@@ -461,15 +523,34 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - EXTENDED: `cgm/core/mrs/blocks/organic/muzzle.py` — `lipMidFollowSetup` enum `ribbon:prntConstraint:pntConstraint:parent`; new `prntConstraint` rig path (corner/center influences + parentConstraint + aim); else path uses `pointConstraint` + `orientConstraint`
 
 **Features**:
-- **prntConstraint**: mid lip handles parent to follow null, constrained to two of three influences (left vs right chain), plus per-joint aim along lip chain
+- **prntConstraint**: mid lip handles parent to follow null, constrained to two of three influences (left vs right chain); mid-handle aim was per-joint along chain **until Oct 2026** (now **`lipMidAim`**)
 - **pntConstraint** (default fallback when not ribbon/parent/prntConstraint): point + orient split instead of parentConstraint
 - Enum order documents available modes for artists/TAs
 
 **Decisions**:
-- prntConstraint keeps aim setup inside its branch; pntConstraint path no longer duplicates aim block
-- Debug `pprint` left in prntConstraint loop (remove when Maya-verified)
+- prntConstraint originally kept aim setup inside its branch; **superseded** by shared **`lipMidAim`** gate (see Oct 28, 2026 entry)
+- Debug `pprint` removed from prntConstraint / pntConstraint follow loops when **`lipMidAim`** landed
 
 **Status**: Code complete — Maya verify: rebuild muzzle with `lipMidFollowSetup` = `prntConstraint` vs `pntConstraint` vs `ribbon`
+
+---
+
+### October 28, 2026 - `lipMidAim` rig attr (mid lip handle aim)
+**What**: Mid side lip **control** aim along the lip chain is no longer implicit on the `prntConstraint` follow path only. New rig bool **`lipMidAim`** (default **True**) gates that aim setup; when off, follow modes unchanged and corner influence aim unchanged. When on, aim runs after **any** `lipMidFollowSetup` mode (`ribbon`, `parent`, `prntConstraint`, `pntConstraint`). Removed debug `pprint` from prntConstraint / pntConstraint follow loops.
+
+**Files**:
+- EXTENDED: [`cgm/core/mrs/blocks/organic/muzzle.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/muzzle.py) — `d_attrStateMask['rig']`, `d_attrsToMake`, `d_defaultSettings`; `rig_frame` shared `if mBlock.lipMidAim:` block after follow branches
+
+**Features**:
+- **`lipMidAim`**: rig-phase UI next to **`lipMidFollowSetup`**; default on preserves prior prntConstraint + aim behavior
+- **`lipMidFollowSetup`**: follow only (ribbon surface, parent, parentConstraint, or point+orient split) — no embedded mid-handle aim
+
+**Decisions**:
+- Corner `uprInfluence` / `lwrInfluence` aim stays always on (not gated by `lipMidAim`)
+- Prerig lip **driver** aim (~skeleton pass) unchanged — rig controls only
+- Ship target: **cgmToolsPy3** (`muzzle.py`); sync legacy `cgmTools` checkout only if still in use locally
+
+**Status**: Code complete — Maya verify: each follow mode × `lipMidAim` on/off; `CGM._reload()` if rig attr missing on block
 
 ---
 
@@ -826,9 +907,9 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [x] Remove nostril from lip-corner influence targets
 - [x] `prntConstraint` lip mid-follow rig path
 - [x] `pntConstraint` split (point + orient) for default mid-follow
-- [x] **`lipMidAim`** rig bool (default on) — mid side lip handle aim independent of `lipMidFollowSetup`; corner influence aim unchanged
-- [ ] Maya-verify prntConstraint vs ribbon vs parent on production muzzle profile
-- [x] Remove debug `pprint` from prntConstraint loop
+- [x] **`lipMidAim`** rig bool (default on) — mid side lip handle aim after any `lipMidFollowSetup` mode; corner influence aim unchanged
+- [ ] Maya-verify `lipMidFollowSetup` modes × **`lipMidAim`** on/off on production muzzle profile
+- [x] Remove debug `pprint` from prntConstraint / pntConstraint follow loops
 
 ### Eye block cleanup
 - [x] `mParent` kw on lid handle creation (matches blockShapes_utils)
@@ -880,11 +961,14 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [ ] Maya-verify Send To Build mismatch / match / empty-queue shelf (see Oct 13 timeline)
 - [ ] Maya-verify template **`arm/`** Variation lists **`bezierSimple`** + arm template scene; Version after var folder pick
 
-### MRS form — sub shaper track curves (Oct 7)
+### MRS form / prerig — track curve POC (Oct 7 + Oct 28)
 - [x] **`{p_nameBase}_seg_{i}_trackCrv`** rename in **`limb.py`** form sub-shaper loop (Outliner clarity; not required for POC correctness)
 - [x] Same rename in **`block_utils.form_segment`** (handle / head / segment)
 - [x] **`nurbs_curve_shape_get`** + full-path **`create_pointOnInfoNode`**; **`attachToCurve`** / **`attachHandleToCurve`** / **`attach_toCurveTrack`** pass **`mShape`** to POC
+- [x] **`nurbs_curve_shape_get`**: skip intermediate nurbs after **`rebuildCurve`**; segment/head local **`attachToCurve`** + prerig IK **`mShape`** resolve (**Oct 28**)
 - [ ] Maya-verify two limbs in form with sub shapers (POC **`inputCurve`** long path matches that block’s **`trackCurve`** shape)
+- [ ] Maya-verify **segment** + **head** prerig (**`create_jointHelpers`**, **`drivenCrv_trackCurve`**, joint helpers on **`drivenCurve`**)
+- [ ] Optional follow-up: brow/muzzle/eye/hand inline POC guards; head IK **`mShape`** → **`nurbs_curve_shape_get`** only
 
 ### Head neck — form aim + ribbon segment (Oct 7)
 - [x] **`formAim`** / **`shapersAim`** / **`shapersAimUp`** on head block + neck **`form_segment`** wiring
@@ -955,7 +1039,7 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - [ ] Factor stable facial helpers from `MetahumanFacial.py` into `face_utils` / `sdk_utils` (see Feature_Metahuman)
 
 ### Testing
-- [ ] Muzzle rebuild — lipMidFollowSetup modes
+- [ ] Muzzle rebuild — `lipMidFollowSetup` modes × **`lipMidAim`** on/off
 - [ ] Eye prerig — lid handles with `mParent`
 - [ ] Face batch post — `proxyBuild` off (skinned puppet mesh) on muzzle/brow/eye
 - [ ] Face batch post — `proxyBuild` on (module + puppet proxy, skinned)
@@ -980,14 +1064,13 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 ### Face26 — MRS facial block improvements (muzzle, brow, eye)
 
 #### Overview
-Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-weighted corner influences), aligns eye prerig with the shared `mParent` face-handle contract, adds a configurable face proxy/puppet mesh pipeline for muzzle/brow/eye (normals, `color_mesh` shaders, skin-unify routing), and extends **cgmSimChain** with dynFK hair-chain segment matching, a shipped **`.cgmSim*Dat` preset library** (hair / HairShape / cloth / nucleus), Edna-tuned **`bob`** / **`bob_hold`** hair presets, Init Sim without auto-chain, section-isolated preset apply (feel allowlist vs shape vs fabric vs solver), Script Editor **`attr: old >> new`** apply logs, **Presets SaveDir / SearchDir** (write root vs collective load), and Details **Hair systems** basename rename. Also hardens Scene **Projects** / **Recent** project switch and category/subtype header popups against Maya Qt hard crashes (deferred `LoadProject` / `SetCategory` / `SetSubType`). Branch includes merges from AnimData and SpringCleaning.
+Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-weighted corner influences, optional mid-handle aim via **`lipMidAim`**), aligns eye prerig with the shared `mParent` face-handle contract, adds a configurable face proxy/puppet mesh pipeline for muzzle/brow/eye (normals, `color_mesh` shaders, skin-unify routing), and extends **cgmSimChain** with dynFK hair-chain segment matching, a shipped **`.cgmSim*Dat` preset library** (hair / HairShape / cloth / nucleus), Edna-tuned **`bob`** / **`bob_hold`** hair presets, Init Sim without auto-chain, section-isolated preset apply (feel allowlist vs shape vs fabric vs solver), Script Editor **`attr: old >> new`** apply logs, **Presets SaveDir / SearchDir** (write root vs collective load), and Details **Hair systems** basename rename. Also hardens Scene **Projects** / **Recent** project switch and category/subtype header popups against Maya Qt hard crashes (deferred `LoadProject` / `SetCategory` / `SetSubType`). Branch includes merges from AnimData and SpringCleaning.
 
 #### Major changes
 
 ##### 1. Muzzle lip mid-follow
-- New `lipMidFollowSetup` mode: **prntConstraint** (parentConstraint + aim along chain)
-- **`lipMidAim`** (rig bool, default **True**): mid side lip **handle** aim along chain when on; applies after any follow mode (`ribbon` / `parent` / `prntConstraint`). Corner `uprInfluence` / `lwrInfluence` aim is not gated by this attr.
-- Default fallback path uses **pointConstraint + orientConstraint** instead of parentConstraint
+- **`lipMidFollowSetup`**: `ribbon` | `parent` | `prntConstraint` (parentConstraint to influences) | `pntConstraint` (point + orient split)
+- **`lipMidAim`** (rig bool, default **True**): mid side lip **handle** aim along chain when on; runs after whichever follow mode is active. Corner `uprInfluence` / `lwrInfluence` aim is **not** gated by this attr.
 - Lip-corner influences: distance-normalized weights via `distance_utils.get_normalizedWeightsByDistanceToObj`; `nostril` removed from target list
 
 **Files**: `cgm/core/mrs/blocks/organic/muzzle.py`, `cgm/core/lib/distance_utils.py` (caller only)
@@ -1067,9 +1150,9 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 - See timeline **October 7, 2026** — amend **`####`** subsections there (shared helpers, attachPoint, pivot naming, digit temp bypass)
 - **Files**: `builder_utils.py`, `head.py`, `segment.py`, `handle.py`, `limb.py`, `block_utils.py` (`pivots_setup`)
 
-##### 12. Form sub shaper track curves — per-block naming (Oct 7)
-- See timeline **October 7, 2026** — **`#### Form sub shaper track curves`**
-- **Files**: `limb.py`, `block_utils.py` (`form_segment`); related **`blockShapes_utils.attachToCurve`**, **`curve_Utils.create_pointOnInfoNode`**
+##### 12. Form / prerig track curves — full-path POC (Oct 7 + Oct 28)
+- See timeline **October 28, 2026** (prerig intermediate shapes) and **`#### Form / prerig track curves — full-path POC wiring`**
+- **Files**: `curve_Utils.py`, `blockShapes_utils.py`, `constraint_utils.py`, `segment.py`, `head.py`, `limb.py`, `block_utils.py` (`form_segment`)
 
 ##### 10. cgmSimChain — Init Sim + preset apply isolation (Sept 21)
 - **Init Sim / New**: `setup_sim_dynFK(objs=[])` — no auto `chain_create` from Maya selection
@@ -1107,10 +1190,11 @@ Face26 work hardens muzzle lip mid-follow (new `prntConstraint` mode, distance-w
 - **SpringCleaning** — see [`Branch_SpringCleaning.md`](Branch_SpringCleaning.md)
 
 #### Breaking changes
-None intended — new enum values and rig paths are opt-in via block attrs. Existing face blocks without `proxyBuild` attr behave as puppet mesh path (off).
+None intended — new enum values and rig paths are opt-in via block attrs. Existing face blocks without `proxyBuild` attr behave as puppet mesh path (off). New blocks default **`lipMidAim=True`** (mid-handle aim on); set **`lipMidAim=False`** to disable without changing follow mode.
 
 #### Next steps
-- Maya-verify prntConstraint on production characters
+- Maya-verify muzzle **`lipMidFollowSetup`** × **`lipMidAim`** on production characters
+- Maya-verify prntConstraint follow on production characters (without assuming aim is tied to that mode)
 - Maya-verify eye lid mesh density via `numLidSplit_u` / `numLidSplit_v`
 - Maya-verify skin-unify puppet mesh normals + side-colored shaders on production face rigs
 - Design blockDat key-based remap for new prerig handles (cheek, etc.)
@@ -1133,6 +1217,7 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 ### Architectural patterns
 - Face handle parent kw is **`mParent`** (not `mStateNull`) — match `blockShapes_utils`
 - Lip mid-follow modes: `ribbon` | `prntConstraint` | `pntConstraint` | `parent`
+- Mid side lip **handle** aim: **`lipMidAim`** (rig bool, default **True**); independent of follow mode; corner influence aim always on
 - Face mesh: **`meshBuild`** (any mesh) + **`proxyBuild`** (proxy vs skinned puppet path); default `proxyBuild=False` on muzzle/brow/eye
 - Batch post: `proxyMesh_verify` (module proxy) then `puppetMesh_create(unified=True, skin=True, proxy=True)` — face blocks with `proxyBuild` off skip step 1 and use `create_simpleMesh` in step 2
 - Puppet mesh post-create: **`puppetMesh_normalCheck`** → **`puppetMesh_colorGeo`** (`CORERIG.color_mesh`, side or `'center'`)
@@ -1162,7 +1247,7 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **Handle proxy shaders**: **`proxySetColorAdded`** (default **on**) — off = keep source materials on proxy/puppet geo; **`block_proxy_skip_shader_assignment`** in **`block_utils`**
 - **Proxy caps vs root**: **`proxyGeoCap`** `none` / `both` — close open tube ends (`polyCloseBorder` on handle cast); **`proxyGeoRoot`** `none` / `loft` / `ball` — segment/limb base piece via **`mesh_proxyCreate`** (segment default **`loft`**, not locked on)
 - **Puppet unify**: handle skinned + limb proxies via **`polyUniteSkinned`**; **`puppetMesh_normalCheck`** scoped on unified path to avoid double-flipping limb proxy geo
-- **Form sub shaper track curves**: full-path nurbs shape on POC **`inputCurve`** (`curve_Utils` + **`BLOCKSHAPES.attachToCurve`**); optional **`{p_nameBase}_seg_{i}_trackCrv`** rename for Outliner; shared **`UTILS.form_segment`** + limb inline form
+- **Form / prerig track curves**: full-path non-intermediate nurbs on POC **`inputCurve`** (`nurbs_curve_shape_get`, **`create_pointOnInfoNode`**, **`BLOCKSHAPES.attachToCurve`**, segment/head local **`attachToCurve`**); optional **`{p_nameBase}_seg_{i}_trackCrv`** rename; **`UTILS.form_segment`** + limb inline form; prerig **`drivenCurve`** + **`drivenCrv_trackCurve`**
 - **Head neck form aim**: same **`formAim`** / **`shapersAim`** / **`shapersAimUp`** contract as segment — wired through **`form_segment`** when **`neckBuild`**
 - **Head neck segment ribbon**: **`rig_segments`** **`IK.ribbon`** kwargs match segment; **`additiveScaleEnds`** not tied to **`scaleSetup`** on head squash dict (live surface + aim **`scaleZ`**)
 - **Limb roll seg mid IK**: **`segmentMidIKControl`** = create + influences; **`segmentMidIKSetup`** = follow only; **`limb_segment_mid`** per roll (not **`segment_mid`**); **`squashSkipAim`** on roll ribbons — **`Feature_MRSWiring.md`**
@@ -1172,5 +1257,5 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 
 ---
 
-*Last Updated: October 13, 2026 (Scene mixed set/variation navigation; Send To Build precheck skip; September Scene popup defer)*
+*Last Updated: October 28, 2026 (`lipMidAim` muzzle rig attr; Segment/Head prerig POC + intermediate shape filter; form full-path POC)*
 *Branch Status: Active*

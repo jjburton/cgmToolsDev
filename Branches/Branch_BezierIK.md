@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 23, 2026 — hips **`followIK`** / **`*_ikOrientFrame`** / **`ml_ikBlendUse`** Maya-verified; PR hygiene items remain  
+**Last Updated**: October 29, 2026 — Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
 **PR**: Pending — see [fix list](#before-merge--pr-fix-list) (cleanup only)
 
 ## Before merge / PR (fix list)
@@ -51,6 +51,21 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 
 **Out of scope for this branch**: prerig mesh, proxy loft, `block_utils` `polyType`, puppet mesh — unless IK work later requires a render mesh (not planned now).
 
+### Segment `buildEnd` (skin tip joint — Oct 29)
+
+Block enum on **Segment** (and **Limb**): **`buildEnd`** = **`dag`** \| **`joint`** (prerig UI). Controls whether the **last skin / `moduleJoint`** exists at the form tip — not Bezier-only; applies to ribbon / spline / bezier builds alike.
+
+| Value | Behavior |
+|-------|----------|
+| **`joint`** (Segment default) | Full chain: one **`moduleJoint`** per **`jointHelper`**, including tip. |
+| **`dag`** | **`skeleton_build`** deletes the last **`moduleJoint`**; tip **`jointHelper`** remains for prerig / **`ikEndHandle`**. **`numJoints`** still drives helper count → effective skin count ≈ **`numJoints − 1`**. Rebuild **skeleton** after toggling. |
+
+**Rig buffer (limb parity):** **`tipEnd` + dag → `b_ikNeedEnd`**; **`tipBase` + joint → `int_handleEndIdx`** — interacts with **`ikEnd` / `ikEndShape=cast`** (**`ikEndFrameHandle`**, Oct 28). **`followParentBank`** mid joint: **`jointHelpers[-1]`** vs **`[-2]`**. **`buildEnd` joint**: last FK cast target culled for **`shapes_fromCast`** (limb-style).
+
+Legacy bool **`hasEndJoint`** on old nodes is **ignored**; use **`buildEnd`**. **`ribbonAttachEndsToInfluence`** is unchanged (separate end-attach knob).
+
+**Files:** [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py); reference [`limb.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py).
+
 ## Tabled — come back later
 
 **Sine on driver** (`spline_ik_curve_add_sine`, `spline_ik_sine_handle_fit_to_curve`, `waveAmplitude` / `waveLength` / `waveOffset` on sine output). Prototype in `ik_utils.py`; not the active artist path.
@@ -66,7 +81,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 
 **Active path for now:** `bezier_spline` → `bezier_controls_add` → optional `bezier_spline_stretch` with `driver_curve=_res['mDriverCurve']` (hidden POCI driver; IK stays on driver until sine stack returns).
 
-**MRS phase (current):** Segment / **Head** / **Limb** bezier inflate in FK via **`inflateDriveDirectParents`** + visible **`{rigJoint}_inflateScale`** parents (**`segment_inflate_parent_rig_direct_controls`**). **Segment + Head build:** **`rig_inflate`** after **`rig_segments`** — single parent-wire pass. **Ribbon / ribbonLive `segmentType`:** **`IK.ribbon`** in **`rig_segments`** only; **`segment_inflate_stretch_result_from_volume_joints`** on **`segmentJoints`** with **`leave_joint_volume_wiring=True`** — **never** **`bezier_spline_stretch`** **`replaceExisting`** on seg joints post-ribbon. **`ikSetup=bezier` + `segmentType=parent`:** full volume squash on module **`ikJoints`** in **`rig_frame`** → **`d_stretchInflateRes`** → **`rig_inflate`** on **`blendJoints`**. **`ikSetup=bezier` + `segmentType` ≠ parent** (ribbon, seg bezier, …): **`rig_frame`** **`bezier_spline_stretch`** with **`extraSquashControl=False`** (arc-length / **`segmentStretchBy`** only); volume squash stays on **`segmentJoints`** in **`rig_segments`** (**`segment_bezier_ik_module_chain_volume_squash`**). **Parent + `ikSetup=spline`:** **`mSplineDriverCurve`** + **`rig_inflate`** **`volumeSquashInflateOnly`** on **`ikJoints`**. **`segmentType=bezier`:** stretch in **`rig_segments`** → **`d_segmentBezierStretch`** → **`rig_inflate`**. Limb **`segmentType=bezier`**: per-section stretch; inflate wire at **`rig_segments`** end. **Next:** puppet/mirror QC; **`ikSetup=bezier` × non-parent** combos beyond spine template; sine/wave (tabled).
+**MRS phase (current):** Segment / **Head** / **Limb** bezier inflate in FK via **`inflateDriveDirectParents`** + **`{rigJoint}_inflateScale`** **inserted** above **`masterGroup`**. **Segment + Head:** **`rig_inflate`** after **`rig_segments`**. **Module bezier IK stretch:** **`segment_bezier_module_ik_spline_stretch_profile`** — **`segmentType=parent`** full stretch + volume on **`ikJoints`**; **non-parent** **translate** arc-length on **`ikJoints`**, block **`segmentStretchBy`** / volume / **`pointDist`** on **`segmentJoints`** in **`rig_segments`**. **Limb bezier:** per-section stretch at **`rig_segments`**; **`skipTipInflate`** on last roll section. **Ribbon / ribbonLive:** **`IK.ribbon`** in **`rig_segments`** only; inflate overlay in **`rig_inflate`** with **`leave_joint_volume_wiring=True`**. **Next:** puppet/mirror QC; sine/wave (tabled).
 
 ## Related Documentation
 
@@ -75,10 +90,12 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — canonical `spline`, `curve`, `bezier_spline`
 - **[bezier_utils.py](../../cgmToolsPy3/cgm/core/rig/bezier_utils.py)** — Bezier CV control rigs (`bezier_controls_add`)
 - **[rigFrame_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py)** — MRS orchestration (`RIGFRAME.spline`, segment mid IK, etc.)
-- **[bezier_ik_block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py)** — **`segment_bezier_ik_uses_hips_chain_mains`**, **`segment_bezier_ik_module_chain_volume_squash`**, **`bezier_ik_resolve_main_ik_list`**, hips chain **`rig_shapes`** / **`rig_controls`** / **`rig_frame`** helpers; **`block_bezier_anchor_mode`**, inflate parent wire, bezier segment shapes
-- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — **`rig_inflate`**; `rig_frame` / `rig_segments` / `rig_controls`; `rig_prechecks`; **`d_stretchInflateRes`**, **`d_segmentBezierStretch`**
-- **[head.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)** — neck `neckIK=bezier` (parent segment type); **`rig_inflate`** build step; mirrors Segment bezier `rig_shapes` / `rig_frame` / `rig_controls`
-- **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — `segmentType=bezier` roll sections, `_limb_bezier_inflate_slide_global_spec`, `bezier_spline_stretch` per section
+- **[bezier_ik_block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py)** — **`segment_bezier_ik_uses_hips_chain_mains`**, **`segment_bezier_module_ik_spline_stretch_profile`**, **`block_uses_bezier_module_ik`**, **`segment_bezier_ik_module_chain_volume_squash`**, **`bezier_ik_resolve_main_ik_list`**, hips chain **`rig_shapes`** / **`rig_controls`** / **`rig_frame`** helpers; **`block_bezier_anchor_mode`**, inflate parent wire, bezier segment shapes
+- **[rigShapes_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/rigShapes_utils.py)** — **`ik_end`**, **`_ik_end_cast_source_dag`**, Segment **`ikEndShape=cast`**
+- **[builder_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py)** — **`shapes_fromCast`** **`mode='ikEndFrameHandle'`** (FK last **`frameHandle`** span from cast **U** to loft max **U**)
+- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — **`rig_inflate`**; `rig_frame` / `rig_segments` / `rig_controls` / **`rig_shapes`**; `rig_prechecks`; **`d_stretchInflateRes`**, **`d_segmentBezierStretch`**; prerig **`buildEnd`** (`dag` \| `joint`) — skin tip joint (see note below)
+- **[head.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)** — neck **`neckIK=bezier`** (any **`segmentType`** with deform in **`rig_segments`**); **`rig_inflate`** build step; mirrors Segment bezier **`rig_shapes`** / **`rig_frame`** / stretch profile
+- **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — same **`buildEnd`** enum; `segmentType=bezier` roll sections, `_limb_bezier_inflate_slide_global_spec`, `bezier_spline_stretch` per section
 - **[Builder.py](../../cgmToolsPy3/cgm/core/mrs/Builder.py)** — `ui_stepBuild` runs `asRigFactory(mode='prechecks')` before stepped rig layout
 - **[shared_dat.py](../../cgmToolsPy3/cgm/core/mrs/lib/shared_dat.py)** — `ikSetup` enum vocabulary; **`ikSplineBezierMode`** (`uniform:bend`); **`squashInflateControl`**; **`squashInflateFactorMin/Max/Mode`** in **`d_uiAttrDict['squashStretch']`**; **`squash_stretch_ik_share_kwargs`** (strips bezier-only inflate keys from ribbon/curve share)
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — timeline and PR maintenance
@@ -101,7 +118,7 @@ MRS **IK-only** work: Bezier driver curves plus joint-chain solve on Segment (an
 |-----------|---------------|----------------------------------|--------|
 | **bezier** | **parent** | off | **Shipped** — IK, CV main/sub, end follow, twist |
 | **bezier** + **`ikBase=hips`** | any **`segmentType`** | off | **Maya-verified** (parent spine) — hip/chest **`controlIK*`** + chain CVs; visSub; **`rig_frame`** masterGroups |
-| **bezier** + **`ikBase=hips`** | **ribbon** / **bezier** (non-parent seg) | on + squash **simple** | **In py3** — IK chain **length-only** stretch in **`rig_frame`**; volume squash on **`segmentJoints`** only (no duplicate **`outFactor_*`** on IK) |
+| **bezier** + **`ikBase=hips`** | **ribbon** / **bezier** (non-parent seg) | on + squash **simple** | **In py3** — IK **`stretchBy=translate`** + arcLength in **`rig_frame`**; block **`segmentStretchBy`** / volume / **`pointDist`** on **`segmentJoints`** in **`rig_segments`** |
 | **bezier** | **parent** | on (`segmentStretchBy` translate / scale) | **Maya-verified** — full **`bezier_spline_stretch`** on **`ikJoints`**, FKIK scale blend |
 | **bezier** | **bezier** | any | **Blocked** — precheck; use **bezier/parent** or **bezier/ribbon** |
 | **bezier** | **bezier** (seg only, other `ikSetup`) | off | **In py3** — seg-joint bezier, handle CVs, `controlsSegmentBezier` |
@@ -118,12 +135,12 @@ flowchart TD
   segmentRig -->|ikSetup bezier| rigFrameBezier[RIGFRAME.bezier]
   rigFrameBezier --> bezierSpline[IK.bezier_spline]
   rigFrameBezier --> wireCV[bezier_controls_wire_from_handles]
-  segmentRig -->|scaleSetup + squash simple| stretch[IK.bezier_spline_stretch length or full volume]
+  segmentRig -->|stretch gate| stretch[IK.bezier_spline_stretch via module IK profile]
   segmentRig -->|scaleSetup| scaleBlend[blendChainsScaleByAttr FK/IK to blend]
   rigSegments[segment.rig_segments IK.ribbon / bezier seg stretch]
   rigInflate[segment.rig_inflate overlay + parent wire]
   rigSegments --> rigInflate
-  rigInflate --> rigDirect[rigJoint inflateScale null to masterGroup]
+  rigInflate --> rigDirect["inflateScale inserted: existingParent -> inflate -> masterGroup"]
   segmentRig -->|ikSetup spline| rigFrameSpline[RIGFRAME.spline]
   segmentRig -->|ikSetup curve| ikCurve[IK.curve]
   segmentRig --> endDup[splineEnd duplicate + blendChainsBy follow]
@@ -132,7 +149,8 @@ flowchart TD
 ### Primary call sites
 
 - **`rigFrame_utils.bezier`**: `IK.bezier_spline` on `ml_ikUse`, `masterScale` on driver, twist to controls/settings; links **`bezierIKDriverCurve`** on rigNull.
-- **`segment.py` `rig_frame` (`ikSetup == 'bezier'`)**: Hips chain: **`rig_frame_bezier_segment_hips_chain_master_groups`** before ribbon/bezier wire. `RIGFRAME.bezier` → **`segment_ik_*_orient_follow_setup`** (end + hips base; **`ml_ikBlendUse`**) → optional **`bezier_spline_stretch`** → **`self.d_stretchInflateRes`** (**`extraSquashControl`** only when **`segment_bezier_ik_module_chain_volume_squash`** — i.e. **`segmentType=parent`**); FKIK **`blendChainsBy` / `blendChainsScaleByAttr`** on **`self.ml_ikBlendUse`** when `scaleSetup`. **Inflate parent wire → `rig_inflate`** (not here).
+- **`segment.py` `rig_frame` (`ikSetup == 'bezier'`)**: Hips chain: **`rig_frame_bezier_segment_hips_chain_master_groups`** before ribbon/bezier wire. `RIGFRAME.bezier` → **`segment_ik_*_orient_follow_setup`** (end + hips base; **`ml_ikBlendUse`**) → **`bezier_spline_stretch`** when **`_segment_bezier_should_run_spline_stretch`** — kwargs from **`segment_bezier_module_ik_spline_stretch_profile`** (**parent** full volume / **non-parent** translate-only); **`self.d_stretchInflateRes`** only when profile **`ikVolumeSquash`**. FKIK **`blendChainsBy` / `blendChainsScaleByAttr`** on **`self.ml_ikBlendUse`** when `scaleSetup`. **Inflate parent wire → `rig_inflate`** (not here).
+- **`head.py` `rig_frame` (`neckIK == 'bezier'`)**: Same stretch profile + gate as Segment; **`block_uses_bezier_module_ik`** for parent-path inflate eligibility.
 - **`segment.py` `rig_inflate`**: After **`rig_segments`**. Ribbon/ribbonLive **`segmentType`**: **`segment_inflate_stretch_result_from_volume_joints`** on **`segmentJoints`** (**`leave_joint_volume_wiring=True`**). Parent bezier inflate from **`ikJoints`** only when **`segmentType=parent`**. Seg bezier / spline-curve paths: stored stretch dict or volume overlay, then **`segment_inflate_parent_rig_direct_controls`**.
 - **`segment.py` `rig_skeleton`**: `_squash_ik_fk_blend_segment_scale_compensate` when squash + IK.
 - **`rigFrame_utils.spline`** / **`IK.curve`**: unchanged legacy paths (see prior branch entries).
@@ -167,6 +185,41 @@ For each prototype batch (chat or file path):
 
 ## Timeline
 
+### October 29, 2026 - Module IK stretch profile (`segmentType` parent vs other)
+
+**What**:
+
+- **Artist intent:** Bezier module **`ikJoints`** must still **stretch** when a separate segment deform exists (**ribbon**, seg **bezier**, …), but only **translate** arc-length follow — not block **`segmentStretchBy=scale`** or volume squash on IK. Full squash/stretch options stay on **`segmentJoints`** in **`rig_segments`**.
+- **`segment_bezier_module_ik_spline_stretch_profile`**: **`segmentType=parent`** → block **`segmentStretchBy`**, measure, volume, **`d_stretchInflateRes`**. **Else** → **`stretchBy='translate'`**, **`arcLength`**, **`applyVolumeSquash=False`**, settings **`squash`** **0** on IK path.
+- **`block_uses_bezier_module_ik`**: **`ikSetup=bezier`** or Head **`neckIK=bezier`** (fixes parent measure / volume helper when block has no **`ikSetup`** enum).
+- **Gate:** **`_segment_bezier_should_run_spline_stretch`** ( **`scaleSetup`** + squash **simple** / **both** / **none** ) — replaces **`squash=simple`**-only check in **`rig_frame`**.
+- **Head:** same profile in **`head.py`**; removed precheck **`neckIK bezier requires segmentType parent`**.
+
+**Files**: `bezier_ik_block_utils.py`, `segment.py`, `head.py`; `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
+
+**Maya verify**: Hips bezier + **ribbon** segment, **`scaleSetup`**, squash **simple** — log **`stretchBy:translate`**, **`ikVolumeSquash:False`** on module IK; ribbon squash on **segment** joints; parent spine still **`stretchBy:scale`** (or block enum) + **`ikVolumeSquash:True`** when **`segmentType=parent`**.
+
+**Status**: In py3 — reload **`BEZIERIKBLOCK`**, **`segment`**, **`head`**; rebuild **`rig_frame`**.
+
+---
+
+### October 28, 2026 - Segment `ikEndShape=cast` (`ikEndFrameHandle`)
+
+**What**:
+
+- **Artist intent:** End IK cast control like the **last FK `frameHandle`** shape (cast ring at start **U**, connector rails along proxy loft, through to **max U**), but starting cast **U** from **`ikEnd`** (e.g. **`tipBase`** = penultimate attach), not always the last FK joint.
+- **`builder_utils.shapes_fromCast`**: new **`mode='ikEndFrameHandle'`** — single **`RAYS.cast`** from one target DAG → **`SURF.get_splitValues([u], insertMax=True, …)`** with same pre/post inset, connectors, and offset as FK **`frameHandle`**.
+- **`rigShapes_utils.ik_end`**: **`shapeArg='cast'`** calls that mode; **`_ik_end_cast_source_dag`** picks cast DAG by **`ikEnd`**; **`segment.rig_shapes`** passes **`ml_fkCastTargets`**. **Control transform** placement unchanged per **`ikEnd`** (e.g. **`tipBase`** pivot on **`ml_handleTargets[int_handleEndIdx]`**, not on attach joint duplicate). Cast fail → parent **`ml_fkShapes[int_handleEndIdx]`**.
+- **Not:** **`singleCast`** (one iso curve only) or **`simpleCast`** (short local span); not blindly parenting **`ml_fkShapes[-1]`** when **`int_handleEndIdx` ≠ −1**.
+
+**Files**: `cgm/core/mrs/lib/builder_utils.py`, `cgm/core/mrs/lib/rigShapes_utils.py`, `cgm/core/mrs/blocks/organic/segment.py`; `Features/Feature_BezierIK.md` § Segment IK end shapes.
+
+**Maya verify**: Segment **`ikSetup`** on, **`ikEndShape=cast`**, toggle **`ikEnd`** **`helper`** vs **`tipBase`** — cast profile moves along loft; **`controlIK`** pivot follows **`ikEnd`** table; Script Editor **`ikEnd cast | … castDag=…`**.
+
+**Status**: In py3 — reload **`rigShapes_utils`** + **`builder_utils`**; rebuild module **`rig_shapes`**.
+
+---
+
 ### October 23, 2026 - Precheck block: `ikSetup=bezier` × `segmentType=bezier`
 
 **What**: **`rig_prechecks`** fails with *Bezier/bezier is not a viable path. Bezier/Ribbon or Bezier/Parent is recommended*. Combo treated as dead end after cycle/DG experiments.
@@ -191,18 +244,15 @@ For each prototype batch (chat or file path):
 
 ---
 
-### October 22, 2026 - Bezier IK + separate segment: length-only on module IK chain
+### October 22, 2026 - Bezier IK + separate segment: translate stretch on module IK (superseded Oct 29)
 
-**What**:
+**What** (historical):
 
-- **Problem:** Spine-style **`ikSetup=bezier`** + **`ikBase=hips`** with **non-parent** segment deform (ribbon, **`segmentType=bezier`**, …) built **full** **`bezier_spline_stretch`** volume squash on **`ikJoints`** **and** squash on **`segmentJoints`** — duplicate **`outFactor_*`** / settings wiring.
-- **`segment_bezier_ik_module_chain_volume_squash(mBlock, str_segment_type)`**: module IK owns volume squash only when **`segmentType=parent`**.
-- **`segment.py` `rig_frame`**: logs **`ikVolumeSquash:True/False`**; **`extraSquashControl=False`** on IK when segment deform owns squash; settings **`squash`** default **0** on IK-only stretch path.
-- **`rig_inflate`**: parent-path inflate from **`d_stretchInflateRes`** on **`ikJoints`** gated to **`segmentType=parent`** (ribbon / seg-bezier inflate unchanged on **`segmentJoints`**).
+- **Problem:** Full volume **`bezier_spline_stretch`** on **`ikJoints`** **and** squash on **`segmentJoints`** duplicated wiring.
+- **Oct 22–28 interim:** **`segment_bezier_ik_module_chain_volume_squash`** turned off volume on non-parent IK but still ran arc-length stretch (sometimes with block **`segmentStretchBy=scale`** on IK).
+- **Oct 29:** **`segment_bezier_module_ik_spline_stretch_profile`** — non-parent IK **translate-only** stretch; segment owns block stretch/squash options. See Oct 29 timeline entry.
 
-**Files**: `bezier_ik_block_utils.py`, `segment.py`; `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
-
-**Maya verify**: Hips bezier + ribbon segment — Script Editor **`bezier_spline_stretch | … segmentType:ribbon ikVolumeSquash:False`**; one squash stack on **segment** joints; IK follows curve length only.
+**Files**: `bezier_ik_block_utils.py`, `segment.py`, `head.py`.
 
 ---
 
@@ -275,6 +325,36 @@ For each prototype batch (chat or file path):
 
 ---
 
+### October 28, 2026 - Inflate `inflateScale` hierarchy insertion (all direct-parent paths)
+
+**What**:
+
+- **Problem:** **`bezier_inflate_parent_direct_controls`** parented **`{rig}_inflateScale`** under caller-supplied **`m_parent`** (limb: **`segJoints_{section}[i]`**) and moved **`masterGroup`** there — broke wrist/arm directs that were already under **`blendJoints`** from **`rig_controls`**.
+- **Contract:** Inflate is **insertion only** — read each direct’s **`masterGroup`** DAG parent **before** wiring, parent **`inflateScale`** under that node, then **`masterGroup`** under **`inflateScale`**: **`existingParent → {rig}_inflateScale → masterGroup → …`**. Optional entry **`m_parent`** is fallback **only** when **`masterGroup`** has no parent yet.
+- **Limb:** **`_limb_bezier_inflate_parent_direct_controls`** still maps **`l_inflateDirectPlugs`** index → **`segJoints_{section}[i].drivenJoint`** (rig direct + stretch plug); **does not** pass seg joints as inflate DAG parents.
+- **Limb end followRoot (Oct 21 follow-up):** **`addBall` / `addLeverEnd`** → culled end main via **`section_idx + 1 == len(handleJoints)−1`** + **`handleJoints[-1]`**; otherwise last roll section + **`ml_mains[-1]`** (arm/wrist path).
+
+**Files**: `cgm/core/mrs/lib/bezier_ik_block_utils.py` — **`bezier_inflate_parent_direct_controls`**, **`bezier_inflate_parent_segment_direct_controls`** doc; `cgm/core/mrs/blocks/organic/limb.py` — **`_limb_bezier_inflate_parent_direct_controls`**, bezier end **`followRoot`** call site.
+
+**Maya verify**: Bezier limb + **`squashInflateControl` on** — rebuild **`rig_segments`**; forearm span directs: **`blendJoint → …_inflateScale → masterGroup`** (not under seg/bezier deform joint). Segment **`rig_inflate`** unchanged timing; same insertion helper.
+
+**Supersedes (doc only):** Oct 19 “**`m_parent = segJoints_{section}[i]`**” as **DAG** parent — seg joint remains **plug / drivenJoint** lookup only on limb.
+
+---
+
+### October 27, 2026 - Limb bezier skip end-joint tip inflate
+
+**What**:
+
+- **Problem:** Multi-roll limb **`segmentType=bezier`**: global inflate ramp sized as **sum(N−1)** spans per section, but **`_bezier_stretch_wire_chain_tip_inflate`** still ran on the **last roll section** tip (wrist/ankle) — missing or mismatched **`inflateFactor_*`** vs span list; wrist had inflate **`inflateScale`** without **`outFactor_*`** parity.
+- **Fix:** **`bezier_spline_stretch`** kwarg **`skipTipInflate`** (gates tip inflate wire on arcLength + pointDist). Limb **`_limb_rig_segments_bezier_squash_stretch`** passes **`skipTipInflate=True`** when **`section_idx == l_rollKeys[-1]`**. Limb-end joint keeps volume squash; no tip **`inflateScale`**. Interior roll section tips unchanged.
+
+**Files**: `cgm/core/rig/ik_utils.py`, `cgm/core/mrs/blocks/organic/limb.py`; `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
+
+**Maya verify**: 2+ roll bezier sections, **`squashInflateControl` on** — rebuild **`rig_segments`**; end direct has **no** **`inflateScale`**; forearm span directs still inflate; settings **`inflateFactor_*`** count = sum of **(len(segJoints)−1)** per section.
+
+---
+
 ### October 21, 2026 - Inflate ramp N joints, tip direct parents, factor UI flags
 
 **What**:
@@ -295,11 +375,26 @@ For each prototype batch (chat or file path):
 
 **What**:
 
-- **`_limb_rig_segments_bezier_end_main_follow_root`** (renamed from wrist helper): **followRoot** + **stableEnd** on last rig **`handleJoints`** main (**`len−1`** culled span), not prerig **`int_handleEndIdx`** alone; not gated on **`addBall`**. Section wired when **`section_idx + 1`** is chain end index.
+- **`_limb_rig_segments_bezier_end_main_follow_root`** (renamed from wrist helper): **followRoot** + **stableEnd** on last rig **`handleJoints`** main (**`len−1`** culled span), not prerig **`int_handleEndIdx`** alone; not gated on **`addBall`**. **Oct 28:** **`addBall`/`addLeverEnd`** → section **`section_idx + 1 == len(handleJoints)−1`** + **`handleJoints[-1]`**; else last roll key + **`ml_mains[-1]`** (arm/wrist).
 
 **Files**: `cgm/core/mrs/blocks/organic/limb.py`; `Features/Feature_BezierIK.md`.
 
 **Status**: In py3 — rebuild limb **`rig_segments`** for bezier roll sections.
+
+---
+
+### October 27, 2026 - Limb `segmentEndHandleUp`
+
+**What**:
+
+- **Block attr** (Limb rig UI): **`segmentEndHandleUp`** enum **`stableUp`** \| **`last`**, default **`stableUp`**.
+- **`stableUp`**: last-segment **`back_aimer`** **`aimConstraint`** **`worldUpObject`** = **`stableEnd`** upObj (ribbon parity; fixes bezier end-main path that used section start main).
+- **`last`**: world-up = immediate previous rig **`handleJoints`** ikBezier main.
+- **`_limb_segment_end_back_aimer_world_up_node`** shared by **`_limb_rig_segments_bezier_end_main_follow_root`** and legacy **`rig_segments`** last-handle branch.
+
+**Files**: `cgm/core/mrs/blocks/organic/limb.py`; `Features/Feature_BezierIK.md`, `Features/Feature_MRSWiring.md`.
+
+**Status**: In py3 — reload **`limb`** block module; rebuild **`rig_segments`**; verify bezier + ribbon, both enum values, ball/leverEnd culled end main.
 
 ---
 
@@ -339,7 +434,7 @@ For each prototype batch (chat or file path):
 - **Block attrs renamed / exposed:** **`squashInflateFactorMin`**, **`squashInflateFactorMax`**, **`squashInflateFactorMode`** on Segment / Head / Limb (Squash/Stretch UI next to volume **`squashFactor*`**). Ramp drives **settings** **`{part}_inflate_inflateFactor_i`** — not **`squashFactorMin/Max`**. **`block_squash_inflate_factor_min_max`** / **`block_squash_inflate_factor_mode`** in **`bezier_ik_block_utils`** (legacy **`inflateFactorMin/Max/Mode`** on old blocks still read).
 - **`midBulge`** inflate mode — fixed distance-from-center weights in **`math_utils`** (e.g. count 7 → `0, .2, .6, 1, .6, .2, 0` between min/max).
 - **`ik_utils`**: **`_bezier_stretch_inflate_factor_plugs_ensure`** runs for all **`extraInflateControl`** + inflate factor list builds (fixes flat/zero ramp when min/max were 0 on legacy attrs).
-- **Limb inflate parent fix:** wire moved to **end of `rig_segments`** (after per-section stretch stored on **`md_limbBezierStretchBySection`**). **`_limb_bezier_inflate_parent_direct_controls`**: **`m_parent = segJoints_{section}[i]`** so FK direct joints follow **seg IK** deformation (was **`scaleJoint`** / early **`rig_blendFrame`** — subs did not track bezier seg).
+- **Limb inflate parent fix:** wire moved to **end of `rig_segments`** (after per-section stretch stored on **`md_limbBezierStretchBySection`**). **`_limb_bezier_inflate_parent_direct_controls`**: resolve rig direct + inflate plug via **`segJoints_{section}[i].drivenJoint`** (Oct 19). **Superseded Oct 28:** inflate **`inflateScale`** **inserts** under existing **`masterGroup`** DAG parent — **not** under seg joints (see Oct 28 timeline entry).
 - **Bezier sub control shapes:** Limb removed **`_LIMB_BEZIER_SUB_SEMISPHERE_SCALE` (0.4)** — subs use full **`jointRadius`/offset** semiSphere. Segment/Head **`rig_shapes_bezier_ik_subs`**: sub sphere scale matches main IK (**1.2**, was **×0.8**).
 
 **Files**: EXTENDED `shared_dat.py`, `bezier_ik_block_utils.py`, `segment.py`, `head.py`, `limb.py`, `ik_utils.py`, `math_utils.py`; EXTENDED `Features/Feature_BezierIK.md`, `Branches/Branch_BezierIK.md`.
@@ -819,7 +914,8 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 - [x] Step Build surfaces `rig_prechecks` failures in UI (no GuiFactory traceback)
 - [x] **Head** `neckIK=bezier` + parent `segmentType` (stretch/squash/inflate + **`headIK`** / **`controlIK`** split — template Maya-verified)
 - [x] **Head** **`rig_inflate`** after **`rig_segments`** (Oct 22)
-- [x] Segment **`ikSetup=bezier`** + non-parent segment — IK length-only stretch, segment owns volume squash (Oct 22)
+- [x] Segment **`ikSetup=bezier`** + non-parent segment — IK **translate** stretch + segment owns volume squash (Oct 29 profile)
+- [x] Head **`neckIK=bezier`** + non-parent **`segmentType`** — same stretch profile; precheck parent lock removed (Oct 29)
 - [x] `bezier_ik_block_utils.py` — shared shapes / pickwalk / squash compensate
 - [x] `segmentType` **bezier** (+ squash/stretch on seg driver; Maya verify pending)
 - [ ] Limb `segmentType=bezier` — [x] `rig_segments` squash/stretch + inflate kwargs; [ ] shapes/controls / puppet regression
@@ -833,7 +929,7 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 
 - [x] Segment build smoke — bezier parent + scaleSetup + squash simple
 - [x] Segment parent bezier + **`ikBase=hips`** — dual IK handles, chain CVs, visSub, **`rig_frame`** masterGroup parenting (Oct 22)
-- [ ] Hips bezier + **ribbon** (or seg bezier) segment — **`ikVolumeSquash:False`** on IK stretch log; single squash on **`segmentJoints`**
+- [ ] Hips bezier + **ribbon** (or seg bezier) segment — log **`stretchBy:translate`**, **`ikVolumeSquash:False`** on module IK; block stretch/squash on **`segmentJoints`**
 - [x] Stretch translate / scale; FKIK scale blend to blend chain
 - [ ] Bezier **`lengthScale`** — bind **`r=1`** keys length; **`stretch=1`**, **`lengthScale=1`** + deformed curve matches pre-**`lengthScale`** behavior (see feature doc verify table)
 - [x] **`squashMeasure` pointDist** + **`segMeasure`** master scale — no double global squash (Oct 15)
@@ -852,6 +948,7 @@ Sine tuning stays on sine output (`waveAmplitude`, …); blend on final output (
 - [x] Bezier **ikBezierSub** shapes — full-size segment cast / FK sphere (no 0.4× / 0.8× sub scale) (Oct 19)
 - [x] Limb roll **`segmentType=curve`** — no **`extraInflateControl`** leaked into **`IK.curve`** (Oct 19)
 - [x] Step Build — precheck fail (e.g. parent control/joint count) shows error list, window stays open (**`ikSetup=bezier` × non-parent `segmentType`** no longer blocked — Oct 22)
+- [ ] Segment **`ikEndShape=cast`** — **`tipBase`** vs **`helper`**: cast span to loft tip; **`controlIK`** pivot on penultimate vs end handle ( **`rig_shapes`** rebuild)
 - [ ] Mirror / full puppet regression with bezier subs on rigNull
 
 ---
@@ -868,7 +965,9 @@ Bezier IK for MRS segments (and related modules): Bezier driver curve + joint so
 
 - `cgm/core/rig/ik_utils.py` — `bezier_spline`, `bezier_spline_stretch` (**`lengthScale`**, **`volumeSquashInflateOnly`**, curve-blend helpers), `inflateDriveDirectParents` / `l_inflateDirectPlugs`
 - `cgm/core/mrs/lib/bezier_ik_block_utils.py` — **`segment_inflate_stretch_result_from_volume_joints`**, **`segment_inflate_parent_rig_direct_controls`**, **`segment_inflate_direct_parent_joint_list`**
-- `cgm/core/mrs/blocks/organic/segment.py` — **`rig_inflate`** build step; **`d_stretchInflateRes`**, **`mSplineDriverCurve`**
+- **Module IK stretch split**: **`segment_bezier_module_ik_spline_stretch_profile`**, **`block_uses_bezier_module_ik`**, **`_segment_bezier_should_run_spline_stretch`**
+- `cgm/core/mrs/blocks/organic/segment.py` — stretch profile in **`rig_frame`**
+- `cgm/core/mrs/blocks/organic/head.py` — neck bezier stretch profile; precheck unlock
 - `cgm/core/rig/bezier_utils.py` — CV control wire
 - `cgm/core/rig/constraint_utils.py` — `blendChainsScaleByAttr`
 - `cgm/core/mrs/lib/rigFrame_utils.py` — `bezier`
@@ -893,7 +992,7 @@ None expected until block enum changes; document if existing `spline` behavior s
 - Inflate: **`squashInflateControl` on**, **`squashInflateFactorMin=-1`**, **`squashInflateFactorMode=midPeak`** (or **`midBulge`**), **`squashInflate > 0`** — ends contract, mid inflates; settings show **`{part}_inflate_inflateFactor_*`**; **`head_bezier_inflateSample_*_floorUtil`** under **`head_bezier_bezierStretch_grp`** on rigNull after rebuild.
 - Segment / Head parent bezier inflate: **FKIK = 0**, raise **`squashInflate`** — direct joints bulge; **`{rig}_inflateScale`** visible under blend (Head: neck **`rigJoints`**).
 - Segment parent **`ikSetup=spline`**, **`scaleSetup`**, **`squashExtraControl`**: rebuild through **`rig_inflate`**; logs **`spline volume squash + inflate`**; **`inflateScale`** nulls under **`blendJoints`**; spline length behavior unchanged vs pre-inflate build.
-- Hips **`ikSetup=bezier`** + **ribbon** segment, **`scaleSetup`**, squash **simple**: **`rig_frame`** log **`ikVolumeSquash:False`**; ribbon squash on **`segmentJoints`** only; IK length tracks bezier driver.
+- Hips **`ikSetup=bezier`** + **ribbon** segment, **`scaleSetup`**, squash **simple**: **`rig_frame`** log **`stretchBy:translate`**, **`ikVolumeSquash:False`**; ribbon squash on **`segmentJoints`**; parent **`segmentType=parent`** still logs block **`stretchBy`** + **`ikVolumeSquash:True`**.
 - Head neck bezier: rebuild through **`rig_inflate`**; **`inflate direct parents | neckIK:bezier`** when **`squashInflateControl`** on.
 - Limb bezier inflate: **`{rig}_inflateScale`** parented under matching **`segJoints_{section}[i]`**; FK + IK track seg deformation; rebuild **rig_segments** after py3 sync.
 - Segment parent bezier (4 IK joints): **3** **`outFactor_*`**, **4** **`inflateFactor_*`**; tip direct joint gets **`inflateScale`**; factor attrs visible in channel box, not keyable.
@@ -901,6 +1000,7 @@ None expected until block enum changes; document if existing `spline` behavior s
 - Leg limb bezier: ankle (not ball) end main gets **followRoot** / **stableEnd** when **`addBall`**; rebuild **rig_segments**.
 - Limb/Segment/Head bezier subs: tangent **ikBezierSub** balls/semiSpheres match main handle scale (rebuild **rig_shapes**).
 - Segment bezier: **`ikSplineTwistUpEnd=y+`** default; Head neck bezier end WU still **z-** default.
+- Segment **`ikEnd=tipBase`**, **`ikEndShape=cast`**: connected end cast from penultimate attach **U**; **`controlIK`** at penultimate handle pivot; compare to **`ikEnd=helper`** (last attach **U**, **`ikEndHandle`** pivot).
 
 #### Next steps
 
