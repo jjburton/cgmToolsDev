@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 29, 2026 — Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
+**Last Updated**: October 30, 2026 — Limb bezier wrist shape **`IndexError`** fix (**`fkAttachJoints`** vs **`ml_fkShapes`** length mismatch); Oct 29 Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
 **PR**: Pending — see [fix list](#before-merge--pr-fix-list) (cleanup only)
 
 ## Before merge / PR (fix list)
@@ -184,6 +184,22 @@ For each prototype batch (chat or file path):
 ---
 
 ## Timeline
+
+### October 30, 2026 - Limb bezier wrist shape `IndexError` (`fkAttachJoints` length mismatch)
+
+**What**:
+
+- **Problem:** Step-built **`segmentType=bezier`** limb with a parent **attach** joint wired (e.g. clavicle) raised `IndexError: list index out of range` on **`ml_fkShapes[fk_idx]`** in **`_limb_rig_shapes_bezier_main_segment_handle`** during **`rig_shapes`** — wrist bezier segment handle (and any mains after it) never built. Right arm (no clav attach) built fine; left arm (clav attach present) failed — not a mirrored-geometry issue, a list-length mismatch.
+- **Cause:** **`rig_shapes_closest_fk_shape_idx`** returns the nearest-position index into **`ml_fkCastTargets`** (**`mRigNull.fkAttachJoints`**, else **`fkJoints`**); that index was then used to subscript **`ml_fkShapes`** — a different list, cast 1:1 from **`self.ml_fkShapeTargetDags`**. **`fkAttachJoints`** carries one extra leading entry (the parent attach frame, e.g. **`L_clav_fkAttach_frame`**) that **`ml_fkShapes`** doesn't have, so for the wrist main (last in the chain) the nearest match resolved one index past the end of **`ml_fkShapes`**.
+- **Fix:** **`rig_shapes`** now passes **`self.ml_fkShapeTargetDags`** (not **`ml_fkCastTargets`**) into **`_limb_rig_shapes_bezier_segments`**, keeping the nearest-shape lookup index-aligned with **`ml_fkShapes`**. **`ml_fkCastTargets`** usage elsewhere in **`rig_shapes`** (settings-control placement fallback) is unchanged.
+
+**Files**: `cgm/core/mrs/blocks/organic/limb.py` — `rig_shapes` call site into `_limb_rig_shapes_bezier_segments`.
+
+**Maya verify**: Step build `L_arm_limbBlock` (bezier, clavicle attach present) through `rig_shapes` — no `IndexError`; wrist bezier main + sub segment handles build correctly. User-confirmed fix.
+
+**Status**: Maya-verified.
+
+---
 
 ### October 29, 2026 - Module IK stretch profile (`segmentType` parent vs other)
 
