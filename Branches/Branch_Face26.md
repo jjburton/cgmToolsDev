@@ -3,18 +3,20 @@
 ## Quick Info
 **Status**: Active  
 **Created**: September 1, 2026  
-**Last Updated**: October 30, 2026 (Scene tmp cleanup: every `*_MRSbatch.py`)
+**Last Updated**: November 2, 2026 (Closest World Orient snap — cgm menu + toolbox)
 **PR**: Pending  
 **py3 checkout**: `jburton/Face26` (`__BRANCH` = `FaceRigging26`, `__RELEASE` = `26.09.01.01`)
 
 ## Goals
-Improve MRS facial block rigging — starting with **muzzle** lip follow/constraints and **eye** prerig parameter cleanup. Broader facial-block work (blockDat remapping when adding prerig handles, cheek controls, brow/face block parity) is in scope for this branch but not started yet. This branch also carries shared **MRS body** and **cgm.core** work used by face-adjacent rigs: **scaleSetup** dyn-parent defaults from **attachPoint**, pivot-result naming, **Segment `followParentBank`** (Limb-style parent pivot bank at module **`rigRoot`**), **Limb roll segment mid IK** (`segmentMidIKSetup` / **`limb_segment_mid`**), digit-limb ship bypass, and **cgmMeta** hierarchy queries that use long DAG paths when returning meta. MetaHuman solve / project-script work stays on [`Branch_UnrealWorkflow.md`](Branch_UnrealWorkflow.md) and [`Feature_Metahuman.md`](../Features/Feature_Metahuman.md) unless we deliberately factor helpers into py3.
+Improve MRS facial block rigging — starting with **muzzle** lip follow/constraints and **eye** prerig parameter cleanup. Broader facial-block work (blockDat remapping when adding prerig handles, cheek controls, brow/face block parity) is in scope for this branch but not started yet. This branch also carries shared **MRS body** and **cgm.core** work used by face-adjacent rigs: **scaleSetup** dyn-parent defaults from **attachPoint**, pivot-result naming, **Segment `followParentBank`** (Limb-style parent pivot bank at module **`rigRoot`**), **Segment `buildEnd`** (dag \| joint skin tip + dag end **`followIK`** via module-end **`*_ikOrientFrame`**), **Limb roll segment mid IK** (`segmentMidIKSetup` / **`limb_segment_mid`**), digit-limb ship bypass, **cgmMeta** hierarchy queries that use long DAG paths when returning meta, and a **Closest World Orient** snap on the cgm menu and cgmToolbox (same closest-axis aim as **`ikOrientToWorld`**). MetaHuman solve / project-script work stays on [`Branch_UnrealWorkflow.md`](Branch_UnrealWorkflow.md) and [`Feature_Metahuman.md`](../Features/Feature_Metahuman.md) unless we deliberately factor helpers into py3.
 
 ## Related Documentation
 - **[Feature_MRSMeshCreation.md](../Features/Feature_MRSMeshCreation.md)** — MRS proxy/puppet/skinned mesh contract (`meshBuild`, `proxyBuild`, batch post, geoGroup invariants)
 - **[Feature_DynSimTool.md](../Features/Feature_DynSimTool.md)** — **cgmDynSimTool** dynFK / `.cgmSim*Dat` library, hair chain segment-length contract, connect/bake
 - **[Feature_Metahuman.md](../Features/Feature_Metahuman.md)** — MetaHuman facial retarget / SDK transfer (Perforce `MetahumanFacial.py`; reference for facial solve patterns)
 - **[Feature_MRSWiring.md](../Features/Feature_MRSWiring.md)** — module/puppet message graphs, block parent wiring
+- **[Feature_BezierIK.md](../Features/Feature_BezierIK.md)** — Segment module IK **`followIK`**, hips **`*_ikOrientFrame`**, **`ml_ikBlendUse`**
+- **[Branch_BezierIK.md](Branch_BezierIK.md)** — **`buildEnd`** skin-tip table, Bezier/spline IK matrix (detail not duplicated here)
 - **[Feature_CgmMetaAPI.md](../Features/Feature_CgmMetaAPI.md)** — **`cgmObject`** hierarchy getters, **`_hierarchyQueryFullPath`**
 - **[Feature_CgmToolUI.md](../Features/Feature_CgmToolUI.md)** — Scene browser columns, navigation depth (filesystem walk), scroll-list contracts
 - **[Scene.py](../../cgmToolsPy3/cgm/core/mrs/Scene.py)** — asset browser, `hasSub` / `hasVariant`, `_republish_navigation_lists`, Export Selection directory helpers; Projects/Recent **`LoadProject`** defer; category/subtype popup defer; project-column Query/Clean → **`find_tmpFiles`**
@@ -38,15 +40,51 @@ Improve MRS facial block rigging — starting with **muzzle** lip follow/constra
 - **[cgmDynFK_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmDynFK_presets.py)** — `base` seed + script API (artist hair presets → `cgmDat/sim/hair/`)
 - **[cgmNCloth_presets.py](../../cgmToolsPy3/cgm/core/presets/cgmNCloth_presets.py)** — `base` nc/n seed + script API (artist cloth/nucleus presets → `cgmDat/sim/`)
 - **[face_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/face_utils.py)** — `fortniteMetaHuman` pose-buffer schema
-- **[builder_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py)** — `get_dynParentTargetsDat`, scaleSetup dyn-parent helpers
+- **[builder_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py)** — `get_dynParentTargetsDat`, scaleSetup dyn-parent helpers; **`control_convertToWorldIK`** calls **`SNAP.orient_closest_world(..., 'z')`**
+- **[snap_utils.py](../../cgmToolsPy3/cgm/core/lib/snap_utils.py)** — **`orient_closest_world`** (closest local axis to world X/Y/Z)
+- **[snap_calls.py](../../cgmToolsPy3/cgm/core/tools/lib/snap_calls.py)** — **`snap_action`** **`closestWorldOrient`**; optionVar **`cgmVar_closestWorldAxis`**
+- **[tool_chunks.py](../../cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py)** — cgm menu **Snap → Closest World Orient** (X/Y/Z)
+- **[snapTools.py](../../cgmToolsPy3/cgm/core/tools/snapTools.py)** — toolbox snap **Closest World:** radio + button
 - **[handle.py](../../cgmToolsPy3/cgm/core/mrs/blocks/simple/handle.py)** — handle dyn parents; pivot result driver; **`proxySetColorAdded`** / **`proxyGeoCap`** proxy mesh paths
 - **[limb.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py)** — limb rigRoot / IK-FK dyn parents; roll **`segmentMidIKSetup`** / **`squashSkipAim`**; digit scaleSetup bypass
 - **[rigFrame_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py)** — **`limb_segment_mid`** (per-roll mid follow; not spine **`segment_mid`**)
-- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — segment rigRoot scaleSetup dyn parents; **`followParentBank`** (`rig_followParentBankSetup`, space lists)
+- **[segment.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py)** — segment rigRoot scaleSetup dyn parents; **`followParentBank`**; prerig **`buildEnd`**; **`b_ikNeedEnd`** ikEnd append; **`rig_frame`** end **`followIK`** branch
+- **[bezier_ik_block_utils.py](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py)** — **`segment_ik_end_orient_follow_setup`**, **`segment_ik_base_orient_follow_setup`**, **`segment_ik_spline_orient_follow_setup`**
 - **[head.py](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)** — head rigRoot scaleSetup dyn parents; **neck form** `formAim` / `shapersAim` / `shapersAimUp`; **neck `rig_segments`** ribbon / **ribbonLive**
 - **[ik_utils.py](../../cgmToolsPy3/cgm/core/rig/ik_utils.py)** — **`IK.ribbon`** arcLength squash aim-scale hookup (shared with segment blocks)
 
 ## Timeline
+
+### November 2, 2026 — Closest World Orient snap (cgm menu + toolbox)
+
+**What**: The closest-axis aim from MRS **`ikOrientToWorld`** (`control_convertToWorldIK`) is a snap. Each selected transform rotates so the local axis closest to a chosen world axis (including the negative side) aims along that axis. World axis is **`cgmVar_closestWorldAxis`**, default **Z**. **Z** and **X** use scene up (up axis **`y+`**), matching the rig on **Z**. **Y** uses a world-Z up vector so the aim is not parallel to scene up; if the chosen local aim axis is also Z, local up is **`x+`**. The rig still only calls the **Z** path: it creates the **`worldOrient`** group, aims that group, then restores the control.
+
+**Files**:
+- EXTENDED: [`snap_utils.py`](../../cgmToolsPy3/cgm/core/lib/snap_utils.py) — **`orient_closest_world(obj, worldAxis='z')`**
+- EXTENDED: [`builder_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py) — **`control_convertToWorldIK`** aims via **`orient_closest_world(mGrp_zero.mNode, 'z')`**
+- EXTENDED: [`snap_calls.py`](../../cgmToolsPy3/cgm/core/tools/lib/snap_calls.py) — **`closestWorldOrient`** on each selected; explicit **`worldAxis`** stores the optionVar
+- EXTENDED: [`tool_chunks.py`](../../cgmToolsPy3/cgm/core/tools/lib/tool_chunks.py) — **Snap → Closest World Orient → X/Y/Z** (checked item is the optionVar; pick snaps)
+- EXTENDED: [`snapTools.py`](../../cgmToolsPy3/cgm/core/tools/snapTools.py) — snap frame row: **Closest World:** **X / Y / Z** radio + **Closest World Orient** button
+
+**Verify in Maya**: Select one or more transforms. CGM menu **Snap → Closest World Orient → Z** aims the closest local axis at world +Z. Toolbox radio **X** or **Y**, then the button, uses that axis (menu pick updates the same optionVar). **`ikOrientToWorld`** rebuild still parents a **`worldOrient`** group and leaves the control’s world rotate unchanged.
+
+```python
+import cgm.core.cgm_General as cgmGEN
+import cgm.core.lib.snap_utils as SNAP
+import cgm.core.tools.lib.snap_calls as SNAPCALLS
+import cgm.core.tools.lib.tool_chunks as UICHUNKS
+import cgm.core.tools.snapTools as SNAPTOOLS
+import cgm.core.mrs.lib.builder_utils as BUILDERUTILS
+cgmGEN._reloadMod(SNAP)
+cgmGEN._reloadMod(SNAPCALLS)
+cgmGEN._reloadMod(UICHUNKS)
+cgmGEN._reloadMod(SNAPTOOLS)
+cgmGEN._reloadMod(BUILDERUTILS)
+```
+
+**Status**: Code in tree — Maya verify (reopen CGM menu and relaunch toolbox after reload)
+
+---
 
 ### October 30, 2026 — Scene tmp cleanup: every `*_MRSbatch.py`
 
@@ -67,6 +105,38 @@ cgmGEN._reloadMod(SCENEUTILS)
 ```
 
 **Status**: Code in tree — Maya verify
+
+---
+
+### October 30, 2026 — Segment `buildEnd` (dag skin tip) + dag end `followIK` orient frame
+
+**What**: **Segment** block gains Limb-parity **`buildEnd`** = **`dag`** \| **`joint`** (prerig UI; **`simple`** profile default **`dag`**). **`dag`** drops the terminal **`moduleJoint`** in **`skeleton_build`** but keeps tip **`jointHelper`** for prerig / **`ikEndHandle`**. **`rig_dataBuffer`** sets **`b_ikNeedEnd`** when **`buildEnd=dag`** and **`jointHelpers` > `moduleJoints`**; **`rig_skeleton`** appends tip **ikEnd** joint (limb-style). **`followParentBank`** mid position uses **`jointHelpers[-2]`** when **`buildEnd=dag`**. **`buildEnd=joint`**: FK cast cull for **`shapes_fromCast`** (last target popped). Legacy **`hasEndJoint`** is not migrated — use **`buildEnd`**.
+
+**End `followIK` (module `rig_frame`, bezier + spline):**
+
+| **`buildEnd`** | End follow wiring |
+|----------------|-------------------|
+| **`joint`** | **`segment_ik_spline_orient_follow_setup`** on **`ml_ikJoints[-1]`** + solver **`mIKSplineEnd`** (unchanged). |
+| **`dag`** | **`segment_ik_end_orient_follow_setup`** — same pattern as hips base **`segment_ik_base_orient_follow_setup`**: **`{moduleEnd}_ikOrientFrame`** under **module-end ik joint** (parent of appended **ikEnd**); **`followIK`** orient blend on the **frame**, not on the ik chain joint directly; **`ml_ikBlendUse`** module-end index → orient frame. Solver / **`ml_ikUse`** tip unchanged. |
+
+Direct orient on the appended **ikEnd** or **`mIKSplineEnd`** span does not work for **`dag`** — artists need the orient-frame path.
+
+**Files**:
+- EXTENDED: [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py) — attrs, **`skeleton_build`** / **`skeleton_check`**, **`rig_dataBuffer`**, **`rig_skeleton`** **`b_ikNeedEnd`**, **`rig_frame`** follow branch
+- EXTENDED: [`bezier_ik_block_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py) — **`segment_ik_end_orient_follow_setup`**; **`segment_ik_spline_orient_follow_create_parts`** (create-only helper for manual wiring tests)
+
+**Verify in Maya**: Segment **`buildEnd=dag`**, **`ikSetup`** bezier or spline, **`tipEnd`** (or config that sets **`b_ikNeedEnd`**) → step **`rig_skeleton`** (ik chain + ribbon drivers on full **`ikJoints[-1]`** tip); full build → end **`controlIK.followIK`** drives **`*_ikOrientFrame`** on module-end ik joint; stretch / IK solve unchanged on **`ml_ikUse`**. Toggle **`buildEnd=joint`** → end follow returns to spline skin-joint setup.
+
+```python
+import cgm.core.cgm_General as cgmGEN
+import cgm.core.mrs.lib.bezier_ik_block_utils as BEZIERIKBLOCK
+import cgm.core.mrs.blocks.organic.segment as SEGMENT
+cgmGEN._reloadMod(BEZIERIKBLOCK)
+cgmGEN._reloadMod(SEGMENT)
+# MRS module rebuild from prerig after toggling buildEnd
+```
+
+**Status**: Code in tree — Maya verify (dag end **`followIK`** + stretch at base; no ribbon **`indices`** change)
 
 ---
 
@@ -977,6 +1047,13 @@ cgmGEN._reloadMod(SCENEUTILS)
 - [ ] Maya-verify head **`neckBuild`** + **ribbonLive** + squash/aim-scale rig build end-to-end
 - [ ] Maya-verify neck form shaper loft aim with **`shapersAim`** / **`formAim`** enums vs segment feel
 
+### Closest World Orient snap (Nov 2)
+- [x] **`orient_closest_world`** — closest local axis to world **X / Y / Z** (default **Z** matches **`ikOrientToWorld`**)
+- [x] **`control_convertToWorldIK`** calls it with **`'z'`** (group + restored control rotate unchanged)
+- [x] cgm menu **Snap → Closest World Orient → X/Y/Z** (`cgmVar_closestWorldAxis`)
+- [x] cgmToolbox snap row — same optionVar radio + **Closest World Orient** button
+- [ ] Maya-verify menu pick and toolbox radio on a rotated control; **Y** when the closest axis is Z
+
 ### TD toolbox / cgm menu (Oct 7)
 - [x] **`rigging_utils`** — **`dag_lock`**, **`standard_attrs_hide`**, **`standard_attrs_unhide`**
 - [x] **cgmToolbox** Rigging **Flags:** row (under **Group:**) — dagLock, dagUnlock, Hide Std, Unhide Std
@@ -989,6 +1066,15 @@ cgmGEN._reloadMod(SCENEUTILS)
 - [x] **`segmentMidIKControl`** vs **`none`** setup — mid in influences without follow rig
 - [x] **`squashSkipAim`** on limb roll **`IK.ribbon` / `IK.curve`**
 - [ ] Maya-verify all **`segmentMidIKSetup`** modes on production arm/leg roll setup
+
+### Segment `buildEnd` + dag end `followIK` (Oct 30)
+- [x] **`buildEnd`** enum + prerig UI on Segment; **`simple`** profile **`dag`**
+- [x] **`skeleton_build`** terminal **`moduleJoint`** delete when **`dag`**
+- [x] **`b_ikNeedEnd`** + ikEnd append in **`rig_skeleton`**; **`followParentBank`** / FK cast buffer parity (limb-style)
+- [x] **`segment_ik_end_orient_follow_setup`** for **`buildEnd=dag`** end **`followIK`** (**`*_ikOrientFrame`** + **`ml_ikBlendUse`**)
+- [x] **`buildEnd=joint`** keeps **`segment_ik_spline_orient_follow_setup`** on last ik + **`mIKSplineEnd`**
+- [ ] Maya-verify dag + bezier/spline stretch (base IK chain stable; end **`followIK`** on orient frame)
+- [ ] Maya-verify **`buildEnd`** toggle after **`skeleton_build`** (helper / module joint count)
 
 ### MRS scaleSetup dyn-parent + pivot naming (Face26)
 - [x] Pivot result **`{partName}_pivotResult`** / **`{partName}_PivotResult`** (handle **`rig_frame`**, segment, limb ×2)
@@ -1242,6 +1328,7 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 - **scaleSetup dyn-parent**: default enum from block **attachPoint** on rebuilt **`dynParents`**; digit limbs gated by **`_LIMB_TEMP_SKIP_SCALE_SETUP_DIGIT`** until finger attach verified
 - **Pivot result naming**: **`{partName}_pivotResult`** on the same DAG null as **`pivotResultDriver`**; created in handle **`rig_frame`** (not prerig); **`pivots_setup`** parents that null at end of pivot chain — rebuild module for new names
 - **Segment followParentBank**: Limb-style parent bank at **`rigRoot`**; **`rig_followParentBankSetup`** after **`rig_frame`**; parent pivot in **`ml_dynParentsAbove`**; space menu **`followParentBank`** + parent **`_PivotResult`** alias — default **off** on Segment; see **`Feature_MRSWiring.md`**
+- **Segment `buildEnd`**: **`dag`** = no tip **`moduleJoint`**, optional **`b_ikNeedEnd`** ikEnd; end **`followIK`** on module-end **`*_ikOrientFrame`** when **`dag`** (not direct ik joint orient); **`joint`** = full skin chain + spline end follow on last ik — see **`Branch_BezierIK.md`** § **`buildEnd`**
 - **cgmMeta hierarchy**: **`asMeta=True`** on **`getParent`** / **`getChildren`** / **`getAllChildren`** / siblings / shapes / **`getListPathTo`** → **`_hierarchyQueryFullPath`** forces **`fullPath=True`** on **`listRelatives`**; string return paths keep per-method **`fullPath`** defaults — see **`Feature_CgmMetaAPI.md`**
 - **Handle proxyType**: **`geoOnly`** = Proxy Geo only; **`geoAdd`** = cast + Proxy Geo (legacy **`comboMesh`**); **`proxyGeo_add`** unlocks override attrs before **`color_mesh`** / **`colorControl`**
 - **Handle proxy shaders**: **`proxySetColorAdded`** (default **on**) — off = keep source materials on proxy/puppet geo; **`block_proxy_skip_shader_assignment`** in **`block_utils`**
@@ -1257,5 +1344,5 @@ Facial blocks store blockDat by **ordered lists**; adding a prerig handle (e.g. 
 
 ---
 
-*Last Updated: October 28, 2026 (`lipMidAim` muzzle rig attr; Segment/Head prerig POC + intermediate shape filter; form full-path POC)*
+*Last Updated: October 30, 2026 (Segment **`buildEnd`** + dag end **`followIK`** **`*_ikOrientFrame`**; Scene tmp full-path cleanup)*
 *Branch Status: Active*
