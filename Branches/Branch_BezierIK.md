@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 30, 2026 — Limb bezier wrist shape **`IndexError`** fix (**`fkAttachJoints`** vs **`ml_fkShapes`** length mismatch); Oct 29 Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
+**Last Updated**: November 2, 2026 — Fix: FK/IK scale blend read `*_ikOrientFrame`'s undriven scale at hips-base / **`buildEnd=dag`** end indices; added parallel **`ml_ikScaleUse`** chain (see [`Feature_BezierIK.md`](../Features/Feature_BezierIK.md) revision history); Oct 30 Limb bezier wrist shape **`IndexError`** fix (**`fkAttachJoints`** vs **`ml_fkShapes`** length mismatch); Oct 29 Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
 **PR**: Pending — see [fix list](#before-merge--pr-fix-list) (cleanup only)
 
 ## Before merge / PR (fix list)
@@ -65,6 +65,8 @@ Block enum on **Segment** (and **Limb**): **`buildEnd`** = **`dag`** \| **`joint
 Legacy bool **`hasEndJoint`** on old nodes is **ignored**; use **`buildEnd`**. **`ribbonAttachEndsToInfluence`** is unchanged (separate end-attach knob).
 
 **Files:** [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py); reference [`limb.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py).
+
+**Scale fix (Nov 2):** With `ikSetup=bezier`, `segmentType=parent`, `buildEnd=dag`, `scaleSetup` on — the module-end `*_ikOrientFrame` built for `followIK` (point + orient only, no driven `.scale`) was also being read as the FK/IK scale-blend source (`ml_ikBlendUse` fed both `blendChainsBy` and `blendChainsScaleByAttr`). Fixed via parallel `ml_ikScaleUse` chain — see [`Feature_BezierIK.md`](../Features/Feature_BezierIK.md) § Segment IK orient follow and revision history. Same fix applied to the hips-base `*_ikOrientFrame` substitution (symmetrical bug, not yet hit in practice).
 
 ## Tabled — come back later
 
