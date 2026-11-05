@@ -431,6 +431,22 @@ if isinstance( width, int ):
 
 **Scope**: only `mUI.Mel*` wrappers (classes deriving from `BaseMelWidget` / `BaseMelLayout` in `baseMelUI.py` — `MelButton`, `MelHLayout`, `MelColumnLayout`, `MelFrameLayout`, etc.) are affected. Raw `mc.*` calls (e.g. `mc.columnLayout(w=self.width)`) go straight to the Maya command, which coerces floats fine — the silent-drop behavior is purely in the Python wrapper layer.
 
+### Mix `mUI.Mel*` and raw `mc.*` controls inside the same stretch/weighted layout only with care — prefer `mUI.Mel*` for every sibling
+
+Real Maya crash in **`Shots.py`**'s per-shot `MelHSingleStretchLayout` row: every sibling (`minButton`, `maxButton`, `frameBtn`, `removeBtn`) was built with `mUI.MelButton(...)` / `mUI.MelIconButton(...)`, but `nameField` — the row's **stretch widget** — was built with a raw `mc.textField(parent=_row, ...)` call instead of `mUI.MelTextField(_row, ...)`. Result:
+
+```
+ValueError: 'pyunify_ShotsUI|columnLayout20|...|textField160' is not in list
+```
+
+**Mechanism**: a raw `mc.*` call returns Maya's own full **long UI path** string for the new control. Every `mUI.Mel*` wrapper (any `BaseWidget`/`BaseMelWidget` subclass in [`baseMelUI.py`](../../cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py) — `MelButton`, `MelTextField`, `MelIconButton`, `MelSpacer`, etc.) instead always returns a **short/leaf unique name** (`BaseMelWidget.__new__` explicitly generates one, e.g. `MelButtonN__`, and returns that, never the long path). Layout classes that track children **by identity** for layout math — `MelHSingleStretchLayout.layout()` resolves children via `self(q=True, ca=True)` (Maya `-childArray`, which returns short/leaf names) and `setStretchWidget()`/`.layout()` do `children.index(stretchWidget)` against that list — silently break the moment one sibling's handle is a long path instead of a short name: `children.index(...)` can't find it.
+
+**Why it goes unnoticed until it crashes**: the mismatch only surfaces when Maya actually needs to look up the mismatched control by identity — concretely, only when that raw-`mc.*` control happens to be the one passed to `setStretchWidget()`. A raw `mc.*` control used as a *non*-stretch sibling in the same row is never looked up by identity, so it can sit there "working" for a long time before someone makes it (or another raw-`mc.*` control) the stretch widget and the layout crashes with no warning.
+
+**Fix / rule going forward**: inside any `mUI.Mel*` layout (`MelHLayout`, `MelHSingleStretchLayout`, `MelVLayout`, or anything else in `baseMelUI.py` that calls `self.getChildren()` / does `children.index(...)` / otherwise tracks children by identity for sizing), create **every** child via the matching `mUI.Mel*` wrapper — `mUI.MelTextField` (not `mc.textField`), `mUI.MelIntField` (not `mc.intField` — `MelIntField` exists in `baseMelUI.py`, so there is no excuse to go raw here), `mUI.MelButton` (not `mc.button`), `mUI.MelIconButton` (not raw `mc.iconTextButton`), `mUI.MelSpacer`, etc. — even though the raw `mc.*` call "works" for simple creation/parenting. `MelFloatField` also exists in `baseMelUI.py` and should be used over `mc.floatField` for the same reason.
+
+**Reference**: `Shots.py`'s per-shot `MelHSingleStretchLayout` row — `nameField` needed to switch from `mc.textField(parent=_row, ...)` to `mUI.MelTextField(_row, ...)` to fix the crash above, since it was the row's designated stretch widget.
+
 ### Full-width row + per-column widths must share one source of truth
 
 Pitfall when a tool mixes an outer full-width stretch row (e.g. a bottom `mUI.MelButton(..., w=self.width, ...)` action row) with sibling per-row `rowColumnLayout`s that carry their own `columnWidth=` list — **`Shots.py`**'s per-shot rows vs its outer `columnLayout(w=self.width)` and bottom "Add Sub Animation" / "Refresh" row.
@@ -554,6 +570,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | Store command items (`New`) in the optionVar | Next open lands on a prompt, not a real target | Run the command, then persist the created/selected value (cgmAnimClip Layer) |
 | Bottom full-width row (`w=self.width`) sized separately from sibling per-row `columnWidth=` list | Widths drift apart as columns are added/removed — gap under per-row columns, or full-width row no longer looks full-width | Define column widths once; derive `self.width = sum(widths)`; size every full-width control off that one list — see **Full-width row + per-column widths must share one source of truth** (Shots.py) |
 | Passing a float `w=`/`h=` to `mUI.Mel*` | `BaseMelWidget.__new__` silently drops it via `isinstance(..., int)` check — no error, falls back to default size | `int(...)` the value at the call site (or wherever it's computed); only affects `mUI.Mel*` wrappers, not raw `mc.*` calls — see **`mUI.Mel*` silently drops a non-`int` `w=`/`h=` kwarg** (Shots.py) |
+| Raw `mc.*` control (e.g. `mc.textField`) as a child/stretch-widget inside a `mUI.Mel*` layout (`MelHLayout`, `MelHSingleStretchLayout`, etc.) | Raw `mc.*` returns a full long UI path; `mUI.Mel*` wrappers return a short leaf name — layout classes that index children by identity (`setStretchWidget` → `children.index(...)`) crash with `ValueError: '<long path>' is not in list`, often only for the specific control chosen as the stretch target | Use the matching `mUI.Mel*` wrapper (`MelTextField`, `MelButton`, `MelIconButton`, etc.) for every child of a `mUI.Mel*` layout — see **Mix `mUI.Mel*` and raw `mc.*` controls inside the same stretch/weighted layout only with care** (Shots.py) |
 
 ---
 
@@ -613,7 +630,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
-| 2026-11-05 | Shots.py: `ut='cgmUITemplate'` does not style `MelIconButton`/`iconTextButton` (only `cmd.button` registers a `dt=` entry) — pass `bgc=cgmUI.guiButtonColor` explicitly; full-width stretch row and per-row `columnWidth=` list must derive from one shared width source or they drift apart; `mUI.Mel*` (`BaseMelWidget.__new__`) silently drops a non-`int` `w=`/`h=` kwarg — float widths from `self.cw * <float>` arithmetic get dropped with no error |
+| 2026-11-05 | Shots.py: `ut='cgmUITemplate'` does not style `MelIconButton`/`iconTextButton` (only `cmd.button` registers a `dt=` entry) — pass `bgc=cgmUI.guiButtonColor` explicitly; full-width stretch row and per-row `columnWidth=` list must derive from one shared width source or they drift apart; `mUI.Mel*` (`BaseMelWidget.__new__`) silently drops a non-`int` `w=`/`h=` kwarg — float widths from `self.cw * <float>` arithmetic get dropped with no error; a raw `mc.textField` used as a `MelHSingleStretchLayout`'s stretch widget crashed with `ValueError: '<long path>' is not in list` because raw `mc.*` returns a long UI path while `mUI.Mel*` wrappers return a short leaf name that `children.index(...)` can find — use `mUI.Mel*` for every child of a `mUI.Mel*` layout |
 | 2026-10-19 | Scene file-list RMB popup: do not `_rebuildFileListPopup` in `pmc` (menu-click crash); Send To Build `en=False` for `*_BUILD` via `is_mrs_build_output_scene` + path resolve; anti-patterns |
 | 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
 | 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
