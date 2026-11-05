@@ -411,6 +411,26 @@ _row.layout()
 
 **Avoid** relying on **`MelFormLayout`** alone for this case: attaching the label to all four edges centers text inside the form, but the form may still shrink to content width when the parent column does not stretch.
 
+### `mUI.Mel*` silently drops a non-`int` `w=`/`h=` kwarg
+
+Pitfall closely related to the one below, same file: **`Shots.py`**'s bottom `MelHLayout` button row passed `w=self.width`, where `self.width` was `sum()` of `self.cw * 2.9`-style expressions (e.g. `100 * 2.9 = 290.0`) — a Python `float`. The width kwarg was **silently ignored**: no error, no warning, no log line. It took several debugging passes — trying `MelHSingleStretchLayout`, trying different layout nesting, re-adding `w=self.width` without noticing it still didn't apply — before `BaseMelWidget.__new__` in [`baseMelUI.py`](../../cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py) (~line 103-121) turned out to be the actual cause:
+
+```python
+width = kw.pop( 'w', kw.pop( 'width', cls.DEFAULT_WIDTH ) )
+if isinstance( width, int ):
+    kw[ 'width' ] = width
+```
+
+**Mechanism**: `w=`/`width=` (and the matching `h=`/`height=` pair) are popped out of the kwargs dict unconditionally, then only put back if `isinstance(value, int)`. A `float` fails that check and the value is simply dropped — the underlying Maya command never receives a width/height at all, and the control falls back to its default/content-sized width.
+
+**Why it's easy to hit**: any width/height built from `self.cw * 0.25`-style float arithmetic — a very common cgm pattern for proportional column/row sizing — produces a Python `float`, not an `int`, even when the result is a "round" number like `290.0`.
+
+**Symptom**: no exception, no log output — the control just silently renders at default/content size, which looks identical to "the layout logic itself is wrong." That similarity is what burns debugging time chasing the wrong cause (layout nesting, wrong layout class) before someone checks the actual kwarg type.
+
+**Fix**: wrap in `int(...)` at the call site when passing a computed/float width to any `mUI.Mel*` constructor — e.g. `mUI.MelHLayout(parent, w=int(self.width))`. If a file already derives pixel widths from float arithmetic broadly, prefer rounding/int-casting **once**, at the point the width value is computed/stored, over patching every call site.
+
+**Scope**: only `mUI.Mel*` wrappers (classes deriving from `BaseMelWidget` / `BaseMelLayout` in `baseMelUI.py` — `MelButton`, `MelHLayout`, `MelColumnLayout`, `MelFrameLayout`, etc.) are affected. Raw `mc.*` calls (e.g. `mc.columnLayout(w=self.width)`) go straight to the Maya command, which coerces floats fine — the silent-drop behavior is purely in the Python wrapper layer.
+
 ### Full-width row + per-column widths must share one source of truth
 
 Pitfall when a tool mixes an outer full-width stretch row (e.g. a bottom `mUI.MelButton(..., w=self.width, ...)` action row) with sibling per-row `rowColumnLayout`s that carry their own `columnWidth=` list — **`Shots.py`**'s per-shot rows vs its outer `columnLayout(w=self.width)` and bottom "Add Sub Animation" / "Refresh" row.
@@ -533,6 +553,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | `MelIconButton` with large/default icon art (not **25×25** `*_25.png`) next to **h=20** labels | Row/form grows taller than labels; visible slack under status/map rows | **`w=25` `h=25`**, `iconOnly`, `*_25.png` icons; inner scroll column **`rowSpacing=0`**; pin form height if needed — see **Icon buttons in horizontal tool rows** |
 | Store command items (`New`) in the optionVar | Next open lands on a prompt, not a real target | Run the command, then persist the created/selected value (cgmAnimClip Layer) |
 | Bottom full-width row (`w=self.width`) sized separately from sibling per-row `columnWidth=` list | Widths drift apart as columns are added/removed — gap under per-row columns, or full-width row no longer looks full-width | Define column widths once; derive `self.width = sum(widths)`; size every full-width control off that one list — see **Full-width row + per-column widths must share one source of truth** (Shots.py) |
+| Passing a float `w=`/`h=` to `mUI.Mel*` | `BaseMelWidget.__new__` silently drops it via `isinstance(..., int)` check — no error, falls back to default size | `int(...)` the value at the call site (or wherever it's computed); only affects `mUI.Mel*` wrappers, not raw `mc.*` calls — see **`mUI.Mel*` silently drops a non-`int` `w=`/`h=` kwarg** (Shots.py) |
 
 ---
 
@@ -592,7 +613,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
-| 2026-11-05 | Shots.py: `ut='cgmUITemplate'` does not style `MelIconButton`/`iconTextButton` (only `cmd.button` registers a `dt=` entry) — pass `bgc=cgmUI.guiButtonColor` explicitly; full-width stretch row and per-row `columnWidth=` list must derive from one shared width source or they drift apart |
+| 2026-11-05 | Shots.py: `ut='cgmUITemplate'` does not style `MelIconButton`/`iconTextButton` (only `cmd.button` registers a `dt=` entry) — pass `bgc=cgmUI.guiButtonColor` explicitly; full-width stretch row and per-row `columnWidth=` list must derive from one shared width source or they drift apart; `mUI.Mel*` (`BaseMelWidget.__new__`) silently drops a non-`int` `w=`/`h=` kwarg — float widths from `self.cw * <float>` arithmetic get dropped with no error |
 | 2026-10-19 | Scene file-list RMB popup: do not `_rebuildFileListPopup` in `pmc` (menu-click crash); Send To Build `en=False` for `*_BUILD` via `is_mrs_build_output_scene` + path resolve; anti-patterns |
 | 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
 | 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
