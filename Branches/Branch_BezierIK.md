@@ -4,7 +4,7 @@
 
 **Status**: Active  
 **Created**: October 12, 2026  
-**Last Updated**: October 30, 2026 — Limb bezier wrist shape **`IndexError`** fix (**`fkAttachJoints`** vs **`ml_fkShapes`** length mismatch); Oct 29 Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
+**Last Updated**: November 5, 2026 — ShotList tool UI overhaul (unrelated incidental work — see Timeline); Nov 2 Fix: FK/IK scale blend read `*_ikOrientFrame`'s undriven scale at hips-base / **`buildEnd=dag`** end indices; added parallel **`ml_ikScaleUse`** chain (see [`Feature_BezierIK.md`](../Features/Feature_BezierIK.md) revision history); Oct 30 Limb bezier wrist shape **`IndexError`** fix (**`fkAttachJoints`** vs **`ml_fkShapes`** length mismatch); Oct 29 Segment **`buildEnd`** (dag/joint skin tip); module IK stretch profile (**translate** on **`ikJoints`** when **`segmentType` ≠ parent**); Head **`neckIK=bezier`** parity; Oct 28 **`ikEndFrameHandle`** / **`inflateScale`**  
 **PR**: Pending — see [fix list](#before-merge--pr-fix-list) (cleanup only)
 
 ## Before merge / PR (fix list)
@@ -65,6 +65,8 @@ Block enum on **Segment** (and **Limb**): **`buildEnd`** = **`dag`** \| **`joint
 Legacy bool **`hasEndJoint`** on old nodes is **ignored**; use **`buildEnd`**. **`ribbonAttachEndsToInfluence`** is unchanged (separate end-attach knob).
 
 **Files:** [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py); reference [`limb.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/limb.py).
+
+**Scale fix (Nov 2):** With `ikSetup=bezier`, `segmentType=parent`, `buildEnd=dag`, `scaleSetup` on — the module-end `*_ikOrientFrame` built for `followIK` (point + orient only, no driven `.scale`) was also being read as the FK/IK scale-blend source (`ml_ikBlendUse` fed both `blendChainsBy` and `blendChainsScaleByAttr`). Fixed via parallel `ml_ikScaleUse` chain — see [`Feature_BezierIK.md`](../Features/Feature_BezierIK.md) § Segment IK orient follow and revision history. Same fix applied to the hips-base `*_ikOrientFrame` substitution (symmetrical bug, not yet hit in practice).
 
 ## Tabled — come back later
 
@@ -184,6 +186,25 @@ For each prototype batch (chat or file path):
 ---
 
 ## Timeline
+
+### November 5, 2026 - ShotList (Sub Animation List) tool UI overhaul
+
+**Not Bezier IK work** — incidental tool UI session that happened to land on this branch/checkout. Scope is `cgm/core/mrs/Shots.py` only; no Bezier IK logic touched.
+
+**What**:
+
+- **Resizable layout:** window now **`sizeable=True`** with an adjustable outer `columnLayout`; each shot row rebuilt on **`mUI.MelHSingleStretchLayout`** with the name **`textField`** as the single stretch widget and every other control (start/end int fields, length, Frame button, Remove icon, spacers) pinned to fixed widths off one shared **`self._colWidths`** list (**`self.width = sum(...)`** single source of truth). Header row mirrors the same stretch structure, including matching trailing placeholder spacers, so header and body columns stay aligned.
+- **Styling pass:** all buttons converted from raw **`mc.button`** to **`mUI.MelButton`** / **`mUI.MelIconButton`** with **`ut='cgmUITemplate'`**; header restyled with **`ut='cgmUIHeaderTemplate'`** + explicit **`bgc=cgmUI.guiHeaderColor`** (template alone doesn't cover **`mc.button`**). Remove control switched to a **`MelIconButton`** (**`clear.png`**) with explicit **`bgc`** + **`style='iconOnly'`**, plus a **`mc.confirmDialog`** guard before removing a shot. Bottom Add/Refresh row rebuilt as an evenly-split **`mUI.MelHLayout`** (matches `toolbox.py`'s Snap section pattern) instead of two stacked fixed-width buttons.
+- **Field wrappers + highlighting:** Name/Start/End/Frames fields switched to white backgrounds and to **`mUI.MelTextField`** / **`mUI.MelIntField`** wrappers instead of raw **`mc.textField`** / **`mc.intField`** — raw controls return a long UI path that broke **`MelHSingleStretchLayout.setStretchWidget()`**'s identity lookup. Row in-range highlighting unified so every control in a row (name, `<`/`>`, start/end/length, Frame, spacers — spacers switched from **`MelSpacer`** to **`MelLabel`** since **`MelSpacer`** takes no background color) toggles together, replacing the old partial-field highlight.
+- **Keyboard focus fix (unconfirmed):** Frame/`<`/`>` now release focus via a deferred **`mc.evalDeferred`** onto a dedicated 1x1 inert "focus trap" **`MelTextField`** in the same top-level window, so typing doesn't land back in the shot name field — needed because the tool is a separate floating window from Maya's main window, and targeting a modelPanel via **`mc.setFocus`** didn't reliably steal Qt focus across windows. No existing codebase precedent for this pattern; reasoned fix only.
+- **Investigated, not implemented:** centering numbers in the int fields — Maya's **`intField`** command has no alignment flag (confirmed via `baseMelUI.py` and a full grep of `intField` usage in `cgm/core/`), so left as-is rather than silently no-op; name field stays left-justified.
+- Companion doc **[`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md)** updated multiple times in the same session with the underlying pitfalls (template-per-widget-type coverage, float `w=`/`h=` silently dropped by `mUI.Mel*`, raw `mc.*` vs `mUI.Mel*` long-path mismatch in stretch layouts, header/body stretch-width total matching) — reference that for similar issues in other tools.
+
+**Files**: `cgm/core/mrs/Shots.py`; `Features/Feature_CgmToolUI.md` (pitfalls only, updated during this session).
+
+**Status**: Code in tree — Maya verify (window resize/stretch behavior, row highlighting, remove confirm dialog, and especially the keyboard-focus-release fix, which is unconfirmed).
+
+---
 
 ### October 30, 2026 - Limb bezier wrist shape `IndexError` (`fkAttachJoints` length mismatch)
 
