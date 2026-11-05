@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Living document — initial capture from mocapBakeTools list refactor + Builder scroll-list patterns (August 2026)
-- **Last Updated**: October 19, 2026
+- **Last Updated**: November 5, 2026
 - **Audience**: Dev / TA / agents — design contract for **Maya tool windows** under `cgm/core/tools/`, `cgm/core/mrs/`, and related UI helpers
 - **Purpose**: Prevent **display strings from polluting saved data** (CCL, optionVars, scene presets, message attrs). Document how cgm tools keep **canonical data** and **UI labels** separate, and how scroll lists map selection back to data by **index**, not by parsing row text.
 
@@ -411,6 +411,14 @@ _row.layout()
 
 **Avoid** relying on **`MelFormLayout`** alone for this case: attaching the label to all four edges centers text inside the form, but the form may still shrink to content width when the parent column does not stretch.
 
+### Full-width row + per-column widths must share one source of truth
+
+Pitfall when a tool mixes an outer full-width stretch row (e.g. a bottom `mUI.MelButton(..., w=self.width, ...)` action row) with sibling per-row `rowColumnLayout`s that carry their own `columnWidth=` list — **`Shots.py`**'s per-shot rows vs its outer `columnLayout(w=self.width)` and bottom "Add Sub Animation" / "Refresh" row.
+
+**Symptom**: adding a column to the per-row layout (e.g. a spacer + a narrower Remove-icon column) without re-deriving `self.width` from that same list — the per-row columns either leave a visible gap short of `self.width`, or (if `self.width` is instead recomputed from the column list) the bottom full-width buttons shrink and stop looking like they stretch to the tool's original width.
+
+**Fix**: Define column widths **once** (e.g. an instance list such as `self._l_shotRow_colWidths`), derive `self.width` as `sum()` of that same list, and size every full-width control — outer `columnLayout`, bottom button row, header row, per-shot `rowColumnLayout`s — off that one definition. Never hand-tune `self.width` as a separate constant alongside a per-row `columnWidth=` list.
+
 ### Icon buttons in horizontal tool rows
 
 Pinned status rows and map rows often mix **`MelLabel`** / **`MelButton`** at **`h=20`** with **`MelIconButton`** (`iconTextButton`). **Wrong icon art or size is a common cause of extra vertical space** under the row (gray band below widgets inside the form, or gap before the next frame).
@@ -420,6 +428,7 @@ Pinned status rows and map rows often mix **`MelLabel`** / **`MelButton`** at **
 | **Non-25px icon images** (e.g. `select.png` beside `select_25.png` / `set_25.png`) | Maya enforces a **taller minimum control height** than adjacent 20px labels; **`MelHSingleStretchLayout`** grows vertically | Use **25×25** assets from the cgm image folder: **`set_25.png`**, **`select_25.png`**, etc. Set **`w=25`**, **`h=25`**, **`style='iconOnly'`**, **`ut='cgmUITemplate'`**, **`bgc=cgmUI.guiButtonColor`** |
 | **Icon row on `MelScrollLayout` without inner column** | Multiple direct scroll children stack with default spacing | Wrap scroll content in **`MelColumnLayout`** with **`rowSpacing=0`**, **`columnAttach=('both', 0)`** |
 | **Form still taller than widgets** | `iconTextButton` margin / template slack | After **`_row.layout(expand=False)`**, optionally set form **`height=20`** (or max child height) and **top/bottom**-attach children at **0** — see **`_ui_compact_hstretch_row`** in [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py) |
+| **`ut='cgmUITemplate'` on a `MelIconButton`** | `cgmUITemplate` only registers a deferred-template entry for `cmd.button` (`mc.button(dt='cgmUITemplate', backgroundColor=guiButtonColor, ...)` in `GuiFactory.initializeTemplates()`); Maya `uiTemplate` `dt=` entries key off the exact widget command, so `MelIconButton` (`WIDGET_CMD = cmd.iconTextButton`) never matches and silently keeps Maya's default icon-button look even when tagged `ut='cgmUITemplate'` | Pass **`bgc=cgmUI.guiButtonColor`** explicitly on the `MelIconButton` call (with `style='iconOnly'`) — don't rely on `ut=`/`dt=` to style it. See `cgm_Dat.py` ~line 936, `animClip_dat.py` ~line 1435; hit in `Shots.py`'s per-row Remove icon button, which stayed unstyled next to sibling `mc.button` controls |
 
 **Shared helper (cgmDynSimTool):** **`_dynfk_icon_btn_kw(image_name)`** — same contract as animClip_dat / Scene icon rows.
 
@@ -523,6 +532,7 @@ Reference: [`animFilterTool.py`](../../cgmToolsPy3/cgm/core/tools/animFilterTool
 | `MelTextField` with `enable=False` on `cgmUISubTemplate` rows | Disabled Maya field = dark text on dark row; unreadable | Keep `enable=True`; toggle `editable=False` + `bgc=SHARED._d_gui_state_colors['help']` when inactive, `editable=True` + `['normal']` when active (Scene.py / cgmDynSimTool follicle segment length) |
 | `MelIconButton` with large/default icon art (not **25×25** `*_25.png`) next to **h=20** labels | Row/form grows taller than labels; visible slack under status/map rows | **`w=25` `h=25`**, `iconOnly`, `*_25.png` icons; inner scroll column **`rowSpacing=0`**; pin form height if needed — see **Icon buttons in horizontal tool rows** |
 | Store command items (`New`) in the optionVar | Next open lands on a prompt, not a real target | Run the command, then persist the created/selected value (cgmAnimClip Layer) |
+| Bottom full-width row (`w=self.width`) sized separately from sibling per-row `columnWidth=` list | Widths drift apart as columns are added/removed — gap under per-row columns, or full-width row no longer looks full-width | Define column widths once; derive `self.width = sum(widths)`; size every full-width control off that one list — see **Full-width row + per-column widths must share one source of truth** (Shots.py) |
 
 ---
 
@@ -582,6 +592,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-11-05 | Shots.py: `ut='cgmUITemplate'` does not style `MelIconButton`/`iconTextButton` (only `cmd.button` registers a `dt=` entry) — pass `bgc=cgmUI.guiButtonColor` explicitly; full-width stretch row and per-row `columnWidth=` list must derive from one shared width source or they drift apart |
 | 2026-10-19 | Scene file-list RMB popup: do not `_rebuildFileListPopup` in `pmc` (menu-click crash); Send To Build `en=False` for `*_BUILD` via `is_mrs_build_output_scene` + path resolve; anti-patterns |
 | 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
 | 2026-08-31 | mrsAnimClip: `uiBuild_pinned_chrome` under Dat file bar so PoseManager context stays visible while CLIP CONTENTS scrolls |
