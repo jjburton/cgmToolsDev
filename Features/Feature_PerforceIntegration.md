@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Active — FBX export preflight + Scene auto checkout + mayapy batch P4 context + batch P4 prepare summary + batch auto checkout gate + all-path preflight + cgmP4 revert path fix + Scene meta sidecars + cgmP4 default CL partial submit + **interactive skip-add** shipped; **`useP4OnExport` export-only flag still TBD** |
-| **Last Updated** | August 19, 2026 (fstat cache client-root keys) |
+| **Last Updated** | November 10, 2026 (offline: new files allowed, existing blocked) |
 | **Owners** | TBD |
 | **Audience** | Dev / TA — design contract for optional P4 incorporation in cgm tools |
 | **Branch** | [`Branch_p4.md`](../Branches/Branch_p4.md) |
@@ -237,6 +237,7 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `query_files_status(paths, …)` | Batch `p4 fstat` — cache-first; dict **client-root disk** normpath → same shape as `query_file_status` (Scene browser column load); `clientFile` matched after UNC→disk map |
 | `invalidate_fstat_paths(paths, …)` | Drop cached fstat for specific paths (P4 writes) |
 | `invalidate_fstat_directory(dir_path, …)` | Drop cached fstat for all paths under a directory (Scene column Refresh) |
+| `get_cached_file_status(path, …)` | Session fstat cache lookup only — no subprocess; used by offline save gate |
 | `classify_file_status_ui(file_dat)` | Map fstat dict → Scene UI key: `locked_by_other` \| `checked_out` \| `marked_for_add` \| `out_of_sync` \| `unknown` \| `None` |
 | `file_status_ui_suffix(file_dat, status_key)` | Display-only alias parenthetical, e.g. `(locked-by-other)` |
 | `is_under_client(path, …)` | True when path is in current client workspace view |
@@ -322,7 +323,7 @@ When `d_project['versionControl'] == 'perforce'`, scoped writes through **`path_
 
 | Function | Responsibility |
 |----------|----------------|
-| `prepare_output_for_write(path, mDat=None, use_p4=None, confirm_p4=True, p4_add=False, …)` | Global prepare — mkdir parent, optional P4 fstat + checkout confirm, writability check. Default skip add |
+| `prepare_output_for_write(path, mDat=None, use_p4=None, confirm_p4=True, p4_add=False, …)` | Global prepare — mkdir parent, optional P4 fstat + checkout confirm, writability check. Default skip add; offline: new files write, existing files blocked unless session cache says checked-out / add / unknown |
 | `get_project_mDat()` | Load project cfg from `cgmVar_projectCurrent` |
 | `path_in_p4_scope(path, mDat, extra_roots=())` | Path filter **within** P4-enabled project |
 | `prepare_paths_for_write(paths, …)` | Multi-path loop; resolves `use_p4` per path |
@@ -346,7 +347,7 @@ When `d_project['versionControl'] == 'perforce'`, scoped writes through **`path_
 
 Open-scene guard: refresh/thumb blocked when selected version file ≠ open scene (`_meta_open_file_matches_selection`).
 
-**P4 prepare sequence** (when connected; skipped silently when P4 offline):
+**P4 prepare sequence** (when connected):
 
 1. `query_file_status` (`p4 fstat`)
 2. **Block** if on depot and **out of date** (`haveRev < headRev`) — dialog + `PathWritePrepareError`; artist must sync first
@@ -355,6 +356,12 @@ Open-scene guard: refresh/thumb blocked when selected version file ≠ open scen
 5. If synced read-only on depot — **`confirmDialog`**: Checkout / Cancel (default Cancel); on confirm — `p4 edit`
 6. If new file in client view — **no dialog, no `p4 add`** (`p4_add=False` default). Local write; add later via Find Unknowns or Scene popup Add
 7. If caller passed **`p4_add=True`** (export Auto Check Out) — silent `p4 add` (never an Add confirm)
+
+**Offline** (VC=perforce, not connected):
+
+- **New file** (not on disk) → local write, no prompt; ledger `p4_skipped_offline`
+- **Existing file** → allowed only if the session fstat cache (`perforce.get_cached_file_status`, no subprocess) classifies it as checked out by you / marked for add / unknown (not on depot); ledger `p4_skipped_offline`. Otherwise blocked: one-button dialog (interactive, `confirm_p4=True`) + `PathWritePrepareError` reason "P4 not connected — existing file requires checkout"; ledger `p4_offline_existing` (failure)
+- `p4_checkout=False` (batch, Auto Check Out off) keeps writability-only behavior
 
 **Callers:** pass `mDat=self` (project dat) so P4 opt-in resolves from project JSON. Batch/export may pass `confirm_p4=False` when wired (no dialogs on farm). Interactive saves never prompt to add.
 
@@ -403,10 +410,11 @@ Session ledger in **`path_utils`** records one entry per export path per stage (
 | `p4_edit` / `p4_add` / `p4_already_open` | P4 checkout succeeded or file already open |
 | `writable_no_p4` | Connected P4 run; no checkout required |
 | `p4_skipped_vc_off` | Project `versionControl` not perforce |
-| `p4_skipped_offline` | P4 not connected — writability-only |
+| `p4_skipped_offline` | P4 not connected — new file, or existing file cleared by session cache |
+| `p4_offline_existing` | P4 not connected — existing file blocked (no cached checkout) |
 | `p4_skipped_add_disabled` | Edit-only prepare (`p4_add=False`) |
 | `p4_skipped_auto_checkout_off` | Auto Check Out Export Files off (batch writability-only) |
-| `p4_not_in_client` / `p4_out_of_date` / `p4_locked` / `p4_checkout_failed` / `p4_user_cancel` | P4 prepare failed |
+| `p4_not_in_client` / `p4_out_of_date` / `p4_locked` / `p4_checkout_failed` / `p4_user_cancel` / `p4_offline_existing` | P4 prepare failed |
 | `not_writable` | Local writability check failed |
 
 **API:** `clear_export_prepare_records()` at batch start; `log_export_prepare_summary(_str_func)` at batch end. Optional `prepare_context={'sceneFile': ...}` on preflight attaches scene path to each ledger row. Failed batch items may include `p4Outcome` / `p4Reason` from `get_last_export_prepare_failure()`. Multi-path preflight failures: **`ExportPreflightFailedError.failures`** (list of `{path, reason, p4Outcome?, p4Reason?}`).
@@ -440,7 +448,7 @@ Implement inside **`cgm.core.lib.perforce`**, not zooPy `getDefaultWorkingDir()`
 | `d_project['versionControl']` | project JSON (General) | **`none`** | `perforce` enables P4 for project; status row in Project General |
 | `CGM_EXPORT_P4` | env `1`/`true`/`yes` | unset | Override for batch farm (export slice — planned) |
 | P4 session cache | `cgm.core.lib.perforce_session` | — | Module `_CACHE` holds `is_available`, `connection_info`, and full `query_connection` report keyed by `(user, client, scene_path)`. **Not** reloaded on cgmP4 open or `perforce.py` reload — survives both. Cleared in place on P4 writes (`flush_status_cache()`). Full flush: `reload_session_cache()` or `cgmGEN._reloadMod(perforce_session)`; cgmP4 **Setup → Reload** runs `reload_dependencies()` + module reload + `super().reload()` (standard cgm tool rebuild). **Logging:** cache hit/miss in `query_connection` / `query_project_p4_status` is `log.debug` — avoid `log.info` on hot paths (Scene calls project status many times per column refresh) |
-| P4 offline / unavailable | — | skip silently | Fall back to `path_utils` writability check only |
+| P4 offline / unavailable | — | new: write; existing: block | Existing files allowed only when session fstat cache shows checked-out / add / unknown |
 | `p4_checkout` on export preflight | function kwarg | **`True`** when interactive or Auto Check Out on | Batch with Auto Check Out **off**: **`False`** — writability only, no `p4 edit` |
 | `confirm_p4` on `prepare_output_for_write` | function kwarg | **`True`** | Interactive export with Auto Check Out off; set **`False`** for silent checkout or batch with Auto Check Out on |
 | `p4_add` on `prepare_output_for_write` | function kwarg | **`False`** | Interactive saves skip add (local write). **`True`** only for export Auto Check Out (silent add). Never an Add confirm dialog |
@@ -483,13 +491,15 @@ Complete before Phase 1 export wiring:
 - [ ] Already checked out by you — no confirm; save proceeds
 - [ ] New file (Save Version, first-time meta, pose) — no Add popup; local write; yellow unknown until Find Unknowns / Scene Add
 - [ ] Locked by another user — error message, no write
-- [ ] P4 offline with VC=perforce — skip P4; fail only if file still read-only locally
+- [ ] P4 offline with VC=perforce — new file (Save Version) saves with no dialog
+- [ ] P4 offline — save over existing synced file → "Perforce not connected" block, no write
+- [ ] P4 offline — file checked out earlier this session (cache warm) → save succeeds
 
 ### P4-enabled export cases (opt-in on — planned)
 
 - [ ] Export over existing synced FBX (read-only) → prepare with confirm or `confirm_p4=False` on farm → export succeeds
 - [ ] Export new FBX under depot path → silent add **only when Auto Check Out on**; otherwise local write (no Add popup)
-- [ ] P4 not installed / `p4 info` fails with flag on → skip P4; fail only if still read-only
+- [ ] P4 offline with Auto Check Out on → new FBX path `p4_skipped_offline`; existing FBX `p4_offline_existing` failure
 - [ ] Batch multi-shot: each path edited; summary shows P4 edit/add counts and no failed outcomes
 - [ ] Another user's lock → fail with actionable message (not FBX I/O)
 - [ ] `.bak` sidecar present + read-only target → prepare clears/adds/edits as expected
@@ -549,6 +559,7 @@ Record decisions in the **Decisions log** as they are resolved.
 | 2026-08-18 | Export `p4_checkout` gate | Separate from `confirm_p4`; batch Auto Check Out off skips `p4 edit`/`p4 add` |
 | 2026-08-18 | All-path export preflight | `ExportPreflightFailedError` — check every planned FBX path before fail |
 | 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; no Add confirm; checkout / locked / out-of-date only. Export `p4_add=autoCheckoutExportFiles` |
+| 2026-11-10 | Offline: new files allowed, existing blocked | New files are offline work; overwriting depot files without checkout/out-of-date/lock checks is unsafe. Session cache allows already-opened/unknown files |
 
 ---
 
@@ -573,6 +584,7 @@ Record decisions in the **Decisions log** as they are resolved.
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-11-10 | Offline save gate | New files write offline; existing files blocked unless session fstat cache shows checked-out/add/unknown; ledger `p4_offline_existing` |
 | 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; never Add confirm; checkout/locked/out-of-date only; export silent add when Auto Check Out on |
 | 2026-08-18 | Mayapy batch P4 + revert paths | Batch export context payload; `p4_add=False` for scratch batch scripts; cgmP4 `revert_opened_entry` / client-root path resolve |
 | 2026-08-18 | Batch auto checkout gate + all-path preflight | `p4_checkout`; `ExportPreflightFailedError` |

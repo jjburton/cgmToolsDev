@@ -26,6 +26,17 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 
 ---
 
+### November 10, 2026 - Offline save gate (new files write, existing blocked)
+**What**: With project `versionControl=perforce` and P4 not connected, `path_utils.prepare_output_for_write` no longer writes existing depot files blindly. New files (not on disk) write locally with no prompt (ledger `p4_skipped_offline`). Existing files are allowed only when the session fstat cache (`perforce.get_cached_file_status`, no subprocess) shows checked out by you, marked for add, or unknown (not on depot); otherwise blocked with a one-button dialog (interactive) and `PathWritePrepareError` "P4 not connected — existing file requires checkout" (ledger `p4_offline_existing`). `p4_checkout=False` (batch, Auto Check Out off) keeps writability-only behavior.  
+**Files**:
+- EXTENDED: `cgm/core/lib/path_utils.py` — offline branch in `prepare_output_for_write`; `p4_offline_existing` ledger outcome
+- EXTENDED: `cgm/core/lib/perforce.py` — `get_cached_file_status` (session fstat cache lookup, no subprocess)
+- EXTENDED: `Features/Feature_PerforceIntegration.md`, `Branches/Branch_p4.md`
+
+**Status**: verify in Maya — offline Save Version of a new file writes; offline save over a synced existing file is blocked; file checked out earlier this session (cache warm) saves offline
+
+---
+
 ### August 19, 2026 (ae) - Empty asset types persist; Fill Default Asset Types menu
 **What**: Project load/`fillDefaults` no longer injects `character` / `environment` / `prop` when `assetDat` is empty, so a scripts-style project stays empty after Save → Reload. Default types are opt-in: **Project Setup → Fill Default Asset Types** and **Scene File → Fill Default Asset Types** (additive; skips existing names). **Tools → Verify Asset Dirs** unchanged.  
 **Files**:
