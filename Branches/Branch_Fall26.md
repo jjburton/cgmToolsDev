@@ -14,7 +14,7 @@
 - **[Branch_Face26.md](Branch_Face26.md)** - Previous branch (merged via PR #19); facial block, Segment, and cgmMeta hierarchy work
 - **[Branch_BezierIK.md](Branch_BezierIK.md)** - Previous branch (merged via PR #18); Bezier/spline IK and ShotList UI
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch doc format
-- **[Feature_Name.md](../Features/Feature_Name.md)** - [Add feature docs as work starts]
+- **[Feature_MRSPivots.md](../Features/Feature_MRSPivots.md)** - MRS pivot pipeline, ballRotate frames
 
 ## 🗓️ Timeline
 
@@ -31,6 +31,22 @@
 - Branch starts from a clean `main` (no commits ahead yet)
 
 **Status**: ✅ Complete
+
+### November 10, 2026 - ballRotate pivot on rotated ground plane
+**What**: Handle/Segment `addPivot = ballRotate` rolled wrong when the base pivot wasn't world-aligned, and sank into the ground at 45°.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/lib/block_utils.py` (`pivots_setup`, ballRotate branch)
+- NEW: `Features/Feature_MRSPivots.md` (cgmToolsDev)
+
+**Features**:
+- `ballRoll` group (zeroed in tilt frame, parented before wiring) receives roll translate; `ballSpin` child at ball center receives rotation; `pivotResult` parents under `ballSpin`
+- Radius = half `pivotBall` bbox (was full diameter)
+
+**Decisions**:
+- Ground plane = `base_pivotHelper` frame (artist-rotatable); ball center/size = `ball_pivotHelper`
+- Handle with `rotPivotPlace = jointHelper` needs the joint helper aligned to the base pivot space — documented, not enforced (no helper yet)
+
+**Status**: ✅ Verified in Maya (user, with joint helper aligned)
 
 ---
 

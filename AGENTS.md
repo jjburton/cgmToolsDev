@@ -49,6 +49,8 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 19. **BlockCreate placement helpers design contract**: [`Features/Feature_BlockCreateHelpers.md`](Features/Feature_BlockCreateHelpers.md) — **`mrsHelpers`** msgList (`helpers_*`), Initialize/Build, height baseline pivots along profile **shapeDirection**, build size/snap, `blockCreate_open` reload. Timeline: [`Branches/Branch_Jan2026.md`](Branches/Branch_Jan2026.md). Update when changing `Helpers.py`, BlockCreate helper UI, or `mrsBlockCreate` entry.
 
+20. **MRS pivots design contract**: [`Features/Feature_MRSPivots.md`](Features/Feature_MRSPivots.md) — block **`addPivot`** (`simple` / `wobble*` / **`ballRotate`**), prerig **`pivotHelper`** → **`RIGSHAPES.pivotShapes`** → **`BLOCKUTILS.pivots_setup`** → **`pivotResult`**; ground frame = **`base_pivotHelper`**; ballRotate **`ballRoll`** (translate) / **`ballSpin`** (rotate at ball center) groups; Handle **joint helper must be aligned to the base pivot space**. Timeline: [`Branches/Branch_Fall26.md`](Branches/Branch_Fall26.md). Update when changing `pivots_setup`, `pivotShapes`, `add_ball_auto_roll`, or block pivot prerig.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.
