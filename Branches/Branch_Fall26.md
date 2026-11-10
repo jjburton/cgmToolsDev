@@ -5,7 +5,7 @@
 **Created**: November 10, 2026  
 **Last Updated**: November 10, 2026  
 **PR**: Pending  
-**py3 checkout**: `jburton/Fall26` (cut from `main` at `86b4b39`, after the Face26 merge — `__BRANCH` = `main`, `__RELEASE` = `26.11.06.01` in `cgm_General.py`; update `__BRANCH` when the first ship commit lands)
+**py3 checkout**: `jburton/Fall26` (cut from `main` at `86b4b39`, after the Face26 merge — `__BRANCH` = `Fall26`, `__RELEASE` = `26.11.06.01` in `cgm_General.py`)
 
 ## 🎯 Goals
 [2-3 sentence summary of what this branch accomplishes — TBD. Fall 2026 working branch following the Face26 and BezierIK merges.]
@@ -22,9 +22,10 @@
 **What**: Created `jburton/Fall26` in cgmToolsPy3 from `main` after the Face26 merge; started this branch doc  
 **Files**: 
 - NEW: `Branches/Branch_Fall26.md` (cgmToolsDev)
+- EXTENDED: `cgm/core/cgm_General.py` (`__BRANCH` = `Fall26`)
 
 **Features**:
-- None yet
+- Release metadata branch string set to Fall26
 
 **Decisions**:
 - Branch starts from a clean `main` (no commits ahead yet)
