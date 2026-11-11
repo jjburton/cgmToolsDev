@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: November 10, 2026  
-**Last Updated**: November 10, 2026  
+**Last Updated**: November 11, 2026  
 **PR**: Pending  
 **py3 checkout**: `jburton/Fall26` (cut from `main` at `86b4b39`, after the Face26 merge — `__BRANCH` = `Fall26`, `__RELEASE` = `26.11.06.01` in `cgm_General.py`)
 
@@ -15,6 +15,7 @@
 - **[Branch_BezierIK.md](Branch_BezierIK.md)** - Previous branch (merged via PR #18); Bezier/spline IK and ShotList UI
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch doc format
 - **[Feature_MRSPivots.md](../Features/Feature_MRSPivots.md)** - MRS pivot pipeline, ballRotate frames
+- **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Scene export pipeline; rig naming / unbaked rig options
 
 ## 🗓️ Timeline
 
@@ -61,6 +62,29 @@
 - `ShotUI` is a raw `mc.window`, not a zoo `BaseMelWindow`, so it calls `mc.scriptJob(event=('SceneOpened', ...), parent=self.window)` directly instead of `setSceneChangeCB`
 
 **Status**: 🔄 Verify in Maya (open scene with shots → open scene without → File → New)
+
+### November 11, 2026 - Scene rig export naming + unbaked rig export
+**What**: Two new project export options for Scene rig export (mode 3): pick the rig FBX name source, and skip bake/animation on rig export.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/lib/scene_export_utils.py` (`rig_export_file_name`, `resolve_rig_export_file_name`; `sub_asset` / `variation` / `rig_export_name` on `resolve_export_fbx_paths`)
+- EXTENDED: `cgm/core/mrs/Scene.py` (`ExportScene` kwargs `rigExportName`, `bakeRigExport`, `variation`; `RunExportCommand`, `batch_buildFile`, `BatchExport` wiring)
+- EXTENDED: `cgm/core/tools/lib/project_utils.py` (`_exportOptionSettings`: `rigExportName`, `bakeRigExport`)
+- EXTENDED: `cgm/core/cgm_General.py` (`fbx_export_preamble(include_animation=)`)
+- EXTENDED: `cgm/assets/example_project.cfg`
+- EXTENDED: `Features/Feature_SceneExportFlow.md` (cgmToolsDev)
+
+**Features**:
+- **Rig export naming** (`rigExportName`): `namespace` (default, legacy `{refNamespace}_rig.fbx`) or `generated` (`{asset}_{subAsset}_{variation}_rig.fbx`, e.g. `Crate_Hero_red_rig.fbx`; `rig` always last, missing tokens dropped)
+- **Bake rig export** (`bakeRigExport`, default **off**): rig export skips `Bake()` and writes FBX with the Animation group off; prep + FBX still run. On = legacy bake
+- Preflight and `ExportScene` share one name resolver, so planned path = written path
+
+**Decisions**:
+- Asset token for `generated` = `exportAssetPath` leaf (browser asset), so interactive and batch agree without a new kwarg
+- Sub asset / variation are Sets / Variation list **folders** only (version files in those lists are ignored)
+- Fixed batch payload key mismatch: RunExportCommand wrote `subSet`, BatchExport read `set` — now reads `subSet` with `set` fallback; batch queue now sends `subSet` + `variation`
+- Multi-root rig (combined FBX) still uses browser `exportName` — not changed
+
+**Status**: ✅ Verified in Maya (user)
 
 ---
 

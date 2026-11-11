@@ -3,7 +3,7 @@
 ## Status and Overview
 
 - **Status**: Shipped (UnrealWorkflow branch, June 2026)
-- **Last Updated**: August 19, 2026 (export `p4_add` tied to Auto Check Out; no Add confirm)
+- **Last Updated**: November 11, 2026 (rig export naming + unbaked rig export options)
 - **Audience**: Dev / TA — design contract for export pipeline behavior (not artist manual prose)
 - **Purpose**: Canonical reference for what Scene export does, in what order, and what rig/scene setup must look like. Use when debugging regressions, reviewing PRs, or aligning on tdSet / namespace / selection semantics.
 
@@ -85,7 +85,7 @@ Modes come from `RunExportCommand` (`Scene.py` mode arg) or `ExportScene(mode=�
 | 0 | bake | Yes | Yes | No | `exportFBXFile=False` — bake + prep only; writes `*_baked.mb` rename target |
 | 1 | export | Yes | Yes | Yes | Single-asset anim; multi-root **prompts** cutscene confirm |
 | 2 | cutscene | Yes | Yes | Yes | `exportAsCutscene`, per-shot FBX under animation folder; mesh strip from project **`deleteMesh`** (default off) |
-| 3 | rig | Yes | Yes | Yes | `exportAsRig`; multi-root → **one** combined FBX at asset path |
+| 3 | rig | Only if `bakeRigExport` | Yes | Yes | `exportAsRig`; multi-root → **one** combined FBX at asset path. Default (`bakeRigExport=False`): no bake, FBX written **without animation** |
 | 4 | static | No | No | Yes | Skips bake and prep; optional `BreakTextureLinks` only |
 
 **Auto-detect** (`mode=-1`): if multiple `exportObjs` → mode 2 (cutscene); if one → mode 1 (anim).
@@ -105,7 +105,7 @@ High-level order inside `ExportScene`:
 5. **`AnimList` load** + effective export name (`noShotListExportName`)
 6. **Export preflight** — `resolve_export_fbx_paths()` then `preflight_export_output_paths()` for all planned FBX paths **before bake** (writability always; P4 when VC=perforce + connected). **All paths are checked** before fail; multi-path cutscene exports log every failure (`ExportPreflightFailedError`). Interactive: checkout with confirm unless **Auto Check Out Export Files** is on. Batch/mayapy: checkout **only** when Auto Check Out is on (`p4_checkout`); requires batch payload **P4 context** (see below).
 7. Rename scene to `*_baked.mb` (safety copy target)
-8. **`Bake(exportObjs, …)`** — unless `exportStatic`; frame range from `AnimList` shot list when present (see **Shot list and bake frame range** below)
+8. **`Bake(exportObjs, …)`** — unless `exportStatic`, or rig mode with `bakeRigExport=False` (log `Rig export | bakeRigExport=False | skipping bake`); frame range from `AnimList` shot list when present (see **Shot list and bake frame range** below)
 9. **`ensure_fbx_plugin`** — before any FBX write
 10. **Per export hint** (`for obj in exportObjs`):
    - Referenced → `Prep(…)`
@@ -320,8 +320,17 @@ Path roots built in `RunExportCommand`:
 |------|-----------------|--------|
 | **Anim (1)** | `exportAnimPath / exportName` | Single FBX or per-shot files under `exportAnimPath` when `exportShotsToIndividualFiles` |
 | **Cutscene (2)** | `exportAnimPath / {animationName}/` when animation name set | Per-shot: `{shotName}_{assetName}.fbx` where `assetName` = first namespace token of hint (e.g. `Crane` from `Crane:master`) |
-| **Rig (3)** | `exportAssetPath / {assetName}_rig.fbx` | Multi-root: single combined file; `fbx_export_preamble(clear_takes=False)` |
+| **Rig (3)** | `exportAssetPath / ` per **`rigExportName`** (below) | Multi-root: single combined file at `exportName`; `fbx_export_preamble(clear_takes=False, include_animation=bakeRigExport)` |
 | **Static (4)** | `exportAssetPath / {p_nameBase}.fbx` | No bake/prep |
+
+**Rig naming** (`rigExportName`, single-root rig only; resolved by `scene_export_utils.resolve_rig_export_file_name`, shared by preflight and `ExportScene`):
+
+| Value | FBX name | Source |
+|-------|----------|--------|
+| `namespace` (default, legacy) | `{refNamespace}_rig.fbx` (e.g. `CrateBase_rig.fbx`); non-ref → DAG leaf of hint | Export context hint |
+| `generated` | `{asset}[_{subAsset}][_{variation}]_rig.fbx` (e.g. `Crate_Hero_red_rig.fbx`); `rig` always last | `asset` = `exportAssetPath` leaf (browser asset); `subAsset` = `subSet`; `variation` = `variation` kwarg |
+
+`subSet` (sub asset) is the Sets-list **folder** under the subtype (`Scene.selectedSet`; batch: `animDict['set']` only when it is a directory). Skipped when equal to the asset name or the asset already ends with `_{subAsset}`. `variation` is the Variation-list **folder** (`_version_list_variation_token`, directories only; batch: `animDict['variation']`). Both are omitted when unset. Batch payloads carry **`subSet`** and **`variation`** (`BatchExport` falls back to legacy `set` for sub asset). `namespace` naming ignores both.
 
 **Cutscene directory rule**: per-shot FBXs sit directly under the animation folder (`flow/`), not `flow/shot1/`, `flow/shot2/`.
 
@@ -394,6 +403,8 @@ flowchart LR
 | `deleteMesh` | bool | False | Strip mesh before anim/cutscene FBX; rig/static ignore — mesh removal there is **delete set only** |
 | `noShotListExportName` | `asset` / `sceneFile` | `asset` | Single-file FBX stem when `shotList` is empty (anim/cutscene only) |
 | `parentExportToWorld` | bool | True | Unparent `export_tdSet` members to world before delete |
+| `rigExportName` | `namespace` / `generated` | `namespace` | Rig FBX naming — see **Rig naming** |
+| `bakeRigExport` | bool | False | Rig mode only. Off: skip `Bake()`, FBX Animation group off (`FBXProperty Export\|IncludeGrp\|Animation -v false`). On: legacy bake + animated rig FBX |
 | `breakTextureLinks` | bool | True | Prep / static |
 | `fbxVersion` | option menu | `default` | Project setting; FBX version probing is lazy elsewhere |
 
@@ -407,7 +418,7 @@ Add a new export option by extending `_exportOptionSettings`, then wiring the wi
 | `postEuler` | `euler` |
 | `fixRotation` | `fixRotation` |
 | `postTangent` | `tangent` |
-| `zeroRoot`, `sampleBy`, `simplify`, `reducer`, `exportShotsToIndividualFiles`, `deleteMesh`, `breakTextureLinks`, `noShotListExportName`, `parentExportToWorld` | same name |
+| `zeroRoot`, `sampleBy`, `simplify`, `reducer`, `exportShotsToIndividualFiles`, `deleteMesh`, `breakTextureLinks`, `noShotListExportName`, `parentExportToWorld`, `rigExportName`, `bakeRigExport` | same name |
 
 ### Not in `exportOptions`
 
@@ -567,6 +578,8 @@ Run in Maya after export pipeline changes:
 12. **Batch P4 prepare summary** — multi-item batch: end log shows `Batch P4 prepare summary` with per-path outcomes and `scene=` when preflight ran
 13. **Batch Auto Check Out off** — read-only depot FBX: preflight fails without `p4 edit`; ledger `[p4_skipped_auto_checkout_off]`; no silent checkout
 14. **Cutscene multi-path preflight** — three+ FBX paths locked: all paths reported in log before bake abort
+15. **Rig naming** — rig with sub-asset folder (e.g. `Crate/rig/Hero`): `rigExportName=namespace` → `Crate_rig.fbx`; `generated` → `Crate_Hero_rig.fbx` (with variation `red` → `Crate_Hero_red_rig.fbx`); preflight path log matches written path
+16. **Unbaked rig** — `bakeRigExport=False`: no `ExportScene >> Bake | start:` bake run, log `skipping bake`; FBX has no anim curves / take. `True` restores legacy bake
 
 ---
 
@@ -589,6 +602,7 @@ Run in Maya after export pipeline changes:
 
 | Date | Summary |
 |------|---------|
+| 2026-11-11 | Rig export options — `rigExportName` (namespace vs generated `{asset}_{subAsset}_{variation}_rig.fbx`) and `bakeRigExport` (default off: no bake, no FBX animation); `subSet` / `variation` batch payload keys (user verified in Maya) |
 | 2026-08-19 | Export `p4_add=autoCheckoutExportFiles` — no Add confirm; new FBX silent add only when Auto Check Out on |
 | 2026-08-18 | Batch auto checkout gate — `p4_checkout` separate from `confirm_p4`; batch + option off = no checkout |
 | 2026-08-18 | All-path export preflight — `ExportPreflightFailedError`; cutscene multi-FBX reports every failure |
