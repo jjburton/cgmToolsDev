@@ -48,6 +48,20 @@
 
 **Status**: ✅ Verified in Maya (user, with joint helper aligned)
 
+### November 11, 2026 - Shot list refreshes on scene open
+**What**: Open Shot list (`Shots.ShotUI`, "Sub Animation List") now reloads its rows on Maya **SceneOpened** (File → Open / New) — same pattern as Builder, setTools, cgmDynSimTool.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/Shots.py` (`CreateWindow` scriptJob, `uiFunc_on_scene_change`, `uiFunc_refresh_after_scene_open`, `LoadAnimList` reset)
+
+**Features**:
+- `SceneOpened` scriptJob parented to the window → `mc.evalDeferred(..., lp=True)` → `RefreshShotListUI()`
+- `LoadAnimList` clears `animDict` / `animList` / `animListNode` first, so a scene with no `AnimListNode` shows an empty list instead of the previous scene's shots
+
+**Decisions**:
+- `ShotUI` is a raw `mc.window`, not a zoo `BaseMelWindow`, so it calls `mc.scriptJob(event=('SceneOpened', ...), parent=self.window)` directly instead of `setSceneChangeCB`
+
+**Status**: 🔄 Verify in Maya (open scene with shots → open scene without → File → New)
+
 ---
 
 ## 📦 Deliverables

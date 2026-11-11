@@ -99,7 +99,7 @@ Used throughout MRS **Builder** and newer list-heavy tools.
 
 When adding a new block list in MRS-style tools, **subclass or mirror** this pattern rather than storing formatted strings as the only row identity.
 
-**Retained tools + scene load:** register `setSceneChangeCB` (Maya `SceneOpened` via [`baseMelUI`](../../cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)), log at the boundary, then `mc.evalDeferred(..., lp=True)` before `rebuild()` or other scene walks. References: [`setTools.py`](../../cgmToolsPy3/cgm/core/tools/setTools.py), [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py), Builder `uiFunc_on_scene_change` → `uiFunc_refresh_blocks_after_scene_open` (clear active block + `BlockScrollList.rebuild()`).
+**Retained tools + scene load:** register `setSceneChangeCB` (Maya `SceneOpened` via [`baseMelUI`](../../cgmToolsPy3/cgm/core/lib/zoo/baseMelUI.py)), log at the boundary, then `mc.evalDeferred(..., lp=True)` before `rebuild()` or other scene walks. References: [`setTools.py`](../../cgmToolsPy3/cgm/core/tools/setTools.py), [`dynFKTool.py`](../../cgmToolsPy3/cgm/core/tools/dynFKTool.py), Builder `uiFunc_on_scene_change` → `uiFunc_refresh_blocks_after_scene_open` (clear active block + `BlockScrollList.rebuild()`), Shot list [`Shots.py`](../../cgmToolsPy3/cgm/core/mrs/Shots.py) `uiFunc_on_scene_change` → `RefreshShotListUI()`. Raw `mc.window` tools (no `BaseMelWindow`) register `mc.scriptJob(event=('SceneOpened', cb), parent=<window>)` directly. Reset cached scene state (data dicts, meta handles) on reload so a scene without the tool's node shows empty, not the previous scene's data.
 
 ### Reference: `cgmListItem` (mocapBakeTools)
 
