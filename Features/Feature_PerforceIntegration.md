@@ -36,7 +36,7 @@
 
 ### Out of scope (v1)
 
-- Maya `.ma` / `.mb` save-here / Save Version
+- Maya `.ma` / `.mb` save-here / Save Version / file-row **Replace File**
 - Texture / image export paths
 - Submitting changelists from **export** — export opens files only (`p4 edit` / `p4 add`); no auto-submit on export
 - Revert-on-failed-export rollback
@@ -335,7 +335,7 @@ When `d_project['versionControl'] == 'perforce'`, scoped writes through **`path_
 | `PathWritePrepareError` | Actionable failure (out of date, locked, checkout failed, user cancelled) |
 | `project_uses_perforce(mDat)` | Gate: `versionControl == 'perforce'` on project General settings |
 
-**Wired callers:** Project/cgm_Dat cfg save; Scene Save Version / Save Maya here / **meta sidecars** (`saveMetaData`, `refreshMetaData`, `updateMetaThumbnail`); PoseManager + Animate; animFilter `.afs`; mocap CCL; skinDat; batch scripts (`confirm_p4=False`).
+**Wired callers:** Project/cgm_Dat cfg save; Scene Save Version / Save Maya here / **Replace File** (`file_replace`, after its overwrite confirm) / **meta sidecars** (`saveMetaData`, `refreshMetaData`, `updateMetaThumbnail`); PoseManager + Animate; animFilter `.afs`; mocap CCL; skinDat; batch scripts (`confirm_p4=False`).
 
 **Scene meta sidecars** (normative — mirrors PoseManager):
 

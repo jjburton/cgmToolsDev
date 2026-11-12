@@ -86,6 +86,21 @@
 
 **Status**: ✅ Verified in Maya (user)
 
+### November 12, 2026 - Scene Replace File prompts P4 checkout
+**What**: Scene file-row right-click **Replace File** now runs the normal P4 checkout / writability prompt before overwriting, instead of failing on a read-only (not checked out) file.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/Scene.py` (`file_replace`)
+- EXTENDED: `Features/Feature_PerforceIntegration.md` (cgmToolsDev — Replace File added to wired callers)
+
+**Features**:
+- After the "Replacing : …" confirm, calls `PATHUTIL.prepare_maya_scene_for_save(filePath, mDat=self.mDat)` — same path as Save As / Save Version; cancel or checkout failure logs and aborts before `mc.file(s=True)`
+- Refreshes browser lists (`_republish_navigation_lists`) after save so the row's P4 status updates
+
+**Decisions**:
+- Kept the existing overwrite confirm; the checkout prompt follows it (two dialogs: overwrite intent, then P4)
+
+**Status**: ✅ Verified in Maya (user)
+
 ---
 
 ## 📦 Deliverables
