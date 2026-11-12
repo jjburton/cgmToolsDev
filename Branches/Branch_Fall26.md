@@ -16,6 +16,7 @@
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch doc format
 - **[Feature_MRSPivots.md](../Features/Feature_MRSPivots.md)** - MRS pivot pipeline, ballRotate frames
 - **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Scene export pipeline; rig naming / unbaked rig options
+- **[Feature_Scene.md](../Features/Feature_Scene.md)** - Scene browser navigation, subtype resolution (`<asset root>`), file-row save/replace + P4
 
 ## 🗓️ Timeline
 
@@ -100,6 +101,24 @@
 - Kept the existing overwrite confirm; the checkout prompt follows it (two dialogs: overwrite intent, then P4)
 
 **Status**: ✅ Verified in Maya (user)
+
+### November 12, 2026 - Scene asset-root files (mixed asset folder)
+**What**: When `content/<type>/<asset>/` holds subfolders **and** loose `.ma`/`.mb`, the Scene Type (subtype) menu gets a last **`<asset root>`** entry that lists the asset-level files. Before, every subfolder became a subtype and the loose files were unreachable.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/Scene.py` (`_SUBTYPE_ASSET_ROOT`, `_subtype_is_asset_root`, `_subtype_file_token`; `uiFunc_assetList_select`, `buildMenu_subTypes`, `hasSub`, `_resolve_subType_container_path`, `_version_list_include_filename`, `exportFileName`, Save Version / Ref naming, `_exportSubTypeDirName`, `rename_below`)
+- NEW: `Features/Feature_Scene.md` (cgmToolsDev — Scene browser contract; navigation section moved here from `Feature_CgmToolUI.md`)
+
+**Features**:
+- `<asset root>` resolves `path_subType` to `path_asset` with `hasSub` forced off → files in panel 2, same as a type-only layout
+- File/export names drop the subtype token (`{asset}_01.mb`, `{asset}.fbx`)
+
+**Decisions**:
+- Sentinel appended last so config subtype index lookups (`assetType_get(...)['content'][subTypeIndex]`) stay aligned
+- Only offered when the asset folder is mixed; asset folders with only files keep the existing no-subtype layout
+- Not renameable; skipped by Create Asset subtype `mkdir` loop and plural/legacy dir fix-up
+- Interactive Export from a scene opened at asset root still needs ≥3 path tokens (pre-existing `RunExportCommand` limit) — not changed
+
+**Status**: 🔄 Verify in Maya (mixed asset → pick `<asset root>` → open / Save Version / Replace; switch back to a real subtype)
 
 ---
 

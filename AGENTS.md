@@ -51,6 +51,8 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 20. **MRS pivots design contract**: [`Features/Feature_MRSPivots.md`](Features/Feature_MRSPivots.md) — block **`addPivot`** (`simple` / `wobble*` / **`ballRotate`**), prerig **`pivotHelper`** → **`RIGSHAPES.pivotShapes`** → **`BLOCKUTILS.pivots_setup`** → **`pivotResult`**; ground frame = **`base_pivotHelper`**; ballRotate **`ballRoll`** (translate) / **`ballSpin`** (rotate at ball center) groups; Handle **joint helper must be aligned to the base pivot space**. Timeline: [`Branches/Branch_Fall26.md`](Branches/Branch_Fall26.md). Update when changing `pivots_setup`, `pivotShapes`, `add_ball_auto_roll`, or block pivot prerig.
 
+21. **Scene browser design contract**: [`Features/Feature_Scene.md`](Features/Feature_Scene.md) — mrsScene column navigation (category → asset → subtype → sets → variation → version) driven by the filesystem (`hasSub` / `hasVariant`), subtype folder resolution incl. **`<asset root>`** for mixed asset folders, file-row actions, and the rule that every scene write goes through **`prepare_maya_scene_for_save`** (P4 checkout prompt). Export internals stay in item 5; list styling in `Feature_CgmToolUI.md`. Timeline: [`Branches/Branch_Fall26.md`](Branches/Branch_Fall26.md). Update when changing `Scene.py` navigation, path properties, or save/replace actions.
+
 ## Python 2 backport (exceptional)
 
 1. Use **[`cgmTools-py2-backport.code-workspace`](cgmTools-py2-backport.code-workspace)** so the legacy **py2** tree is a workspace folder, **or** add your py2 checkout via **Add Folder to Workspace…**.

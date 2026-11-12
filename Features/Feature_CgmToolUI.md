@@ -210,22 +210,7 @@ Maya **inverts the selection row background**. Light `itc` values (pastel blue, 
 - Filter matches **both** `.item` and `.alias` (typing `rig` finds `+ rig/`).
 - **Show all files** toggles reload SubType + Variation + Version lists (when `hasSub`, also variation/version columns; type-only file layouts reload panel 2 only).
 
-**Navigation depth (filesystem walk, October 2026)** — column count follows **immediate children** of the current browse path, not project `hasSub` / `hasVariant` flags on asset types (except explicit **`hasVariant: false`** in project content, which disables the variation tier).
-
-| On-disk layout under selected type (`path_subType`) | Visible columns (after asset) |
-|---------------------------------------------------|-------------------------------|
-| Only `.ma`/`.mb` (no child folders after `dirMask`) | **Type** menu + **panel 2 scroll** (files). **Version column off** — do not duplicate files into column 4. |
-| Child folders (± loose files at type root) | **Type** + **Sets** (dirs and files in one scroll). **Version** when a **folder** row is selected or when versions live under set/variation paths. |
-| Set folder with only scenes | **Sets** + **Version** (no variation column). |
-| Set folder with child folders (± loose scenes at set root) | **Sets** + **Variation** (subfolders only) + **Version** (scenes in selected variation dir, or at set root when nothing selected / mixed set). |
-
-**Properties** (runtime, per current selection):
-
-- **`hasSub`** — `True` when `path_subType` has filtered child **directories** (`_dir_children_dirs`). `False` → `LoadVersionList` fills **panel 2** (`subTypeSearchList`), not the version scroll.
-- **`hasVariant`** — `True` when selected **set** (`path_set`) has filtered child **directories**. Variation list lists **folders only**; loose scenes at set root appear in the **version** column. Project **`hasVariant: false`** forces variation off.
-- **`_version_column_should_show`** — hides version when the selected sets/variation row is a **file** (`b_subFile` / `b_varFile`), or when layout is type-only files (`not hasSub`).
-
-**Navigation API** (republish after disk/save): `_republish_navigation_lists`, `_navigate_to_scene_file`, `_navigate_to_scene_parts`, `_navigation_tokens_from_focus_path`. **Export Selection** uses `_export_selection_directory` (set path when `hasSub`, type root when not).
+**Navigation depth, subtype resolution (incl. `<asset root>`), and the column/path properties** moved to [`Feature_Scene.md`](Feature_Scene.md) § Architecture (November 2026). This doc keeps the list-widget rules only.
 
 **Folder marker (not icons)**: Maya **`iconTextScrollList` does not render per-row icons** from cmds (no `-image` on append; `numberOfIcons` only reserves empty gutter). Use **alias prefix** instead — dirs: `+ rig/` via `SCENE_LIST_DIR_ALIAS_PREFIX` + trailing `/`; files: plain basename. Pair with folder-first sort + dir `itc` tint.
 
@@ -643,6 +628,7 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 
 | Date | Summary |
 |------|---------|
+| 2026-11-12 | Scene browser navigation depth / properties / `<asset root>` moved to `Feature_Scene.md`; pointer left here |
 | 2026-11-05 | Shots.py: `ut='cgmUITemplate'` does not style `MelIconButton`/`iconTextButton` (only `cmd.button` registers a `dt=` entry) — pass `bgc=cgmUI.guiButtonColor` explicitly; full-width stretch row and per-row `columnWidth=` list must derive from one shared width source or they drift apart; `mUI.Mel*` (`BaseMelWidget.__new__`) silently drops a non-`int` `w=`/`h=` kwarg — float widths from `self.cw * <float>` arithmetic get dropped with no error; a raw `mc.textField` used as a `MelHSingleStretchLayout`'s stretch widget crashed with `ValueError: '<long path>' is not in list` because raw `mc.*` returns a long UI path while `mUI.Mel*` wrappers return a short leaf name that `children.index(...)` can find — use `mUI.Mel*` for every child of a `mUI.Mel*` layout; header row's `MelHSingleStretchLayout` had fewer fixed-width siblings than its body row (missing placeholders for unlabeled trailing columns — Frame button/spacer/Remove icon/spacer), so its stretch widget absorbed extra leftover width and columns after it drifted right of the body rows — header must add matching invisible `MelSpacer`s so both rows' fixed-width totals match |
 | 2026-10-19 | Scene file-list RMB popup: do not `_rebuildFileListPopup` in `pmc` (menu-click crash); Send To Build `en=False` for `*_BUILD` via `is_mrs_build_output_scene` + path resolve; anti-patterns |
 | 2026-10-09 | Scene browser navigation depth: filesystem `hasSub` / `hasVariant` (not project `hasSub`); type-only files in panel 2 without forcing version column; mixed set/type folders; `_republish_navigation_lists` / export-selection paths; `LoadPreviousSelection` respects type-only layout |
