@@ -238,6 +238,7 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `invalidate_fstat_paths(paths, …)` | Drop cached fstat for specific paths (P4 writes) |
 | `invalidate_fstat_directory(dir_path, …)` | Drop cached fstat for all paths under a directory (Scene column Refresh) |
 | `get_cached_file_status(path, …)` | Session fstat cache lookup only — no subprocess; used by offline save gate |
+| `is_connection_error(text)` / `mark_unavailable(…)` | Detect server-unreachable p4 output; flip session `available` to False without flushing fstat cache |
 | `classify_file_status_ui(file_dat)` | Map fstat dict → Scene UI key: `locked_by_other` \| `checked_out` \| `marked_for_add` \| `out_of_sync` \| `unknown` \| `None` |
 | `file_status_ui_suffix(file_dat, status_key)` | Display-only alias parenthetical, e.g. `(locked-by-other)` |
 | `is_under_client(path, …)` | True when path is in current client workspace view |
@@ -362,6 +363,7 @@ Open-scene guard: refresh/thumb blocked when selected version file ≠ open scen
 - **New file** (not on disk) → local write, no prompt; ledger `p4_skipped_offline`
 - **Existing file** → allowed only if the session fstat cache (`perforce.get_cached_file_status`, no subprocess) classifies it as checked out by you / marked for add / unknown (not on depot); ledger `p4_skipped_offline`. Otherwise blocked: one-button dialog (interactive, `confirm_p4=True`) + `PathWritePrepareError` reason "P4 not connected — existing file requires checkout"; ledger `p4_offline_existing` (failure)
 - `p4_checkout=False` (batch, Auto Check Out off) keeps writability-only behavior
+- **Connection lost mid-session** (warm `available=True` cache, server now unreachable): `p4 fstat` connection errors (`perforce.is_connection_error` — "Connect to server failed", "No such host", …) → `perforce.mark_unavailable()` (drops `available` / connection report, **keeps** fstat cache) → same offline rules above. `query_files_status` never caches error results
 
 **Callers:** pass `mDat=self` (project dat) so P4 opt-in resolves from project JSON. Batch/export may pass `confirm_p4=False` when wired (no dialogs on farm). Interactive saves never prompt to add.
 
@@ -584,6 +586,7 @@ Record decisions in the **Decisions log** as they are resolved.
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-11-13 | Offline: stale connection cache | fstat connection errors → `mark_unavailable` + offline rules (new file saves); error fstat results no longer cached |
 | 2026-11-10 | Offline save gate | New files write offline; existing files blocked unless session fstat cache shows checked-out/add/unknown; ledger `p4_offline_existing` |
 | 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; never Add confirm; checkout/locked/out-of-date only; export silent add when Auto Check Out on |
 | 2026-08-18 | Mayapy batch P4 + revert paths | Batch export context payload; `p4_add=False` for scratch batch scripts; cgmP4 `revert_opened_entry` / client-root path resolve |
