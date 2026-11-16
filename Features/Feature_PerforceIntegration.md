@@ -361,7 +361,7 @@ Open-scene guard: refresh/thumb blocked when selected version file ≠ open scen
 **Offline** (VC=perforce, not connected):
 
 - **New file** (not on disk) → local write, no prompt; ledger `p4_skipped_offline`
-- **Existing file** → allowed only if the session fstat cache (`perforce.get_cached_file_status`, no subprocess) classifies it as checked out by you / marked for add / unknown (not on depot); ledger `p4_skipped_offline`. Otherwise blocked: one-button dialog (interactive, `confirm_p4=True`) + `PathWritePrepareError` reason "P4 not connected — existing file requires checkout"; ledger `p4_offline_existing` (failure)
+- **Existing file** → allowed only if the session fstat cache (`perforce.get_cached_file_status`, no subprocess) classifies it as checked out by you / marked for add / unknown (not on depot), **or** there is no cache entry and the file is writable (local/offline work — e.g. new version `.mb` + its meta `.dat` written in the same save; P4-synced files are read-only until checked out); ledger `p4_skipped_offline`. Otherwise (read-only with no cache, or cached as synced / out of date / locked) blocked: one-button dialog (interactive, `confirm_p4=True`) + `PathWritePrepareError` reason "P4 not connected — existing file requires checkout"; ledger `p4_offline_existing` (failure)
 - `p4_checkout=False` (batch, Auto Check Out off) keeps writability-only behavior
 - **Connection lost mid-session** (warm `available=True` cache, server now unreachable): `p4 fstat` connection errors (`perforce.is_connection_error` — "Connect to server failed", "No such host", …) → `perforce.mark_unavailable()` (drops `available` / connection report, **keeps** fstat cache) → same offline rules above. `query_files_status` never caches error results
 
@@ -586,6 +586,7 @@ Record decisions in the **Decisions log** as they are resolved.
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-11-16 | Offline: writable uncached files allowed | New version + meta `.dat` second write was blocked; no-cache + writable now treated as local work, read-only still blocked |
 | 2026-11-13 | Offline: stale connection cache | fstat connection errors → `mark_unavailable` + offline rules (new file saves); error fstat results no longer cached |
 | 2026-11-10 | Offline save gate | New files write offline; existing files blocked unless session fstat cache shows checked-out/add/unknown; ledger `p4_offline_existing` |
 | 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; never Add confirm; checkout/locked/out-of-date only; export silent add when Auto Check Out on |
