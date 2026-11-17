@@ -50,6 +50,30 @@
 
 ---
 
+### November 16, 2026 - Prerig-authored bezier (`ikSplineBezierMode=prerig`)
+**What**: Auto-generated bezier curves didn't follow joint flow. New `ikSplineBezierMode` value `prerig` builds an editable bezier at prerig that places the joints and is the curve the rig's bezier IK uses. Sub-branch `jburton/Fall26_bezierPrerig` (cgmToolsPy3).  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/lib/shared_dat.py` (`ikSplineBezierMode` enum adds `prerig`)
+- EXTENDED: `cgm/core/mrs/lib/bezier_ik_block_utils.py` (`block_bezier_prerig_curve_active` gate, `bezier_prerig_curve_copy_for_rig`, shared prerig build: `prerig_bezier_curve_build`, `prerig_bezier_handles_ride`, `prerig_attach_to_curve_fraction`, `prerig_parent_world_space`)
+- EXTENDED: `cgm/core/mrs/blocks/organic/head.py`, `segment.py` (`prerig`, `create_jointHelpers`)
+- EXTENDED: `cgm/core/mrs/lib/rigFrame_utils.py` (`bezier` → `useBezierCurve`), `cgm/core/rig/ik_utils.py` (`bezier_spline(driverMatchBezier=)`)
+- EXTENDED: `cgm/core/lib/curve_Utils.py` (`getPercentPointOnCurve` accepts bezierCurve; `create_bezier_nurbs_curve(bezier=)`), `cgm/core/mrs/lib/block_utils.py` (`controls_get` appends tangent handles last)
+- UPDATED: `Features/Feature_BezierIK.md` (§ Prerig-authored bezier)
+
+**Features**:
+- Bezier anchors = first prerig handle, ikMid helpers, last prerig handle; tangent handles per anchor (decomposeMatrix → CVs), anchor → tangent lines, bezier-order pickwalk
+- Interior prerig handles and joint helpers ride the bezier by arc length (motionPath fractionMode)
+- Rig copies the prerig curve; spline IK driver is an exact nurbs copy of the bezier (`driverMatchBezier`)
+
+**Decisions**:
+- Hard gate: Head `neckIK=bezier` / Segment `ikSetup=bezier` **and** mode `prerig` — everything else unchanged
+- Joints ride the bezier, not `drivenCurve` — measured up to ~2 units off, caused the IK-on jump
+- ikMid anchors follow the form-only track curve to avoid a DG cycle
+
+**Status**: ✅ Head verified in Maya (joints + IK driver 0.0 off the bezier at rest) · ⏳ Segment port — verify in Maya
+
+---
+
 ## 📦 Deliverables
 
 ### [Phase/Feature Name]

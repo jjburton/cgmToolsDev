@@ -56,7 +56,7 @@
 | Attr | Effect |
 |------|--------|
 | `ikSetup` / Head `neckIK` = bezier | Bezier driver + ikSplineSolver chain |
-| **`ikSplineBezierMode`** (Segment, Head, Limb — rig UI) | **`uniform`** (default) \| **`bend`** — passed to **`IK.bezier_spline`** as **`bezierAnchorMode`** via **`block_bezier_anchor_mode`**. Legacy block nodes may still have **`splineBezierMode`**; lib reads that name when **`ikSplineBezierMode`** is absent. |
+| **`ikSplineBezierMode`** (Segment, Head, Limb — rig UI) | **`uniform`** (default) \| **`bend`** — passed to **`IK.bezier_spline`** as **`bezierAnchorMode`** via **`block_bezier_anchor_mode`**. Legacy block nodes may still have **`splineBezierMode`**; lib reads that name when **`ikSplineBezierMode`** is absent. **`prerig`** — Head (**`neckIK=bezier`**) and Segment (**`ikSetup=bezier`**), see § Prerig-authored bezier; anywhere else (Limb, non-bezier IK) it warns and builds **`uniform`**. |
 | **`ikBezierControlShape`** (Segment, `ikSetup=bezier`) | **`ball`** (default) — FK cross-section **cube** mains + **sphere** subs (neck bezier). **`segmentHandle`** — cast-thin **cube** mains (**`jointRadius`** on aim, cross from proxy cast — limb bezier) + **`limbSegmentHandle`** semiSphere subs. Head/Limb unchanged (no attr → **`ball`**). **SemiSphere size** (all segment **`limbSegmentHandle`** casts, incl. **`RIGSHAPES.segment_handles`**) — **`builder_utils.segment_handle_cast_semisphere_size`**: mean **`moduleJoints`** adjacent span **÷ 4**, capped by **`jointRadius`**. |
 | `segmentType` = **parent** | Bezier solve on **ik** chain; mains = `controlIKBase` / mids / `controlIK` (default **`ikBase`**). **`ikBase=hips`**: hip/chest **`controlIKBase`** / **`controlIK`** keep **`ik_base`** / **`ik_end`** shapes; bezier CV mains on **`bezierIKChainStart`** / mids / **`bezierIKChainEnd`** (see § Hips parent bezier). |
 | **`ikBase`** = **hips** (Segment, `ikSetup=bezier`) | Spine-style hips chain path (any **`segmentType`**): no extra **`handleJoints[1]`** mid spine handle; chain bezier **visSub**; pickwalk **`controlsIK`** = hip IK + chest IK + bezier chain. |
@@ -364,6 +364,30 @@ Legacy neck modes (spline / ribbon / single **`controlIK`** on head) keep one tr
 
 **Mid IK (`ikMidSetup`) on Head:** **`ikMidAimSetup`** exists only on **`head.py`** (not Segment). Ribbon / spline neck paths use existing handle aim; bezier + **`linearTrack`** + aim on uses root→end ref (above). Do not use **`handle_fixTwist`** on bezier ikSpline handles (rp-only).
 
+### Prerig-authored bezier (`ikSplineBezierMode=prerig`) — Head + Segment
+
+**Gate (hard):** **`block_bezier_prerig_curve_active`** — **`ikSplineBezierMode=prerig`** **and**:
+- **Head:** **`neckBuild`** on **and** **`neckIK=bezier`**
+- **Segment** (no **`neckIK`** attr): **`ikSetup=bezier`**
+
+Any other combination builds exactly as before (no prerig curve, joint helpers on **`drivenCurve`**, auto bezier at rig).
+
+**Shared lib** (`bezier_ik_block_utils`, both blocks call these): **`prerig_bezier_curve_build(mBlock, ml_anchors, f_size)`**, **`prerig_bezier_handles_ride(ml_handles, mBezierCurve, mParentNoTrans)`**, **`prerig_attach_to_curve_fraction`**, **`prerig_parent_world_space`**. Block modules (`head.py`, `segment.py`) pick the anchors and call in from **`prerig`** / **`create_jointHelpers`**.
+
+| Stage | Behavior |
+|-------|----------|
+| **prerig** | **`prerig_bezier_curve_build`**: bezierCurve **`prerigNull.bezierPrerigCurve`**. Anchors = rig bezier mains: first **`prerigHandles`**, **`ikMidHelpers`**, last prerig handle (Head: neck handles). Starting tangents from **`CURVES.bezier_cvs_from_anchors`**. CVs driven by **`decomposeMatrix` → `controlPoints[i]`** (no clusters); curve **`inheritsTransform=0`**, reference display. Built after the prerig + **`ikHelpers`** pickwalk chains. |
+| **tangent handles** | In/out spheres (**`cgmTypeModifier`** `bezierIn` / `bezierOut`, **`cgmType`** `preHandle`), listed on **`prerigNull.bezierPrerigHandles`**. Parented under their anchor with **zero local rotate** (match anchor orient). Size **`jointRadius × 5`** baked into the shape (**`create_fromName(bakeScale=True)`**); local scale = **1 / anchor world scale**, so every tangent is the same world size. Translate-only (rotate/scale/v locked). Each has an anchor → tangent **`linearTrack`** line (**`aux`** color, reference display). |
+| **pickwalk** | **`controller_walkChain`** over the CV drivers in curve order — base, base_out, mid_in, mid, mid_out, …, end_in, end — matching rig **`bezier_ik_pickwalk_controls`**. Overrides the anchors' earlier controller parents in this mode. |
+| **ikMid orient** | When gated, each **`ikMid_*_Handle`** aims at the next mid (or the last prerig handle) with the block up vector — oriented like the start/end IK handles, not snapped to the start handle's orient. |
+| **prerig handles** | Interior **`prerigHandles`** (`[1:-1]`) leave the form track curve and ride the bezier: **`masterGroup`** via **`prerig_attach_to_curve_fraction`** (motionPath **`fractionMode`** = arc length, `i / (len−1)`). First / last handles are anchors (they drive the curve). |
+| **joint helpers** | **`create_jointHelpers`** rides helpers on the prerig bezier with **`prerig_attach_to_curve_fraction`** (arc length); always the curve branch (handle-count branch skipped). When joint count = prerig handle count, names come from the prerig handle name dicts — same names as the handle branch (e.g. **`neck_sknJnt`**, not **`neck_0_sknJnt`**). Not **`drivenCurve`** — it leaves the bezier between handles (measured up to ~2 units at rest), so the chain jumped when IK came on. |
+| **ikMid anchors** | **`create_jointHelpers`** attaches **`ikMidHelpers`** to **`prerigNull.bezierPrerigTrackCurve`** (form-only track curve), not the joint-helper curve — that path runs bezier → prerig handles → **`drivenCurve`** → joint helpers and would cycle back into the anchors. Start / end **`ikHelpers`** stay on the joint-helper curve. |
+| **blockDat / mirror** | **`controls_get(prerig=True)`** appends **`bezierPrerigHandles`** **last** — other handle indices unchanged; empty when the mode is off. |
+| **rig_frame** | **`RIGFRAME.bezier`** → **`bezier_prerig_curve_copy_for_rig`**: fresh bezier from the prerig curve's world CVs → **`IK.bezier_spline(useBezierCurve=…)`**. The rig never references prerig nodes. **Raises** if the prerig curve is missing or the CV count ≠ **`3·(mains−1)+1`** (e.g. **`ikMidControlNum`** changed without a prerig rebuild). **`bezier_controls_wire_from_handles(snapHandles=True)`** snaps mains/subs onto the authored CVs. Also passes **`driverMatchBezier=True`**: the spline IK driver (**`bezierIKDriverCurve`**) is a nurbsCurve with the bezier's own CVs + knots, **`create`** fed from the bezier **`worldSpace`** — exact IK curve. The default POCI-sampled driver only approximates the bezier (measured up to ~1 unit off near the neck base). |
+
+**Known limits:** The curve always spans first → last prerig handle (the rig bezier spans every IK joint). Head **`ikBase=hips`** and Segment **`ikBase=hips|head`** / **`ikEnd=tipBase`** put the IK start/end handles inside that span — warning logged, verify base/end mains. **`ikMidHelpers`** positions are not in **`controls_get`** (existing gap, mode-independent), so blockDat load does not restore mid anchors. The enum is in the **rig** UI group but changes prerig — rebuild prerig after switching it. **Segment is unverified in Maya** (Head verified: joints + IK driver on the bezier at rest, 0.0 offset).
+
 ---
 
 ## Reload / test
@@ -380,6 +404,8 @@ Legacy neck modes (spline / ribbon / single **`controlIK`** on head) keep one tr
 
 | Date | Summary |
 |------|---------|
+| 2026-11-16 | **Segment `ikSplineBezierMode=prerig`** (gate **`ikSetup=bezier`**, unverified in Maya): same prerig bezier as Head. Build helpers moved from `head.py` to **`bezier_ik_block_utils`** (`prerig_bezier_curve_build`, `prerig_bezier_handles_ride`, `prerig_attach_to_curve_fraction`, `prerig_parent_world_space`). Head prerig polish (Maya-verified): tangent handles zeroed to anchor orient, baked 5× **`jointRadius`** size, anchor → tangent lines, bezier-order pickwalk, ikMid aim orient, handle-name joint helpers |
+| 2026-11-16 | **Head `ikSplineBezierMode=prerig`** (branch `jburton/Fall26_bezierPrerig`): prerig-authored neck bezier with tangent handles, joint helpers on curve by arc length, rig copies it via **`useBezierCurve`**. Gated on **`neckIK=bezier`** + mode **`prerig`** only |
 | 2026-10-29 | **Module IK stretch split:** **`segment_bezier_module_ik_spline_stretch_profile`** — **`segmentType=parent`** full **`segmentStretchBy`** + volume on **`ikJoints`**; **non-parent** **`translate`** + arcLength on IK, deform **`rig_segments`** keeps block squash/stretch; **`_segment_bezier_should_run_spline_stretch`** gate; Head **`neckIK=bezier`** + **`block_uses_bezier_module_ik`**; removed Head precheck **neck bezier requires parent segment** |
 | 2026-10-28 | **Segment bezier:** **`twistBaseAdd`** / **`twistEndAdd`** on **`controlIKBase`** / **`controlIK`** only; advanced-twist WU inputs unchanged (**`ml_bezierMainIK`**) |
 | 2026-10-28 | **Segment `ikEndShape=cast`**: **`ikEndFrameHandle`** in **`shapes_fromCast`** (FK last **`frameHandle`** span to loft max U, start **U** from **`ikEnd`** cast DAG); **`RIGSHAPES.ik_end`** keeps separate control pivot; **`ml_fkCastTargets`** from **`rig_shapes`** |
