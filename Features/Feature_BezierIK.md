@@ -12,6 +12,7 @@
 **Related**
 
 - [`Feature_MRSWiring.md`](Feature_MRSWiring.md) — rigNull messages, control caches
+- [`Feature_MRSKnownIssues.md`](Feature_MRSKnownIssues.md) — MRS-002: Left segment bezier IK root flipped 180° with `ikBase = cube`
 - [`Builder.py`](../../cgmToolsPy3/cgm/core/mrs/Builder.py) — MRS Builder **Step Build** (`ui_stepBuild`)
 - [`ik_utils.py`](../../cgmToolsPy3/cgm/core/rig/ik_utils.py), [`bezier_utils.py`](../../cgmToolsPy3/cgm/core/rig/bezier_utils.py), [`rigFrame_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/rigFrame_utils.py), [`bezier_ik_block_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/bezier_ik_block_utils.py), [`rigShapes_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/rigShapes_utils.py), [`builder_utils.py`](../../cgmToolsPy3/cgm/core/mrs/lib/builder_utils.py), [`segment.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/segment.py), [`head.py`](../../cgmToolsPy3/cgm/core/mrs/blocks/organic/head.py)
 
