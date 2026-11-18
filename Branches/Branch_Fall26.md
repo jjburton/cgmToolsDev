@@ -3,7 +3,7 @@
 ## 📋 Quick Info
 **Status**: Active  
 **Created**: November 10, 2026  
-**Last Updated**: November 10, 2026  
+**Last Updated**: November 11, 2026  
 **PR**: Pending  
 **py3 checkout**: `jburton/Fall26` (cut from `main` at `86b4b39`, after the Face26 merge — `__BRANCH` = `Fall26`, `__RELEASE` = `26.11.06.01` in `cgm_General.py`)
 
@@ -15,6 +15,8 @@
 - **[Branch_BezierIK.md](Branch_BezierIK.md)** - Previous branch (merged via PR #18); Bezier/spline IK and ShotList UI
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch doc format
 - **[Feature_MRSPivots.md](../Features/Feature_MRSPivots.md)** - MRS pivot pipeline, ballRotate frames
+- **[Feature_SceneExportFlow.md](../Features/Feature_SceneExportFlow.md)** - Scene export pipeline; rig naming / unbaked rig options
+- **[Feature_Scene.md](../Features/Feature_Scene.md)** - Scene browser navigation, subtype resolution (`<asset root>`), file-row save/replace + P4
 
 ## 🗓️ Timeline
 
@@ -47,6 +49,76 @@
 - Handle with `rotPivotPlace = jointHelper` needs the joint helper aligned to the base pivot space — documented, not enforced (no helper yet)
 
 **Status**: ✅ Verified in Maya (user, with joint helper aligned)
+
+### November 11, 2026 - Shot list refreshes on scene open
+**What**: Open Shot list (`Shots.ShotUI`, "Sub Animation List") now reloads its rows on Maya **SceneOpened** (File → Open / New) — same pattern as Builder, setTools, cgmDynSimTool.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/Shots.py` (`CreateWindow` scriptJob, `uiFunc_on_scene_change`, `uiFunc_refresh_after_scene_open`, `LoadAnimList` reset)
+
+**Features**:
+- `SceneOpened` scriptJob parented to the window → `mc.evalDeferred(..., lp=True)` → `RefreshShotListUI()`
+- `LoadAnimList` clears `animDict` / `animList` / `animListNode` first, so a scene with no `AnimListNode` shows an empty list instead of the previous scene's shots
+
+**Decisions**:
+- `ShotUI` is a raw `mc.window`, not a zoo `BaseMelWindow`, so it calls `mc.scriptJob(event=('SceneOpened', ...), parent=self.window)` directly instead of `setSceneChangeCB`
+
+**Status**: 🔄 Verify in Maya (open scene with shots → open scene without → File → New)
+
+### November 11, 2026 - Scene rig export naming + unbaked rig export
+**What**: Two new project export options for Scene rig export (mode 3): pick the rig FBX name source, and skip bake/animation on rig export.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/lib/scene_export_utils.py` (`rig_export_file_name`, `resolve_rig_export_file_name`; `sub_asset` / `variation` / `rig_export_name` on `resolve_export_fbx_paths`)
+- EXTENDED: `cgm/core/mrs/Scene.py` (`ExportScene` kwargs `rigExportName`, `bakeRigExport`, `variation`; `RunExportCommand`, `batch_buildFile`, `BatchExport` wiring)
+- EXTENDED: `cgm/core/tools/lib/project_utils.py` (`_exportOptionSettings`: `rigExportName`, `bakeRigExport`)
+- EXTENDED: `cgm/core/cgm_General.py` (`fbx_export_preamble(include_animation=)`)
+- EXTENDED: `cgm/assets/example_project.cfg`
+- EXTENDED: `Features/Feature_SceneExportFlow.md` (cgmToolsDev)
+
+**Features**:
+- **Rig export naming** (`rigExportName`): `namespace` (default, legacy `{refNamespace}_rig.fbx`) or `generated` (`{asset}_{subAsset}_{variation}_rig.fbx`, e.g. `Crate_Hero_red_rig.fbx`; `rig` always last, missing tokens dropped)
+- **Bake rig export** (`bakeRigExport`, default **off**): rig export skips `Bake()` and writes FBX with the Animation group off; prep + FBX still run. On = legacy bake
+- Preflight and `ExportScene` share one name resolver, so planned path = written path
+
+**Decisions**:
+- Asset token for `generated` = `exportAssetPath` leaf (browser asset), so interactive and batch agree without a new kwarg
+- Sub asset / variation are Sets / Variation list **folders** only (version files in those lists are ignored)
+- Fixed batch payload key mismatch: RunExportCommand wrote `subSet`, BatchExport read `set` — now reads `subSet` with `set` fallback; batch queue now sends `subSet` + `variation`
+- Multi-root rig (combined FBX) still uses browser `exportName` — not changed
+
+**Status**: ✅ Verified in Maya (user)
+
+### November 12, 2026 - Scene Replace File prompts P4 checkout
+**What**: Scene file-row right-click **Replace File** now runs the normal P4 checkout / writability prompt before overwriting, instead of failing on a read-only (not checked out) file.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/Scene.py` (`file_replace`)
+- EXTENDED: `Features/Feature_PerforceIntegration.md` (cgmToolsDev — Replace File added to wired callers)
+
+**Features**:
+- After the "Replacing : …" confirm, calls `PATHUTIL.prepare_maya_scene_for_save(filePath, mDat=self.mDat)` — same path as Save As / Save Version; cancel or checkout failure logs and aborts before `mc.file(s=True)`
+- Refreshes browser lists (`_republish_navigation_lists`) after save so the row's P4 status updates
+
+**Decisions**:
+- Kept the existing overwrite confirm; the checkout prompt follows it (two dialogs: overwrite intent, then P4)
+
+**Status**: ✅ Verified in Maya (user)
+
+### November 12, 2026 - Scene asset-root files (mixed asset folder)
+**What**: When `content/<type>/<asset>/` holds subfolders **and** loose `.ma`/`.mb`, the Scene Type (subtype) menu gets a last **`<asset root>`** entry that lists the asset-level files. Before, every subfolder became a subtype and the loose files were unreachable.  
+**Files**: 
+- EXTENDED: `cgm/core/mrs/Scene.py` (`_SUBTYPE_ASSET_ROOT`, `_subtype_is_asset_root`, `_subtype_file_token`; `uiFunc_assetList_select`, `buildMenu_subTypes`, `hasSub`, `_resolve_subType_container_path`, `_version_list_include_filename`, `exportFileName`, Save Version / Ref naming, `_exportSubTypeDirName`, `rename_below`)
+- NEW: `Features/Feature_Scene.md` (cgmToolsDev — Scene browser contract; navigation section moved here from `Feature_CgmToolUI.md`)
+
+**Features**:
+- `<asset root>` resolves `path_subType` to `path_asset` with `hasSub` forced off → files in panel 2, same as a type-only layout
+- File/export names drop the subtype token (`{asset}_01.mb`, `{asset}.fbx`)
+
+**Decisions**:
+- Sentinel appended last so config subtype index lookups (`assetType_get(...)['content'][subTypeIndex]`) stay aligned
+- Only offered when the asset folder is mixed; asset folders with only files keep the existing no-subtype layout
+- Not renameable; skipped by Create Asset subtype `mkdir` loop and plural/legacy dir fix-up
+- Interactive Export from a scene opened at asset root still needs ≥3 path tokens (pre-existing `RunExportCommand` limit) — not changed
+
+**Status**: 🔄 Verify in Maya (mixed asset → pick `<asset root>` → open / Save Version / Replace; switch back to a real subtype)
 
 ---
 
