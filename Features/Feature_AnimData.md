@@ -410,7 +410,7 @@ Keep unittest + Toolbox Unittesting menu (no pytest).
 - **[Branch_AnimData.md](../Branches/Branch_AnimData.md)** — development timeline
 - **[NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature documentation format
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** — branch documentation format
-- **[cgm-module-placement.mdc](../.cursor/rules/cgm-module-placement.mdc)** — lib vs Dat placement
+- **[reuse-and-placement.md](../.claude/rules/reuse-and-placement.md)** — lib vs Dat placement
 - **[Feature_MRSWiring.md](Feature_MRSWiring.md)** — puppet/module `controls_get` (used via `animate_utils.context_get`)
 - **[Feature_CgmToolUI.md](Feature_CgmToolUI.md)** — pinned chrome above scroll; Layer optionMenu; CLIP CONTENTS zebra
 

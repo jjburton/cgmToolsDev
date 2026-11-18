@@ -321,7 +321,7 @@ cgmGEN._reloadMod(SEGMENT)
 **Files**:
 - EXTENDED: `cgm/core/cgm_Meta.py` — **`_hierarchyQueryFullPath`**; wired on **`cgmObject`** (**`getParent`**, **`getParents`**, **`getSiblings`**, **`getChildren`**, **`getDescendents`** / **`getAllChildren`**, **`getShapes`**, **`getListPathTo`**) and **`cgmNode`** (**`getParent`**, **`getSiblings`**); **`doName(nameChildren=True)`** uses **`descendents_get(..., fullPath=True)`**
 - EXTENDED: `Features/Feature_CgmMetaAPI.md` — hierarchy table + **2026-10-09** revision
-- EXTENDED: `.cursor/rules/cgm-meta-naming-hierarchy.mdc` — **`asMeta`** + **`fullPath`** contract
+- EXTENDED: `.claude/rules/meta-runtime.md` — **`asMeta`** + **`fullPath`** contract
 - EXTENDED: `cgm/core/examples/help_cgmObject.py` — **`getAllChildren`** examples
 
 **Features**:
@@ -896,7 +896,7 @@ cgmGEN._reloadMod(SEGMENT)
 
 **Status**: Code complete — Maya verify: refresh after scene edit; rename hair chain; collapse chain hides sub-lists; **Reload Dependencies** logs Red9 + **`cgm_Meta`** + **`dynamic_utils`**
 
-**Docs**: **`Feature_CgmMetaAPI.md`** § Session reload (core **`CGM._reload`** for **`mClass`**); **`cgm-reload-mod.mdc`** — no partial meta reload in tools
+**Docs**: **`Feature_CgmMetaAPI.md`** § Session reload (core **`CGM._reload`** for **`mClass`**); **`reload.md`** — no partial meta reload in tools
 
 ---
 
@@ -916,7 +916,7 @@ cgmGEN._reloadMod(SEGMENT)
 **What**: **Load progress bar** on autoload (**LastDynFK**) and header **load selected** while **`uiFunc_update_details`** rebuilds (sync → **`get_dat()`** → setup/baking UI → per chain; cancel supported). **Create → Hair** layout aligned with chain **Build** rows; **Follicle** / **Hair system** use Project-style centered sub-headers (not nested frames). Per-chain **Targets** action row label (was Connect). Removed redundant per-chain **HairShape** collapsible (shape presets stay on **Details → Hair systems** menus).  
 **Files**:
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — `_dynfk_progress_*`, **`with_progress`** on load/details; Create Hair + empty Details chrome
-- EXTENDED: `Features/Feature_DynSimTool.md`, `Features/Feature_CgmToolUI.md`, `.cursor/rules/cgm-long-running-ui-progress.mdc`
+- EXTENDED: `Features/Feature_DynSimTool.md`, `Features/Feature_CgmToolUI.md`, `.claude/rules/ui-progress.md`
 
 **Status**: Code complete — Maya verify: multi-chain autoload shows progress; refresh without bar; HairShape only on hair-system rows
 
@@ -947,7 +947,7 @@ cgmGEN._reloadMod(SEGMENT)
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `_hair_reparent_sim_chain_ordered`, sim **`p_parent`** create, `_hair_chain_integrity_missing`, `_dag_str` / follicle constraint driver strings, driven duplicate-root contract
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — broken-chain UI, **Push build → Create**, **Reload Dependencies** vs **Relaunch Tool**, **`getMessageAsMeta('mFollicle')`** on load
 - EXTENDED: `Features/Feature_DynSimTool.md` — sim/driven contract, reload, broken chain, anti-patterns, checklist #21–22
-- EXTENDED: `.cursor/rules/maya-cmds-strings-only.mdc`, **`cgm-runtime-meta-not-strings`** — **`asMeta=False`** / **`.mNode`** at **`mc.*`**
+- EXTENDED: `.claude/rules/maya-cmds.md`, **`cgm-runtime-meta-not-strings`** — **`asMeta=False`** / **`.mNode`** at **`mc.*`**
 
 **Status**: ✅ Maya-verified — Edna 4-target bang + add end; spline IK past 3-joint gate; broken partial chain delete/recreate
 

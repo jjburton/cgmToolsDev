@@ -23,7 +23,7 @@
 | **cgm-side workaround** | Batch bootstrap (`Red9.setup.addPythonPackages()`), wrappers in `cgm/core/lib/`, thin callers |
 | **Red9 patch + manifest** | Import path fix inside Red9 core, behavior that only makes sense inside Red9 modules |
 
-Default: do not edit Red9 without clearance (see `.cursor/rules/cgm-module-placement.mdc`). When Red9 must change, record it here.
+Default: do not edit Red9 without clearance (see `.claude/rules/reuse-and-placement.md`). When Red9 must change, record it here.
 
 ---
 

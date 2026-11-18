@@ -1,7 +1,7 @@
 # Agent / developer workflow (cgmTools)
 
 > **Claude Code:** start at [`CLAUDE.md`](CLAUDE.md) — condensed iron rules, rule index, and env notes.
-> **Cursor:** rules load from [`.cursor/rules/`](.cursor/rules/), which remain the source of truth for both.
+> **Rules:** live in [`.claude/rules/`](.claude/rules/) and load automatically in Claude Code. `CLAUDE.md` holds the condensed iron rules and rule index.
 
 ## Keep `cgmToolsPy3` clean
 
@@ -11,17 +11,17 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 1. **Open the multi-root workspace from this repo:**  
    **File → Open Workspace from File…** → [`cgmTools.code-workspace`](cgmTools.code-workspace)  
-   That loads **`cgmToolsDev`**, **`cgmToolsPy3`**, and **`cgmDocs`** so Cursor rules under `.cursor/rules/` apply while you edit py3 code.
+   That loads **`cgmToolsDev`**, **`cgmToolsPy3`**, and **`cgmDocs`** so the rules in `.claude/rules/` load while you edit py3 code.
 
 2. **Do not** rely on opening only the py3 folder if you want bridge rules active—the rules live here, not in py3.
 
-3. **Module placement:** new general utilities → **`cgm/core/lib/`**; meta/MRS/rig logic → **`mrs/`**, **`rig/`**; do not edit **zooPy** or **Red9** without clearance — see **`.cursor/rules/cgm-module-placement.mdc`**. Before adding a Maya query helper (`mc.ls` / `listConnections` / `keyframe` / name hacks), read [`Features/Feature_CoreLibLookups.md`](Features/Feature_CoreLibLookups.md).
+3. **Module placement:** new general utilities → **`cgm/core/lib/`**; meta/MRS/rig logic → **`mrs/`**, **`rig/`**; do not edit **zooPy** or **Red9** without clearance — see **`.claude/rules/reuse-and-placement.md`**. Before adding a Maya query helper (`mc.ls` / `listConnections` / `keyframe` / name hacks), read [`Features/Feature_CoreLibLookups.md`](Features/Feature_CoreLibLookups.md).
 
-4. **User-facing Google Doc updates** (artist manual): follow [`Guides/GoogleDoc_Capture_Guide.md`](Guides/GoogleDoc_Capture_Guide.md) and the **`google-doc-capture`** skill (`.cursor/skills/google-doc-capture/`). Branch docs in `Branches/` are the dev source; the guide produces paste-ready section blocks for your Google Doc.
+4. **User-facing Google Doc updates** (artist manual): follow [`Guides/GoogleDoc_Capture_Guide.md`](Guides/GoogleDoc_Capture_Guide.md) and the **`google-doc-capture`** skill (`.claude/skills/google-doc-capture/`). Branch docs in `Branches/` are the dev source; the guide produces paste-ready section blocks for your Google Doc.
 
 5. **Export pipeline design contract**: [`Features/Feature_SceneExportFlow.md`](Features/Feature_SceneExportFlow.md) — canonical dev/TA reference for Scene export behavior (modes, tdSets, prep invariants). Update when changing `ExportScene` or `bakeAndPrep`.
 
-6. **cgmDynSimTool design contract** (formerly cgmSimChain): [`Features/Feature_DynSimTool.md`](Features/Feature_DynSimTool.md) — hair vs cloth attach chains, spline/legacy follow, sim/driven joint contract, broken-chain Details, nCloth preset layering, connect/bake invariants (**Bake Input** one-batch bake, auto disconnect, timing logs), Query Settings, addEndJoint, **Reload Dependencies** vs **Relaunch Tool** vs **`CGM._reload`** for **`mClass`** edits. Update when changing `cgmDynFK`, `dynFKTool`, or `nCloth_utils`. Agent rules: **`cgm-meta-and-existing-patterns`**, **`cgm-reload-mod`** (no partial meta reload in tools), **`cgm-stale-session-diagnosis`**, **`cgm-debug-order`**, **`cgm-simchain-debug-contract`**, **`cgm-agent-token-discipline`**, **`maya-cmds-strings-only`**, **`cgm-long-running-ui-progress`**.
+6. **cgmDynSimTool design contract** (formerly cgmSimChain): [`Features/Feature_DynSimTool.md`](Features/Feature_DynSimTool.md) — hair vs cloth attach chains, spline/legacy follow, sim/driven joint contract, broken-chain Details, nCloth preset layering, connect/bake invariants (**Bake Input** one-batch bake, auto disconnect, timing logs), Query Settings, addEndJoint, **Reload Dependencies** vs **Relaunch Tool** vs **`CGM._reload`** for **`mClass`** edits. Update when changing `cgmDynFK`, `dynFKTool`, or `nCloth_utils`. Agent rules: [`reuse-and-placement.md`](.claude/rules/reuse-and-placement.md), [`reload.md`](.claude/rules/reload.md) (no partial meta reload in tools), [`debugging.md`](.claude/rules/debugging.md), [`cgm-dynsim-debug`](.claude/skills/cgm-dynsim-debug/SKILL.md), [`maya-cmds.md`](.claude/rules/maya-cmds.md), [`ui-progress.md`](.claude/rules/ui-progress.md).
 
 7. **MetaHuman facial solve design contract**: [`Features/Feature_Metahuman.md`](Features/Feature_Metahuman.md) — joint matching, bridge mapping, `transfer_rig` / `constrain_rig`, rest-pose invariants. Timeline on [`Branches/Branch_UnrealWorkflow.md`](Branches/Branch_UnrealWorkflow.md). Primary code in Perforce `ProjectScripts/MetahumanFacial.py` (factor core to cgm when API stabilizes).
 
@@ -29,7 +29,7 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 9. **MRS module wiring design contract**: [`Features/Feature_MRSWiring.md`](Features/Feature_MRSWiring.md) — block/module/puppet message graphs, build sync, control rewire, attach points, **Segment `followParentBank`** (default off; Limb digit bank unchanged), **Limb roll `segmentMidIKSetup`** / **`limb_segment_mid`** (per-roll mid follow; segment/head keep **`ikMidSetup`**). Update when changing `puppet_utils`, `module_utils`, `moduleTarget_wire_from_blockParent`, Segment/Limb parent-bank build, or limb roll mid IK (`rigFrame_utils.limb_segment_mid`, `limb.rig_segments`).
 
-10. **cgm tool UI design contract**: [`Features/Feature_CgmToolUI.md`](Features/Feature_CgmToolUI.md) — parallel list data vs scroll display, selection by index, CCL/preset save rules, scroll-list pitfalls; **Scene browser navigation depth** (filesystem `hasSub` / `hasVariant`, type-only files in panel 2); **runtime meta vs strings** (see **`.cursor/rules/cgm-runtime-meta-not-strings.mdc`**); **long-running work** (bake, export, batch) needs progress bar — **`.cursor/rules/cgm-long-running-ui-progress.mdc`**. Living doc — extend when establishing list/UI patterns in tools. See also [`Feature_MocapAlignSnap.md`](Feature_MocapAlignSnap.md) for link-list + CCL example.
+10. **cgm tool UI design contract**: [`Features/Feature_CgmToolUI.md`](Features/Feature_CgmToolUI.md) — parallel list data vs scroll display, selection by index, CCL/preset save rules, scroll-list pitfalls; **Scene browser navigation depth** (filesystem `hasSub` / `hasVariant`, type-only files in panel 2); **runtime meta vs strings** (see **`.claude/rules/meta-runtime.md`**); **long-running work** (bake, export, batch) needs progress bar — **`.claude/rules/ui-progress.md`**. Living doc — extend when establishing list/UI patterns in tools. See also [`Feature_MocapAlignSnap.md`](Features/Feature_MocapAlignSnap.md) for link-list + CCL example.
 
 11. **Perforce integration design contract**: [`Features/Feature_PerforceIntegration.md`](Features/Feature_PerforceIntegration.md) — optional P4 layer; **`path_utils.prepare_*`** for saves (including **`prepare_meta_files_for_write`** for Scene meta sidecars); **`preflight_export_output_paths`** before FBX bake when VC=perforce. Timeline on [`Branches/Branch_p4.md`](Branches/Branch_p4.md).
 
@@ -43,7 +43,7 @@ Others sync the **py3** repo into Maya’s `scripts` path. Do **not** commit Cur
 
 16. **MRS mesh creation design contract**: [`Features/Feature_MRSMeshCreation.md`](Features/Feature_MRSMeshCreation.md) — module proxy vs puppet mesh, face `meshBuild`/`proxyBuild`, `block_proxy_mesh_flow`, batch post (`proxyMesh_verify` → `puppetMesh_create`), skin-unify vs proxy dup, `puppet_geoGroup_get` / protected delete, normals and `color_mesh` helpers. Timeline on [`Branches/Branch_Face26.md`](Branches/Branch_Face26.md). Update when changing face block mesh attrs, `build_proxyMesh` / `create_simpleMesh`, or puppet-level mesh unify.
 
-17. **cgmMeta API scope**: [`Features/Feature_CgmMetaAPI.md`](Features/Feature_CgmMetaAPI.md) — **`cgmNode`** / **`cgmObject`** / **`mClass`** subclasses; **no new instance methods without explicit user approval**; **`mClass` edits → prompt user for `CGM._reload`** (never partial meta reload in tool `reload_dependencies()`). Rules: **`cgm-meta-and-existing-patterns`**, **`cgm-reload-mod`**, **`cgm-msglist-patterns`** (`msgList_*` / **`ml_*`** for ordered scene-linked lists). Naming: **`cgm-meta-naming-hierarchy`**.
+17. **cgmMeta API scope**: [`Features/Feature_CgmMetaAPI.md`](Features/Feature_CgmMetaAPI.md) — **`cgmNode`** / **`cgmObject`** / **`mClass`** subclasses; **no new instance methods without explicit user approval**; **`mClass` edits → prompt user for `CGM._reload`** (never partial meta reload in tool `reload_dependencies()`). Rules: [`meta-runtime.md`](.claude/rules/meta-runtime.md) (`msgList_*` / **`ml_*`** for ordered scene-linked lists; `m*` / `ml_*` / `md_*` naming), [`reload.md`](.claude/rules/reload.md), [`reuse-and-placement.md`](.claude/rules/reuse-and-placement.md).
 
 18. **Bezier IK design contract**: [`Features/Feature_BezierIK.md`](Features/Feature_BezierIK.md) — Segment **`ikSetup=bezier`** + **`segmentType=parent`**; **`segmentType=bezier`** / ribbon segment types; **`rig_inflate`** after **`rig_segments`** for direct-parent inflate. Ribbon segment: overlay only (**`leave_joint_volume_wiring`** — do not **`bezier_spline_stretch`** **`replaceExisting`** on seg joints post-**`IK.ribbon`**). **`RIGFRAME.bezier`**, **`bezier_spline_stretch`**, **`segment_inflate_parent_rig_direct_controls`**. Timeline: [`Branches/Branch_BezierIK.md`](Branches/Branch_BezierIK.md). Update when changing bezier lib/MRS paths, **`rig_inflate`**, or inflate on ribbon segment.
 

@@ -17,7 +17,7 @@
 **Related docs**
 
 - [`Branch_SpringCleaning.md`](../Branches/Branch_SpringCleaning.md) — timeline
-- [`.cursor/rules/cgm-module-placement.mdc`](../.cursor/rules/cgm-module-placement.mdc) — where new helpers go
+- [`.claude/rules/reuse-and-placement.md`](../.claude/rules/reuse-and-placement.md) — where new helpers go
 - [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) — tool UI (not this migration)
 - [`Feature_PerforceIntegration.md`](Feature_PerforceIntegration.md) — zooPy perforce is reference-only; same vendored rule applies here
 

@@ -2,11 +2,11 @@
 
 Living inventory of **`cgm/core/cgm_Meta.py`** (~6k lines) and closely related **`cgmMeta.*`** subclasses elsewhere. Source of truth for behavior remains the py3 module; this doc is for navigation and agent/human onboarding.
 
-**Related rules:** **`cgm-runtime-meta-not-strings`**, **`maya-cmds-strings-only`**, **`cgm-meta-naming-hierarchy`** (`m*` / `ml_*` / `md_*`; new edits first).
+**Related rules:** [`meta-runtime.md`](../.claude/rules/meta-runtime.md) (runtime meta vs strings; `m*` / `ml_*` / `md_*` naming; new edits first), [`maya-cmds.md`](../.claude/rules/maya-cmds.md).
 
 **Revision:** 2026-10-09 — hierarchy getters force **`fullPath=True`** on Maya query when **`asMeta=True`** (**`_hierarchyQueryFullPath`** in **`cgm_Meta.py`**). 2026-09-15 — session reload / **`mClass`** registry order; module vs instance APIs.
 
-**Reload / registry:** [`Feature_DynSimTool.md`](Feature_DynSimTool.md) **Reload contract** (reference tool). Rules: **`cgm-reload-mod`** § Meta / `mClass` — **no partial meta reload in tools**; **`cgm-meta-and-existing-patterns`**.
+**Reload / registry:** [`Feature_DynSimTool.md`](Feature_DynSimTool.md) **Reload contract** (reference tool). Rules: [`reload.md`](../.claude/rules/reload.md) § Meta / `mClass` — **no partial meta reload in tools**; [`meta-runtime.md`](../.claude/rules/meta-runtime.md).
 
 ### Agent policy (all `mClass` work)
 

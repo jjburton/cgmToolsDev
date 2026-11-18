@@ -9,14 +9,12 @@ description: >-
 
 # PY2 backport session
 
-Ported from `.cursor/rules/py2-backport-session.mdc`.
-
 ## Gate
 
 This applies **only** when the user has explicitly opened a backport session. If they have not said so,
 stop and ask — do not assume py2 paths exist, and do not go looking for them.
 
-Default sessions are **py3-only** (`cgmToolsPy3`). See `.cursor/rules/python3-primary.mdc`.
+Default sessions are **py3-only** (`cgmToolsPy3`). See `CLAUDE.md`.
 
 ## Setup
 
@@ -33,7 +31,7 @@ Default sessions are **py3-only** (`cgmToolsPy3`). See `.cursor/rules/python3-pr
 - Prefer **minimal, surgical edits** on the py2 side. Do not modernize, reformat, or refactor py2 code
   that the port does not require.
 - py2 syntax constraints apply there: no f-strings, `print` conventions of that tree, `reload()` builtin
-  rather than `importlib` (and `cgmGEN._reloadMod` still wraps it — see `.cursor/rules/cgm-reload-mod.mdc`).
+  rather than `importlib` (and `cgmGEN._reloadMod` still wraps it — see `.claude/rules/reload.md`).
 
 ## When finished
 
