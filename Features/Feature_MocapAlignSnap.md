@@ -148,7 +148,7 @@ On save: compact source patterns under Skel Roots — **leaf when unique**, mini
 
 ## Module placement
 
-Per [`cgm-module-placement`](../../.cursor/rules/cgm-module-placement.mdc):
+Per [`reuse-and-placement.md`](../.claude/rules/reuse-and-placement.md):
 
 | Module | Responsibility |
 |--------|----------------|

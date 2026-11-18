@@ -20,7 +20,7 @@ Add an **optional** Perforce layer for depot users: audit where cgm tools write 
 - **[Feature_ProjectManager.md](../Features/Feature_ProjectManager.md)** - cgmProjectManager, project `.cfg`, paths, `dirMask`, Content/Export scroll lists
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch documentation format reference
 
-- **`.cursor/rules/perforce-checkout.mdc`** - Agent workflow when py3 files need P4 checkout before edit
+- **`.claude/rules/perforce.md`** - Agent workflow when py3 files need P4 checkout before edit
 
 ## 🗓️ Timeline
 

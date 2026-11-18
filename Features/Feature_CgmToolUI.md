@@ -16,14 +16,14 @@
 - [`Feature_BlockCreateHelpers.md`](Feature_BlockCreateHelpers.md) — BlockCreate Helpers registered readout + msgList persistence
 - [`Feature_AnimData.md`](Feature_AnimData.md) — cgmAnimClip / mrsAnimClip Dat UI; pinned-chrome hook
 - [`Feature_LibToCore.md`](Feature_LibToCore.md) — `test_UISMOKE` open/close shipped cgm windows (Maya GUI; not behavior). `Close(skipVerify=True)` for `VERIFY_CLOSE`.
-- Module placement — `.cursor/rules/cgm-module-placement.mdc` (UI in `tools/`, shared chunks in `tools/lib/`)
-- Long-running actions — `.cursor/rules/cgm-long-running-ui-progress.mdc` (bake, export, batch rebuild)
+- Module placement — `.claude/rules/reuse-and-placement.md` (UI in `tools/`, shared chunks in `tools/lib/`)
+- Long-running actions — `.claude/rules/ui-progress.md` (bake, export, batch rebuild)
 
 ---
 
 ## Long-running actions (progress)
 
-Tool callbacks that bake, export, or loop over many scene objects must show **Maya main progress bar** feedback (and support **cancel** when abort is safe). Implement stepping in **`rig/` / `lib/`** backends; UI handlers stay thin. See **`cgm-long-running-ui-progress`** rule. **cgmDynSimTool Bake Input** (`chain_bake_input_from_targets`): one Maya bake per action — progress bar updates around that call only, not a Python loop per timeline frame (see **`Feature_DynSimTool.md`** connect/bake contract). **cgmDynSimTool load** — **`uiFunc_update_details(..., with_progress=True)`** on autoload and header load selected: stepped bar while syncing chains, reading **`get_dat()`**, and building per-chain Details UI (see **`Feature_DynSimTool.md`** UI Surface / load progress).
+Tool callbacks that bake, export, or loop over many scene objects must show **Maya main progress bar** feedback (and support **cancel** when abort is safe). Implement stepping in **`rig/` / `lib/`** backends; UI handlers stay thin. See [`ui-progress.md`](../.claude/rules/ui-progress.md) rule. **cgmDynSimTool Bake Input** (`chain_bake_input_from_targets`): one Maya bake per action — progress bar updates around that call only, not a Python loop per timeline frame (see **`Feature_DynSimTool.md`** connect/bake contract). **cgmDynSimTool load** — **`uiFunc_update_details(..., with_progress=True)`** on autoload and header load selected: stepped bar while syncing chains, reading **`get_dat()`**, and building per-chain Details UI (see **`Feature_DynSimTool.md`** UI Surface / load progress).
 
 ---
 
@@ -48,7 +48,7 @@ Tool callbacks that bake, export, or loop over many scene objects must show **Ma
 
 Meta keeps a live handle: **`.mNode` / long path is resolved when needed**, not copied through a multi-step pipeline as the only identity.
 
-**Boundary:** load string → **`cgmMeta.asMeta`** → work in meta → save **`.mNode`** once at serialize. Cursor rule: **`.cursor/rules/cgm-runtime-meta-not-strings.mdc`**.
+**Boundary:** load string → **`cgmMeta.asMeta`** → work in meta → save **`.mNode`** once at serialize. Rule: **`.claude/rules/meta-runtime.md`**.
 
 **Anti-pattern:** append **`mc.joint(...)`** names to a string list and pass that list through ensure → skin → msgList. **Prefer:** **`ml_sim`** meta list from **`doCreateAt('joint')`**, **`p_parent`**, hierarchy normalize, connect from meta.
 
@@ -656,5 +656,5 @@ For tools that load external preset files (CCL, AFS, etc.), use the **`animFilte
 | 2026-08-13 | animFilter-style checkbox + frame + compact header buttons; p4Tool changelist R/S batch pattern |
 | 2026-08-13 | Section layout: `column adj` = horizontal stretch; full-width centered labels via `MelHSingleStretchLayout`; compact status block kwargs; p4Tool ref |
 | 2026-08-12 | Session persistence pattern: last-file optionVar + pathList recent + status bar; refs animFilterTool + mocapBakeTools autoload |
-| 2026-09-14 | Runtime meta rule: tool/rig pipelines use cgmMeta; strings for UI + saved data only; link to `cgm-runtime-meta-not-strings.mdc` |
+| 2026-09-14 | Runtime meta rule: tool/rig pipelines use cgmMeta; strings for UI + saved data only; link to `meta-runtime.md` |
 | 2026-08-11 | Initial doc: data vs display rule, parallel lists, `cgmListItem`, `cgmScrollList`, `MelObjectScrollList` caveat, CCL IO, anti-patterns; refs Builder + mocapBakeTools |

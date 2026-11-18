@@ -16,4 +16,4 @@ See **[`../AGENTS.md`](../AGENTS.md)** for workspace setup.
 | [`Plans/PY2_BACKPORT_PLAN.md`](../Plans/PY2_BACKPORT_PLAN.md) | Python 2 backport sessions |
 | [`Plans/Plan_ExportP4Integration.md`](../Plans/Plan_ExportP4Integration.md) | Scene FBX export + Perforce checkout/add (planning) |
 
-For Google Doc capture in Cursor, use the **`google-doc-capture`** skill or ask to “document for Google Doc” (see [`../.cursor/rules/google-doc-capture.mdc`](../.cursor/rules/google-doc-capture.mdc)).
+For Google Doc capture in Cursor, use the **`google-doc-capture`** skill or ask to “document for Google Doc” (see [`../.claude/skills/google-doc-capture/SKILL.md`](../.claude/skills/google-doc-capture/SKILL.md)).

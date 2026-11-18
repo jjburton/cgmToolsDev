@@ -8,8 +8,6 @@ description: >-
 
 # Google Doc capture
 
-Ported from `.cursor/skills/google-doc-capture/SKILL.md` and `.cursor/rules/google-doc-capture.mdc`.
-
 ## When to use
 
 - User asks to document tool changes for **Google Docs** or the **artist manual**

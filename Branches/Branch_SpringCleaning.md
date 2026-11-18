@@ -31,7 +31,7 @@ Out of scope (not leftover): hollow-shim `attributes` / `search`; port `modules`
 - **[Feature_LibToCore.md](../Features/Feature_LibToCore.md)** - Canonical inventory, old→new map, shim rules, test-runner contract, wave order
 - **[Feature_CoreLibLookups.md](../Features/Feature_CoreLibLookups.md)** - `SKIN.transfer_fromTo` / SEARCH / SNAP names
 - **[NewBranch_Guide.md](../Guides/NewBranch_Guide.md)** - Branch documentation format
-- **[cgm-module-placement.mdc](../.cursor/rules/cgm-module-placement.mdc)** - Where new helpers go (`core/lib`, not zoo/Red9)
+- **[reuse-and-placement.md](../.claude/rules/reuse-and-placement.md)** - Where new helpers go (`core/lib`, not zoo/Red9)
 - **[Feature_PerforceIntegration.md](../Features/Feature_PerforceIntegration.md)** - Same vendored rule: do not import zooPy perforce from core
 
 ## Timeline

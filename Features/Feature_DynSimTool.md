@@ -506,9 +506,9 @@ Optional spline-follow rig step in **`dynamic_utils`** (not cgm **`ik_utils.spli
 
 **Script Editor check:** Relaunch / **`reload_dependencies()`** logs each backend **`module.__name__`** and **`cgmDynSimTool backend done`**. It does **not** log Red9/**`cgm_Meta`** — use **CGM._reload** for those.
 
-- **Never** call **`reload_dependencies()`** / rebind from **Make Dynamic Chain** or other one-shot buttons — see **`cgm-reload-mod`** / **`cgm-stale-session-diagnosis`**.
+- **Never** call **`reload_dependencies()`** / rebind from **Make Dynamic Chain** or other one-shot buttons — see [`reload.md`](../.claude/rules/reload.md) / [`debugging.md`](../.claude/rules/debugging.md).
 
-**Maya API boundary**: **`maya.cmds`** arguments must be **`str`** ( **`meta.mNode`** or **`getParent(asMeta=False)`** ). Do not pass meta instances into **`mc.*`** — see **`maya-cmds-strings-only`**. Details **Hair system** row preset menus use **cgmDat/sim** library dats only (same as **Presets** top menu — **Load Dat** / **Save Hair Dat…**); not Maya **`nodePreset`**.
+**Maya API boundary**: **`maya.cmds`** arguments must be **`str`** ( **`meta.mNode`** or **`getParent(asMeta=False)`** ). Do not pass meta instances into **`mc.*`** — see [`maya-cmds.md`](../.claude/rules/maya-cmds.md). Details **Hair system** row preset menus use **cgmDat/sim** library dats only (same as **Presets** top menu — **Load Dat** / **Save Hair Dat…**); not Maya **`nodePreset`**.
 
 ### Dev debug: stale session vs bad wiring
 
@@ -744,7 +744,7 @@ Unittest: Toolbox → **coreLib → SIMCHAIN** (`test_SIMCHAIN.py` — presets +
 
 - **[Branch_UnrealWorkflow.md](../Branches/Branch_UnrealWorkflow.md)** — timeline, lessons learned, PR notes
 - **[NewFeature_Guide.md](../Guides/NewFeature_Guide.md)** — feature doc conventions
-- **[cgm-module-placement.mdc](../.cursor/rules/cgm-module-placement.mdc)** — where new sim helpers belong (`lib/` vs `rig/`)
+- **[reuse-and-placement.md](../.claude/rules/reuse-and-placement.md)** — where new sim helpers belong (`lib/` vs `rig/`)
 
 ### Code references (py3)
 

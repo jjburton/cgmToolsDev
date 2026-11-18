@@ -10,7 +10,6 @@ description: >-
 
 # cgmDynSimTool debug contract
 
-Ported from `.cursor/rules/cgm-simchain-debug-contract.mdc`.
 Canonical detail: [`Features/Feature_DynSimTool.md`](../../../Features/Feature_DynSimTool.md) (Dev debug section).
 
 ## Count vocabulary — do not conflate
@@ -58,7 +57,7 @@ After **Setup → Reload Dependencies**, three checks in the Script Editor:
 3. **After ensure** — `simJoints` count and `l_pos` CV count.
 
 If (1) is correct and (2) is **missing**, treat it as a **stale session** — see the stale-session rule in
-[`CLAUDE.md`](../../../CLAUDE.md) §8 and `.cursor/rules/cgm-stale-session-diagnosis.mdc`. Do **not** chase
+[`CLAUDE.md`](../../../CLAUDE.md) §8 and `.claude/rules/debugging.md`. Do **not** chase
 kwargs wiring.
 
 ## Reload paths
@@ -67,4 +66,4 @@ kwargs wiring.
 - **Relaunch Tool** / shelf = also reloads `dynFKTool`
 - **`mClass` edits** (`cgmDynFK` class body) = user runs `import cgm.core as CGM; CGM._reload()`
 
-See `.cursor/rules/cgm-reload-mod.mdc`.
+See `.claude/rules/reload.md`.

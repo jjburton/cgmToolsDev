@@ -3,113 +3,8 @@
 Entry point for Claude Code. Read this with [`AGENTS.md`](AGENTS.md) (repo layout, workspace setup, and
 the numbered **design contracts** in `Features/`).
 
-## Two repos, one session
+## Rule 0 — Delegate to the cheapest capable subagent (HARD RULE, checked first every turn)
 
-| Repo | Role | Claude may write |
-|------|------|------------------|
-| `cgmToolsDev` (this one) | Bridge: docs, rules, plans, branch notes | Yes — docs, rules, config |
-| `cgmToolsPy3` (additional working dir) | **Ship tree** artists sync into Maya `scripts/` | Yes — **code only** |
-
-**Never** create `.claude/`, `.cursor/`, `CLAUDE.md`, `AGENTS.md`, `*.code-workspace`, or bridge docs
-inside `cgmToolsPy3`. Dev-workflow assets live here. (`cgmToolsPy3/.gitignore` enforces this as a backstop.)
-
-**Python 3 only.** Do not read, search, or edit a legacy py2 `cgmTools` checkout unless a PY2 backport
-session is explicitly active — see the `py2-backport` skill.
-
-## Iron rules (always on)
-
-> **Rule 13 (delegation) is checked first, every turn, before any other rule.** The main session's first tool call on any multi-step task is `Agent` — not `git status`, not a `Read`, not a "quick look".
-
-These are condensed from `.cursor/rules/*.mdc`, which stay the source of truth. When a rule matters to the
-change at hand, **open the named `.mdc`** for the full contract and examples.
-
-### 1. Maya `cmds` — alias and types
-- Import `import maya.cmds as mc`. Never `as cmds`, never bare `cmds.`. (`maya-cmds-import`)
-- Every `mc.*` argument naming a node, shape, component, or plug must be a **`str`**. Never pass a
-  `cgmMeta` / Red9 `MetaClass` instance into `mc.*`. Use `getParent(asMeta=False)` when `mc.*` is next,
-  or `.mNode` on meta you already hold. Don't trust `VALID.mNodeString` to have returned a `str` —
-  `isinstance(..., str)` first. (`maya-cmds-strings-only`)
-
-### 2. Runtime is meta, not strings
-- **UI labels and saved data** (optionVars, `.cgm*Dat`, CCL, presets, JSON) → strings.
-- **Runtime** (handlers, build/create, in-memory lists, message graphs, pipelines) → `cgmMeta` instances.
-- Convert once at the load/save boundary; `str` only at the `mc.*` edge.
-- Resolve scroll-list selection by **index → parallel meta list**, never by parsing display strings.
-  (`cgm-runtime-meta-not-strings`, `Features/Feature_CgmToolUI.md`)
-
-### 3. Meta naming and hierarchy
-- `m*` = one meta instance · `ml_*` = list of meta · `md_*` = dict with meta values. No prefix ⇒ not meta.
-- Meta owns hierarchy: `mChild.p_parent = mParent`, `getParent(asMeta=True)`, `msgList_get` → `ml_*`.
-  Don't run a parallel `mc.listRelatives` / `mc.parent` walk for the same intent.
-- Scope: new code and files you touch — not a mandate to retrofit whole tools.
-  (`cgm-meta-naming-hierarchy`, `cgm-msglist-patterns`)
-
-### 4. Search before you write
-- Before any new `def` using `mc.ls`, `listConnections`, `listAttr`, `keyframe`, or name-string hacks:
-  read [`Features/Feature_CoreLibLookups.md`](Features/Feature_CoreLibLookups.md) and call what's there.
-- Before new helpers, grep `cgmToolsPy3` for the problem already solved. A new lib function needs a real gap.
-- Shared lookup tables / alias maps / enums → `cgm/core/lib/shared_data.py` (as `SHARED`), not module-local
-  dicts. (`cgm-meta-and-existing-patterns`, `cgm-shared-lookup-data`)
-
-### 5. Module placement
-| Kind | Home |
-|------|------|
-| General utilities (paths, math, P4, file IO, non-meta Maya) | `cgm/core/lib/` |
-| Meta, blocks, Scene, rig build | `cgm/core/mrs/`, `cgm/core/rig/`, `mrs/lib/` |
-| Artist tool windows / shelves | `cgm/core/tools/` (+ `tools/lib/`) |
-
-**Do not modify** `cgm/lib/zoo/` (zooPy) or `Red9/` without explicit user clearance — fix or wrap in
-`cgm/core/`. Red9 edits that do happen must be recorded in
-[`Patches/Red9/manifest.json`](Patches/Red9/manifest.json). (`cgm-module-placement`, `Feature_Red9Patches.md`)
-
-### 6. `mClass` / meta API changes need approval
-- **Do not add new instance methods** on registered `mClass` subclasses, or call methods you just invented.
-  Default is a `lib/` / `rig/` **module function** taking `mObj` as first arg.
-- If the user approves an `mClass` change, **tell them to run `import cgm.core as CGM; CGM._reload()`**
-  before expecting new behavior. (`cgm-meta-and-existing-patterns`, `Feature_CgmMetaAPI.md`)
-
-### 7. Reload
-- Reload only via `cgmGEN._reloadMod(module)` after `import cgm.core.cgm_General as cgmGEN`.
-- **Banned:** `importlib.reload`, `importlib.import_module`, bare `reload()`, `imp.reload`,
-  `__import__(__name__)`, `sys.modules[...]` tricks — in code, comments, docs, and Script Editor snippets.
-- Dependencies first, consumer last; tool module last. Log each module name as it reloads.
-- **Never** reload or rebind inside one-shot action callbacks (Create, bake, export).
-- **Never** build a partial Red9 → `cgm_Meta` → `cgm_RigMeta` stack inside a tool's `reload_dependencies()`
-  — it breaks other metaclasses. (`cgm-reload-mod`)
-
-### 8. Debugging order
-1. **Stale session first.** New `log.info` from the tool module but none from the backend module ⇒ stale
-   import / cached meta, not broken wiring. Fix is Reload Dependencies, shelf relaunch, or Maya restart.
-2. **Log at boundaries** (UI handler → public API kwargs → first backend branch) before adding validation,
-   coercion, or rig logic.
-3. **One root cause per turn.** Don't stack fixes without Maya confirmation between them.
-4. **Stop condition:** after one change that doesn't move Maya output and backend entry logs are still
-   absent — stop patching build logic, document reload steps only.
-5. Never interpret a count without naming *which* object (sim joints vs follow locs vs inCurve CVs).
-   (`cgm-stale-session-diagnosis`, `cgm-debug-order`, `cgm-simchain-debug-contract`)
-
-### 9. Working with pasted Maya logs
-- Quote what is **present vs absent** (specific module/function lines), then state **one** inference before
-  editing. Prefer minimal diff until session freshness is proven. Don't re-explain the same root cause
-  across turns without a new log or user confirmation. (`cgm-agent-token-discipline`)
-
-### 10. Clear code
-- Names match scene nodes/attrs/buffer fields (`m_ik_orient_frame`, not `mSpan`). Return what callers need.
-- Pass the block build instance (`self`) into helpers; set `self.ml_*` **inside** the helper, not by
-  assigning a return value at the call site.
-- Obscure patterns only with a stated one-line reason (design / engineering / performance). (`cgm-clear-code`)
-
-### 11. Long-running UI work needs progress
-- Any button or menu that can keep Maya busy — multi-frame bake, timeline export, batch rebuild, heavy
-  scene walks, many constraints/duplicates — must show **visible progress** and support cancel where it can.
-  (`cgm-long-running-ui-progress`)
-
-### 12. Perforce
-- If an edit is blocked by read-only / not-checked-out: **stop**, name the full path and the intended change,
-  wait for the user. No shell one-liners, patch scripts, retries, or edit-a-copy workarounds.
-  (`perforce-checkout`, `Feature_PerforceIntegration.md`)
-
-### 13. Delegate to the cheapest capable subagent (token discipline) — HARD RULE
 - The main session plans, synthesizes, reviews diffs, and answers. It does **not** search, explore, run git ops, resolve conflicts, or edit files itself.
 - **Inline budget: ≤2 tool calls for the whole turn**, against a known path (one `Read`, one `git show <sha>`). Plan/wrap-up bookkeeping calls don't count; everything else does — including "just checking" commands (`git status`, `git fetch`, `git log`, `ls`, `grep`).
 - **Decide before the first tool call.** If the job will plausibly take >2 calls, the first real tool call is `Agent`. No "let me look first, then delegate."
@@ -125,16 +20,44 @@ change at hand, **open the named `.mdc`** for the full contract and examples.
 - Parallel independent lookups go out in one message, each on the cheapest model that fits.
 - **Accountability:** the turn's wrap-up recap names which subagents ran (model + job), or states "inline (≤2 calls)". Exceeding the budget without delegating is a rule violation — say so plainly if it happens.
 
-## Rule index (`.cursor/rules/` — full text)
+## Two repos, one session
 
-Always on: `python3-primary` · `maya-cmds-import` · `maya-cmds-strings-only` · `cgm-runtime-meta-not-strings`
-· `cgm-meta-naming-hierarchy` · `cgm-msglist-patterns` · `cgm-meta-and-existing-patterns`
-· `cgm-shared-lookup-data` · `cgm-module-placement` · `cgm-reload-mod` · `cgm-stale-session-diagnosis`
-· `cgm-debug-order` · `cgm-agent-token-discipline` · `cgm-clear-code` · `cgm-long-running-ui-progress`
-· `perforce-checkout`
+| Repo | Role | Claude may write |
+|------|------|------------------|
+| `cgmToolsDev` (this one) | Bridge: docs, rules, plans, branch notes | Yes — docs, rules, config |
+| `cgmToolsPy3` (additional working dir) | **Ship tree** artists sync into Maya `scripts/` | Yes — **code only** |
 
-Conditional (ported to `.claude/skills/`): `google-doc-capture` · `cgm-simchain-debug-contract`
-· `py2-backport-session` · `bridge-repo-context`
+`cgmToolsDev` holds **developer-workflow** assets: Claude config, workspace files, `Plans/` (backport and
+coordination docs, e.g. `PY2_BACKPORT_PLAN.md`), `Guides/`, `Features/`, `Branches/`. It is **not** the Maya
+scripts tree. `cgmToolsPy3` is the **runtime library**; don't confuse folders here with its package modules.
+
+**Never** create `.claude/`, `.cursor/`, `CLAUDE.md`, `AGENTS.md`, `*.code-workspace`, or bridge docs
+inside `cgmToolsPy3`. Dev-workflow assets live here. (`cgmToolsPy3/.gitignore` enforces this as a backstop.)
+
+**Python 3 only.** `cgmToolsPy3` is the default target for edits and suggestions. Do not read, search, propose
+changes to, or assume paths in a legacy py2 `cgmTools` checkout unless a PY2 backport session is explicitly
+active — see the `py2-backport` skill and `Plans/PY2_BACKPORT_PLAN.md`.
+
+## Iron rules (always loaded from .claude/rules/)
+
+Every file in [`.claude/rules/`](.claude/rules/) loads at session start, like this file. They govern code in
+`cgmToolsPy3`; open the named file for the full contract and examples.
+
+- [`maya-cmds.md`](.claude/rules/maya-cmds.md) — `import maya.cmds as mc`; every `mc.*` node argument is a `str`, never meta.
+- [`meta-runtime.md`](.claude/rules/meta-runtime.md) — meta at runtime, strings at edges; `m*`/`ml_*`/`md_*`; msgLists; no new mClass methods.
+- [`reuse-and-placement.md`](.claude/rules/reuse-and-placement.md) — search before writing; `SHARED` data; module homes; no zoo/Red9 edits.
+- [`reload.md`](.claude/rules/reload.md) — only `cgmGEN._reloadMod`; banned reload APIs; never reload in action callbacks.
+- [`debugging.md`](.claude/rules/debugging.md) — stale session first, boundary logs, one root cause per turn, minimal diffs.
+- [`clear-code.md`](.claude/rules/clear-code.md) — explicit names, `self`-passing helpers; obscurity needs a stated reason.
+- [`ui-progress.md`](.claude/rules/ui-progress.md) — long-running buttons show a cancellable Maya progress bar.
+- [`perforce.md`](.claude/rules/perforce.md) — blocked by checkout: stop, name the file, wait; no workarounds.
+
+## Skills and commands
+
+Skills (`.claude/skills/`): `google-doc-capture` (artist-manual paste blocks) · `cgm-dynsim-debug` (DynSim
+count vocabulary and debug log contract) · `py2-backport` (only in an explicit py2 backport session).
+Commands (`.claude/commands/`): `/cgm-doc` (create/update a Feature or Branch doc) · `/cgm-review` (audit
+cgmToolsPy3 changes against the iron rules).
 
 ## Where docs go
 
