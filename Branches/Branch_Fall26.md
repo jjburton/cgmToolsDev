@@ -70,7 +70,7 @@
 - Joints ride the bezier, not `drivenCurve` — measured up to ~2 units off, caused the IK-on jump
 - ikMid anchors follow the form-only track curve to avoid a DG cycle
 
-**Status**: ✅ Head verified in Maya (joints + IK driver 0.0 off the bezier at rest) · ⏳ Segment port — verify in Maya
+**Status**: ✅ Head and Segment verified in Maya (joints + IK driver 0.0 off the bezier at rest, no jump on IK) · PR [jjburton/cgmToolsPy3#20](https://github.com/jjburton/cgmToolsPy3/pull/20) → `jburton/Fall26`
 
 ---
 
