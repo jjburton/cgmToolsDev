@@ -107,6 +107,17 @@ change at hand, **open the named `.mdc`** for the full contract and examples.
   wait for the user. No shell one-liners, patch scripts, retries, or edit-a-copy workarounds.
   (`perforce-checkout`, `Feature_PerforceIntegration.md`)
 
+### 13. Delegate to the cheapest capable subagent (token discipline)
+- The main session plans, synthesizes, and answers. It does **not** search, read widely, or edit files itself.
+- **Inline only** when the whole job is ≤2 tool calls against a known path (one `Read`, one `git show <sha>`). Anything more → subagent.
+- Always pass `model` explicitly:
+  - **Haiku** — searches, `git log`/`blame`/history digs, file/symbol lookups, edits with a written plan.
+  - **Sonnet** — work needing judgment: locating a cause across files, log diagnosis, non-trivial edits.
+  - **Opus** — only deep MRS/rig build, meta graph, or DynSim design work.
+- Brief tightly: goal, exact paths/repos, what's ruled out, and the return shape (conclusion + `file:line` / sha refs, no file dumps).
+- Follow-ups go to the same agent via `SendMessage`; never redo a subagent's work inline. Review its diff, not whole files.
+- Parallel independent lookups go out in one message, each on the cheapest model that fits.
+
 ## Rule index (`.cursor/rules/` — full text)
 
 Always on: `python3-primary` · `maya-cmds-import` · `maya-cmds-strings-only` · `cgm-runtime-meta-not-strings`
