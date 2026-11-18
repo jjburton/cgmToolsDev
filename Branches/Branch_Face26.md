@@ -947,7 +947,7 @@ cgmGEN._reloadMod(SEGMENT)
 - EXTENDED: `cgm/core/rig/dynamic_utils.py` — `_hair_reparent_sim_chain_ordered`, sim **`p_parent`** create, `_hair_chain_integrity_missing`, `_dag_str` / follicle constraint driver strings, driven duplicate-root contract
 - EXTENDED: `cgm/core/tools/dynFKTool.py` — broken-chain UI, **Push build → Create**, **Reload Dependencies** vs **Relaunch Tool**, **`getMessageAsMeta('mFollicle')`** on load
 - EXTENDED: `Features/Feature_DynSimTool.md` — sim/driven contract, reload, broken chain, anti-patterns, checklist #21–22
-- EXTENDED: `.claude/rules/maya-cmds.md`, **`cgm-runtime-meta-not-strings`** — **`asMeta=False`** / **`.mNode`** at **`mc.*`**
+- EXTENDED: `.claude/rules/maya-cmds.md`, `.claude/rules/meta-runtime.md` — **`asMeta=False`** / **`.mNode`** at **`mc.*`**
 
 **Status**: ✅ Maya-verified — Edna 4-target bang + add end; spline IK past 3-joint gate; broken partial chain delete/recreate
 

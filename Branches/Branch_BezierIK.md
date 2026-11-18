@@ -11,7 +11,7 @@
 
 **Source:** Code review during hips **`followIK`** / **`*_ikOrientFrame`** / **`ml_ikBlendUse`** work (Oct 23, 2026). Chat: [Hips followIK orient frame](4c850023-6bda-4061-bc6a-28754cf9a842). Resolve before opening or merging the PR.
 
-**Rules touched:** `cgm-meta-and-existing-patterns` (search-first, MRS **`self`** + **`self.ml_*`**), clear explicit wiring (no opaque return-dict assignment at call sites).
+**Rules touched:** `.claude/rules/reuse-and-placement.md` (search-first, MRS **`self`** + **`self.ml_*`**), clear explicit wiring (no opaque return-dict assignment at call sites).
 
 ### Code — follow IK and FK/IK blend
 
@@ -172,7 +172,7 @@ Use when reviewing pasted prototype chunks (timeline entries below). Target prod
 | Twist | `IKHandle_addSplineIKTwist` + MRS control wiring | If not `ikSplineSolver`, document alternate twist |
 | MRS drivers | `mRigNull.msgList_get('ribbonIKDrivers')` as skin influences | Bezier CV controls → here or new msgList (grep before inventing) |
 | End behavior | spline end duplicate + `RIGCONSTRAINT.blendChainsBy` | Decide reuse vs simplify for Bezier |
-| Placement | `ik_utils` / `rigFrame_utils` | See `cgm-module-placement` rule |
+| Placement | `ik_utils` / `rigFrame_utils` | See `.claude/rules/reuse-and-placement.md` |
 
 ### Code review workflow
 
