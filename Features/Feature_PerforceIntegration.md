@@ -36,7 +36,7 @@
 
 ### Out of scope (v1)
 
-- Maya `.ma` / `.mb` save-here / Save Version
+- Maya `.ma` / `.mb` save-here / Save Version / file-row **Replace File**
 - Texture / image export paths
 - Submitting changelists from **export** — export opens files only (`p4 edit` / `p4 add`); no auto-submit on export
 - Revert-on-failed-export rollback
@@ -253,7 +253,8 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `flush_status_cache()` | Clear session cache in place (`perforce_session.clear()`) — write paths, Refresh |
 | `reload_session_cache()` | Flush buffer via `cgmGEN._reloadMod(perforce_session)` and rebind — dev / manual flush |
 | `collect_unknown_files(root_path, …)` | Disk walk under root → skip `depot_paths` **and** session fstat-classified paths → batch fstat remaining candidates → filter `classify_file_status_ui == 'unknown'` → session **`unknown_files`** cache |
-| `get_cached_unknown_files(root_path, …)` | Cache hit for unknown list at root (no rescan) |
+| `get_cached_unknown_files(root_path, …)` | Cache hit for unknown list at root (no rescan); trash re-filtered on read (cache may predate filter) |
+| `is_scene_trash_file(path)` | Scene **File Trash** rule (same as `os_Utils.find_tmpFiles`): name ends `_batch.py` / `_MRSbatch.py`, or ext >3 chars starting `ma`/`mb` (except `max`, `mab`, `markdown`, `mapping`). Tables: `shared_data.l_sceneTrashEndMatch` / `l_sceneTrashExtMask`. Unknown sweeps (disk walk, fstat-cache unknowns, cached payload) never list trash; **`add()` refuses trash** (backstop for Scene Add, Find Unknowns, export add) |
 | **Find Unknowns ext filter** | Blue-tint `MelGridLayout` (5 columns); cell width from longest `{ext} ({count})` label; **All/None** on control row after Cache; **Search:** field + clear (Scene scroll-list pattern) on loaded rows |
 | `invalidate_unknown_paths(paths, …)` | Drop paths from unknown cache (after successful `p4 add`) |
 | `flush_unknown_cache(p4_user, p4_client)` | Clear unknown cache (all or scoped); also cleared on full fstat flush |
@@ -337,7 +338,7 @@ When `d_project['versionControl'] == 'perforce'`, scoped writes through **`path_
 | `PathWritePrepareError` | Actionable failure (out of date, locked, checkout failed, user cancelled) |
 | `project_uses_perforce(mDat)` | Gate: `versionControl == 'perforce'` on project General settings |
 
-**Wired callers:** Project/cgm_Dat cfg save; Scene Save Version / Save Maya here / **meta sidecars** (`saveMetaData`, `refreshMetaData`, `updateMetaThumbnail`); PoseManager + Animate; animFilter `.afs`; mocap CCL; skinDat; batch scripts (`confirm_p4=False`).
+**Wired callers:** Project/cgm_Dat cfg save; Scene Save Version / Save Maya here / **Replace File** (`file_replace`, after its overwrite confirm) / **meta sidecars** (`saveMetaData`, `refreshMetaData`, `updateMetaThumbnail`); PoseManager + Animate; animFilter `.afs`; mocap CCL; skinDat; batch scripts (`confirm_p4=False`).
 
 **Scene meta sidecars** (normative — mirrors PoseManager):
 
@@ -564,6 +565,7 @@ Record decisions in the **Decisions log** as they are resolved.
 | 2026-08-18 | All-path export preflight | `ExportPreflightFailedError` — check every planned FBX path before fail |
 | 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; no Add confirm; checkout / locked / out-of-date only. Export `p4_add=autoCheckoutExportFiles` |
 | 2026-11-10 | Offline: new files allowed, existing blocked | New files are offline work; overwriting depot files without checkout/out-of-date/lock checks is unsafe. Session cache allows already-opened/unknown files |
+| 2026-11-11 | Scene trash never added | `*_MRSbatch.py` scratch scripts were checked in via unknowns sweep. One trash definition in `shared_data`; filtered from unknown sweeps and refused by `perforce.add()`. Already-opened trash is not auto-reverted — revert manually |
 
 ---
 
@@ -592,6 +594,7 @@ Record decisions in the **Decisions log** as they are resolved.
 | 2026-11-18 | Offline: login expired | Auth errors ("session has expired") treated like lost connection — new files save; blocked existing files show "Perforce login expired" dialog |
 | 2026-11-16 | Offline: writable uncached files allowed | New version + meta `.dat` second write was blocked; no-cache + writable now treated as local work, read-only still blocked |
 | 2026-11-13 | Offline: stale connection cache | fstat connection errors → `mark_unavailable` + offline rules (new file saves); error fstat results no longer cached |
+| 2026-11-11 | Scene trash excluded | `is_scene_trash_file`; unknown sweeps skip trash; `add()` refuses trash |
 | 2026-11-10 | Offline save gate | New files write offline; existing files blocked unless session fstat cache shows checked-out/add/unknown; ledger `p4_offline_existing` |
 | 2026-08-19 | Interactive save skip-add | Default `p4_add=False`; never Add confirm; checkout/locked/out-of-date only; export silent add when Auto Check Out on |
 | 2026-08-18 | Mayapy batch P4 + revert paths | Batch export context payload; `p4_add=False` for scratch batch scripts; cgmP4 `revert_opened_entry` / client-root path resolve |

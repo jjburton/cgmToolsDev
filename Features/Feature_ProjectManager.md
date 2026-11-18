@@ -134,7 +134,7 @@ flowchart TD
 | [`cgm/core/tools/Project.py`](../../cgmToolsPy3/cgm/core/tools/Project.py) | UI, `data`, `cgmProjectDirList`, P4 row helpers, `project_dir_mask`, save/load/fill |
 | [`cgm/core/tools/lib/project_utils.py`](../../cgmToolsPy3/cgm/core/tools/lib/project_utils.py) | Schema defaults, `l_projectDat`, path keys, `project_uses_perforce`, subtype dir helpers |
 | [`cgm/core/lib/path_utils.py`](../../cgmToolsPy3/cgm/core/lib/path_utils.py) | `walk_below_dir` (mask + prune), `prepare_output_for_write`, export/save prepare |
-| [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | Reads `mDat`; `l_dirMask` for browser navigation; **column depth** from filesystem (`hasSub` / `hasVariant` on disk — not project `hasSub`; optional `hasVariant: false` on content). See [`Feature_CgmToolUI.md`](Feature_CgmToolUI.md) § Scene browser |
+| [`cgm/core/mrs/Scene.py`](../../cgmToolsPy3/cgm/core/mrs/Scene.py) | Reads `mDat`; `l_dirMask` for browser navigation; **column depth** from filesystem (`hasSub` / `hasVariant` on disk — not project `hasSub`; optional `hasVariant: false` on content). See [`Feature_Scene.md`](Feature_Scene.md) § Navigation depth |
 | [`cgm/core/lib/perforce.py`](../../cgmToolsPy3/cgm/core/lib/perforce.py) | P4 queries; fstat cache tree store respects `dir_mask` |
 
 ### Key APIs
