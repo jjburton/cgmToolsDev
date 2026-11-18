@@ -18,6 +18,8 @@ session is explicitly active — see the `py2-backport` skill.
 
 ## Iron rules (always on)
 
+> **Rule 13 (delegation) is checked first, every turn, before any other rule.** The main session's first tool call on any multi-step task is `Agent` — not `git status`, not a `Read`, not a "quick look".
+
 These are condensed from `.cursor/rules/*.mdc`, which stay the source of truth. When a rule matters to the
 change at hand, **open the named `.mdc`** for the full contract and examples.
 
@@ -107,16 +109,21 @@ change at hand, **open the named `.mdc`** for the full contract and examples.
   wait for the user. No shell one-liners, patch scripts, retries, or edit-a-copy workarounds.
   (`perforce-checkout`, `Feature_PerforceIntegration.md`)
 
-### 13. Delegate to the cheapest capable subagent (token discipline)
-- The main session plans, synthesizes, and answers. It does **not** search, read widely, or edit files itself.
-- **Inline only** when the whole job is ≤2 tool calls against a known path (one `Read`, one `git show <sha>`). Anything more → subagent.
+### 13. Delegate to the cheapest capable subagent (token discipline) — HARD RULE
+- The main session plans, synthesizes, reviews diffs, and answers. It does **not** search, explore, run git ops, resolve conflicts, or edit files itself.
+- **Inline budget: ≤2 tool calls for the whole turn**, against a known path (one `Read`, one `git show <sha>`). Plan/wrap-up bookkeeping calls don't count; everything else does — including "just checking" commands (`git status`, `git fetch`, `git log`, `ls`, `grep`).
+- **Decide before the first tool call.** If the job will plausibly take >2 calls, the first real tool call is `Agent`. No "let me look first, then delegate."
+- **Tripwire:** the moment a 3rd inline call would be needed, stop and hand the remainder to a subagent with what you know so far. Never finish "since I'm already here."
+- No exemption for task type: git merges, conflict resolution, commits, doc edits, and multi-file reads are all delegated (Haiku when the plan is written; Sonnet when judgment is needed).
 - Always pass `model` explicitly:
-  - **Haiku** — searches, `git log`/`blame`/history digs, file/symbol lookups, edits with a written plan.
-  - **Sonnet** — work needing judgment: locating a cause across files, log diagnosis, non-trivial edits.
+  - **Haiku** — searches, `git log`/`blame`/history digs, merges/commits/conflict fixes with a written plan, file/symbol lookups, edits with a written plan.
+  - **Sonnet** — work needing judgment: locating a cause across files, log diagnosis, non-trivial edits, conflict resolution needing content decisions.
   - **Opus** — only deep MRS/rig build, meta graph, or DynSim design work.
+- Choose the model by scope and depth, not domain (Maya vs engine work): Opus also covers engine/systems/perf work and many-file refactors. Why delegate even small, already-diagnosed edits: it keeps expensive-model tokens off simple work, and the user can address that specific agent about its result (`SendMessage` / its diff).
 - Brief tightly: goal, exact paths/repos, what's ruled out, and the return shape (conclusion + `file:line` / sha refs, no file dumps).
 - Follow-ups go to the same agent via `SendMessage`; never redo a subagent's work inline. Review its diff, not whole files.
 - Parallel independent lookups go out in one message, each on the cheapest model that fits.
+- **Accountability:** the turn's wrap-up recap names which subagents ran (model + job), or states "inline (≤2 calls)". Exceeding the budget without delegating is a rule violation — say so plainly if it happens.
 
 ## Rule index (`.cursor/rules/` — full text)
 
