@@ -467,6 +467,17 @@ cgmGEN._reloadMod(SEGMENT)
 
 **Status**: Code in tree — Maya verify: keep Builder open → Open/New scene → list matches new scene; relaunch Builder or reload MRS if session had old **`Builder.py`**
 
+#### BlockCreate — helpers survive scene open/new
+**What**: Retained **BlockCreate** window lost its block helpers after File → Open / New (`Helpers : No helpers found. Reinitialize.` on **Build**) — it held `mDag` / `ml_helpers` meta from the previous scene and never re-read **`mrsHelpers`**.  
+**Files**: `cgm/core/mrs/Builder.py` (`ui_createBlock`), `cgm/core/mrs/Helpers.py` (`uiFunc_helper_build`); doc note in [`Feature_CgmToolUI.md`](../Features/Feature_CgmToolUI.md)
+
+**Features**:
+- **`setSceneChangeCB`** in **`ui_createBlock.insert_init`** → **`uiFunc_on_scene_change`** → **`mc.evalDeferred(..., lp=True)`** → **`uiFunc_refresh_helpers_after_scene_open`**
+- Refresh clears stale handles, rebinds **`mrsHelpers`** + msgList only if the node exists, updates the Helpers readout; no name-pattern fallback search on scene open
+- **`uiFunc_helper_build`** re-syncs from **`mrsHelpers`** (`helpers_ui_update_registered(syncFromDag=True)`) before checking, and validates each helper with **`mc.objExists`**
+
+**Status**: Code in tree — Maya verify: keep BlockCreate open → Initialize helpers → save → New scene (readout 0) → reopen saved scene (readout N) → Build. Relaunch BlockCreate after reloading `Builder.py` (old window has no scene callback)
+
 #### Head block — neck form shaper aim + ribbonLive segment rig
 **What**: Head **neck** form setup matches **Segment** shaper aim attrs and **`block_utils.form_segment`** kwargs; neck **`rig_segments`** ribbon dict aligned with **Segment** so **ribbonLive** + squash/aim-scale no longer fails in **`IK.ribbon`** (`scaleZ` connect).  
 **Files**: `head.py` (form state mask, `d_attrsToMake` / defaults, neck **`form_segment`** call, **`rig_segments`**); `ik_utils.py` — arcLength per-joint squash loop hardening
