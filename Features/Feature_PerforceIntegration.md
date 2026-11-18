@@ -229,7 +229,9 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `get_connection_prefs()` | Read `cgmVar_p4_user` / `cgmVar_p4_client` Maya optionVars |
 | `save_connection_prefs(p4_user, p4_client)` | Write optionVars; clears P4 session cache **only when user or client changes** |
 | `resolve_connection(p4_user, p4_client)` | Args, then optionVars, then `CGM_P4USER`/`CGM_P4CLIENT`, then `P4USER`/`P4CLIENT` env |
-| `is_available(p4_user, p4_client)` | `p4 -u -c -ztag info` succeeds; session cache |
+| `is_available(p4_user, p4_client)` | `p4 -u -c -ztag info` succeeds **and** `check_login` ticket is valid; session cache (`unavailable_reason` kept for labels) |
+| `check_login(p4_user, p4_client)` | Uncached `p4 login -s`; `authExpired` only on auth-marker failures (no-password servers stay ok) |
+| `verify_cached_login(p4_user, p4_client)` | Re-check ticket when cache says available; on expiry `mark_unavailable` — cgmP4 cache-first refresh + reused-window open |
 | `connection_info(p4_user, p4_client)` | Parsed `-ztag info` — userName, clientName, clientRoot, clientStream, … |
 | `query_opened(p4_user, p4_client)` | `p4 -u -c -ztag opened` grouped by changelist |
 | `query_pending_changes(p4_user, p4_client)` | `p4 -u -c changes -s pending` |
@@ -247,7 +249,7 @@ User-invoked only (Script Editor or **cgmP4** tool). Does not alter export or ot
 | `query_connection(p4_user, p4_client, scene_path=None, force=False)` | Composes connection + opened + pending + scene fstat; session cache keyed by user/client/scene; cache hit/miss at **`log.debug` only** |
 | `query_status_report(p4_user, p4_client, …)` | Queries + logs formatted report; returns structured dict |
 | `log_status_report(dat)` | Logs formatted report from an existing dict (no p4 queries) |
-| `query_project_p4_status(p4_user, p4_client, force=False, …)` | Lightweight connected/label dict for Project General UI + Scene P4 column gate; **no routine logging** (cache hit/miss at `log.debug`; user reports via `query_status_report` / Print Log) |
+| `query_project_p4_status(p4_user, p4_client, force=False, …)` | Lightweight connected/label dict (`authExpired` + "not logged in" label when ticket invalid) for Project General UI + Scene P4 column gate; **no routine logging** (cache hit/miss at `log.debug`; user reports via `query_status_report` / Print Log) |
 | `flush_status_cache()` | Clear session cache in place (`perforce_session.clear()`) — write paths, Refresh |
 | `reload_session_cache()` | Flush buffer via `cgmGEN._reloadMod(perforce_session)` and rebind — dev / manual flush |
 | `collect_unknown_files(root_path, …)` | Disk walk under root → skip `depot_paths` **and** session fstat-classified paths → batch fstat remaining candidates → filter `classify_file_status_ui == 'unknown'` → session **`unknown_files`** cache |
@@ -586,6 +588,7 @@ Record decisions in the **Decisions log** as they are resolved.
 
 | Date | Author | Summary |
 |------|--------|---------|
+| 2026-11-18 | Login status UI | `is_available` runs `p4 login -s`; status dicts carry `authExpired`; Project P4 button **Not logged in**; cgmP4 status **Not logged in** + re-check on cache-first / reused-window open |
 | 2026-11-18 | Offline: login expired | Auth errors ("session has expired") treated like lost connection — new files save; blocked existing files show "Perforce login expired" dialog |
 | 2026-11-16 | Offline: writable uncached files allowed | New version + meta `.dat` second write was blocked; no-cache + writable now treated as local work, read-only still blocked |
 | 2026-11-13 | Offline: stale connection cache | fstat connection errors → `mark_unavailable` + offline rules (new file saves); error fstat results no longer cached |
