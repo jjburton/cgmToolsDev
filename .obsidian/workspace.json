@@ -25,12 +25,14 @@
             "id": "d5ff25a034ef8dba",
             "type": "leaf",
             "state": {
-              "type": "release-notes",
+              "type": "markdown",
               "state": {
-                "currentVersion": "1.13.7"
+                "file": "Guides/NewFeature_Guide.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-book-up",
-              "title": "Release Notes 1.13.7"
+              "icon": "lucide-file",
+              "title": "NewFeature_Guide"
             }
           }
         ],
@@ -198,8 +200,13 @@
       "bases:Create new base": false
     }
   },
-  "active": "d5ff25a034ef8dba",
+  "active": "88eede3cf0998936",
   "lastOpenFiles": [
+    "Features/Feature_Scene.md",
+    "Features/Feature_MRSPivots.md",
+    "Branches/Branch_Fall26.md",
+    "Features/Feature_BezierIK.md",
+    "Plans/Plan_ExportP4Integration.md",
     "Branches/Branch_Jan2026.md",
     "Branches/Branch_UnrealWorkflow.md",
     "Guides/README.md",
