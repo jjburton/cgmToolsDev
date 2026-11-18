@@ -261,4 +261,4 @@ Record decisions in the **Decisions log** as they are resolved.
 |------|----------|-----------|
 | 2026-05-28 | — | Initial plan from UnrealWorkflow export branch context |
 | 2026-05-28 | — | Decision: cgm Project roots only; Red9 pathing rejected |
-| 2026-05-28 | — | Decision: `cgm.core.lib.perforce`; aligns with `cgm-module-placement` rule |
+| 2026-05-28 | — | Decision: `cgm.core.lib.perforce`; aligns with `.claude/rules/reuse-and-placement.md` |
