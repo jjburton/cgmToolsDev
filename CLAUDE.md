@@ -119,6 +119,7 @@ change at hand, **open the named `.mdc`** for the full contract and examples.
   - **Haiku** — searches, `git log`/`blame`/history digs, merges/commits/conflict fixes with a written plan, file/symbol lookups, edits with a written plan.
   - **Sonnet** — work needing judgment: locating a cause across files, log diagnosis, non-trivial edits, conflict resolution needing content decisions.
   - **Opus** — only deep MRS/rig build, meta graph, or DynSim design work.
+- Choose the model by scope and depth, not domain (Maya vs engine work): Opus also covers engine/systems/perf work and many-file refactors. Why delegate even small, already-diagnosed edits: it keeps expensive-model tokens off simple work, and the user can address that specific agent about its result (`SendMessage` / its diff).
 - Brief tightly: goal, exact paths/repos, what's ruled out, and the return shape (conclusion + `file:line` / sha refs, no file dumps).
 - Follow-ups go to the same agent via `SendMessage`; never redo a subagent's work inline. Review its diff, not whole files.
 - Parallel independent lookups go out in one message, each on the cheapest model that fits.
